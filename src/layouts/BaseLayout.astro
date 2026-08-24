@@ -84,7 +84,7 @@ const routeMotion = {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="author" content={site.author} />
-    <meta id="theme-color" name="theme-color" content="#f8f7f4" />
+    <meta id="theme-color" name="theme-color" content="#fbf7ed" />
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" type="image/png" href="/avatars/avatar.png" />
     <link rel="apple-touch-icon" href="/avatars/avatar.png" />
@@ -92,6 +92,12 @@ const routeMotion = {
       <link rel="preconnect" href={import.meta.env.PUBLIC_TWIKOO_ENV_ID} crossorigin />
     )}
     <link rel="preconnect" href="https://cravatar.cn" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap"
+    />
     <title>{pageTitle}</title>
     <link rel="canonical" href={canonicalUrl} />
     <link
@@ -121,8 +127,8 @@ const routeMotion = {
     <script is:inline>
       (() => {
         const storageKey = 'blog-theme';
-        const lightColor = '#f8f7f4';
-        const darkColor = '#0e1116';
+        const lightColor = '#fbf7ed';
+        const darkColor = '#4a4034';
         const getTheme = () => {
           try {
             const stored = localStorage.getItem(storageKey);
@@ -279,8 +285,8 @@ const routeMotion = {
       (() => {
         const signal = window.__blogPageController.signal;
         const storageKey = 'blog-theme';
-        const lightColor = '#f8f7f4';
-        const darkColor = '#0e1116';
+        const lightColor = '#f6efdd';
+        const darkColor = '#2a2216';
         const button = document.querySelector('[data-theme-toggle]');
         const themeColor = document.querySelector('#theme-color');
         const getStoredTheme = () => {

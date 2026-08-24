@@ -36,23 +36,26 @@ const coverHue = (value: string) => {
 
 <BaseLayout title={site.name} description={site.description} pageClass="home-page">
   <section class="hero">
-    <div class="hero__intro">
-      <img
-        src="/avatars/avatar.png"
-        alt="段枫头像"
-        class="hero__avatar"
-        width="80"
-        height="80"
-      />
-      <p class="eyebrow">AI · Code · Web</p>
-      <h1 class="hero__title">你好，我是段枫</h1>
+    <div class="hero__card">
+      <!-- 手绘箭头装饰 -->
+      <span class="hero__arrow" aria-hidden="true"></span>
+      <!-- 黄色圆点贴纸 -->
+      <span class="hero__sticker hero__sticker--1" aria-hidden="true"></span>
+      <span class="hero__sticker hero__sticker--2" aria-hidden="true"></span>
+
+      <h1 class="hero__title">
+        嗨，我是<span class="hero__name">段枫</span>！
+      </h1>
+      <p class="hero__subtitle">又名 DUAN FENG · 爱折腾的创作者</p>
       <p class="hero__bio">
-        这里记录 AI 工具、代码实践、网站搭建和一些技术观察。文章偏实用，也保留个人判断。
+        别人叫我「AI 实践者」，我觉得自己只是个爱画画、爱写代码的孩子。
+        把屏幕当画板，把代码当蜡笔，在这里画了 <strong>{posts.length}</strong> 篇笔记。
       </p>
+
       <div class="hero__actions">
-        <a class="text-link" href="/archive/">
+        <a class="hero__tag" href="/archive/">
           浏览文章
-          <Icon name="arrow-right" size={18} />
+          <Icon name="arrow-right" size={16} />
         </a>
         <span class="hero__social" aria-label="社交链接">
           <a
