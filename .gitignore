@@ -1,6 +1,14 @@
 node_modules/
 dist/
 .astro/
+.next/
+
+# Payload Blog 子项目（独立依赖、构建产物、本地数据库）
+payload-blog/node_modules/
+payload-blog/.next/
+payload-blog/dist/
+payload-blog/payload.db*
+payload-blog/dev.log
 
 # Local environment
 .env

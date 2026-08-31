@@ -1,0 +1,48 @@
+{
+  "name": "payload-blog",
+  "version": "1.0.0",
+  "description": "Node22 兼容的 Payload CMS 博客后台（SQLite，适配 cloud-blog）",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev -p 9527",
+    "build": "cross-env NODE_OPTIONS=--no-deprecation payload build",
+    "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
+    "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
+    "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
+    "import:data": "cross-env NODE_OPTIONS=--no-deprecation npx tsx src/scripts/import-markdown.ts",
+    "warmup": "node scripts/warmup.mjs",
+    "payload": "cross-env NODE_OPTIONS=--no-deprecation payload"
+  },
+  "dependencies": {
+    "@payloadcms/db-postgres": "^3.88.0",
+    "@payloadcms/db-sqlite": "3.88.0",
+    "@payloadcms/next": "3.88.0",
+    "@payloadcms/richtext-lexical": "3.88.0",
+    "@payloadcms/ui": "3.88.0",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7",
+    "graphql": "^16.8.1",
+    "next": "15.4.11",
+    "payload": "3.88.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "rehype-stringify": "^10.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "sharp": "0.34.5",
+    "unified": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "gray-matter": "^4.0.3",
+    "tsx": "^4.23.12",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.20.0"
+  }
+}
