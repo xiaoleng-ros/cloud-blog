@@ -1,5 +1,5 @@
 import { defineCollection, z } from 'astro:content';
-import { glob } from 'astro/loaders';
+import { payloadNotesLoader, payloadPostsLoader } from './lib/payload-loader';
 
 const stringList = z.preprocess((value) => {
   if (value === undefined || value === null) {
@@ -14,7 +14,7 @@ const stringList = z.preprocess((value) => {
 }, z.array(z.string()).optional());
 
 const posts = defineCollection({
-  loader: glob({ pattern: '**/*.md', base: './src/content/posts' }),
+  loader: payloadPostsLoader,
   schema: z
     .object({
       title: z.string(),
@@ -34,7 +34,7 @@ const posts = defineCollection({
 });
 
 const notes = defineCollection({
-  loader: glob({ pattern: '**/*.md', base: './src/content/notes' }),
+  loader: payloadNotesLoader,
   schema: z
     .object({
       date: z.coerce.date(),

@@ -1,5 +1,6 @@
 ---
 import Icon from './Icon.astro';
+import { getNavItems, getSiteSettings } from '../lib/site-settings';
 
 // 尾斜杠统一处理，避免跨文档视图切换时被主机 301 跳转
 const pathname = Astro.url.pathname.endsWith('/')
@@ -8,12 +9,10 @@ const pathname = Astro.url.pathname.endsWith('/')
 const isCurrent = (href: string) =>
   href === '/' ? pathname === '/' : pathname.startsWith(href);
 
-const navItems = [
-  { href: '/', label: '首页' },
-  { href: '/notes/', label: '随笔' },
-  { href: '/archive/', label: '归档' },
-  { href: '/about/', label: '关于' },
-];
+// 品牌名与导航项：优先从后台站点设置读取，后台不可用时回退默认
+const settings = await getSiteSettings();
+const brandName = settings?.siteName ?? '段枫的手账';
+const navItems = await getNavItems();
 ---
 
 <header
@@ -25,7 +24,7 @@ const navItems = [
     <!-- 左侧站点手账标题 -->
     <a href="/" class="site-nav__brand" aria-label="返回首页">
       <span class="site-nav__brand-dot" aria-hidden="true"></span>
-      <span class="site-nav__brand-name">段枫的手账</span>
+      <span class="site-nav__brand-name">{brandName}</span>
     </a>
 
     <!-- 右侧标签式导航 -->

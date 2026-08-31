@@ -14,8 +14,16 @@ import speakerSlashIcon from '@phosphor-icons/core/assets/regular/speaker-slash.
 import waveformIcon from '@phosphor-icons/core/assets/regular/waveform.svg?raw';
 import xIcon from '@phosphor-icons/core/assets/regular/x.svg?raw';
 
+// 歌单 ID：后台站点设置（SiteSettings）优先 → 环境变量兜底 → 默认值
+import { getSiteSettings } from '../lib/site-settings';
+
+const settings = await getSiteSettings();
 const playlistId =
-  String(import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID ?? '8792942606').trim() || '8792942606';
+  String(
+    settings?.neteasePlaylistId ??
+      import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID ??
+      '8792942606',
+  ).trim() || '8792942606';
 const apiBase =
   String(import.meta.env.PUBLIC_MUSIC_API ?? 'https://meting.mikus.ink/api').trim() ||
   'https://meting.mikus.ink/api';

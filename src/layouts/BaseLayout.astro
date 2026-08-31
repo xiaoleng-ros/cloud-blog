@@ -4,6 +4,7 @@ import MusicPlayer from '../components/MusicPlayer.astro';
 import Nav from '../components/Nav.astro';
 import { ClientRouter } from 'astro:transitions';
 import { absoluteUrl, site } from '../lib/posts';
+import { getSiteSettings } from '../lib/site-settings';
 import '../styles/global.css';
 
 interface Props {
@@ -15,27 +16,35 @@ interface Props {
   jsonLd?: unknown;
 }
 
+// 站点信息：优先后台站点设置（SiteSettings），后台不可用时回退本地配置
+const settings = await getSiteSettings();
+const defaultInfo = {
+  name: settings?.siteName ?? site.name,
+  description: settings?.siteDescription ?? site.description,
+  author: settings?.siteAuthor ?? site.author,
+};
+
 const {
-  title = site.name,
-  description = site.description,
+  title = defaultInfo.name,
+  description = defaultInfo.description,
   pageClass = '',
   image = '/share/og-default.jpg',
   type = 'website',
   jsonLd,
 } = Astro.props;
 
-const pageTitle = title === site.name ? title : `${title} - ${site.name}`;
+const pageTitle = title === defaultInfo.name ? title : `${title} - ${defaultInfo.name}`;
 const canonicalUrl = absoluteUrl(Astro.url.pathname);
 const imageUrl = image ? absoluteUrl(image) : undefined;
 
 const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
-  name: site.name,
+  name: defaultInfo.name,
   url: site.url,
-  description: site.description,
+  description: defaultInfo.description,
   inLanguage: 'zh-CN',
-  author: { '@type': 'Person', name: site.author, url: site.url },
+  author: { '@type': 'Person', name: defaultInfo.author, url: site.url },
 };
 
 const ldScripts = [websiteSchema, ...(jsonLd ? [jsonLd] : [])];
@@ -83,7 +92,7 @@ const routeMotion = {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <meta name="author" content={site.author} />
+    <meta name="author" content={defaultInfo.author} />
     <meta id="theme-color" name="theme-color" content="#fbf7ed" />
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" type="image/png" href="/avatars/avatar.png" />
@@ -103,14 +112,14 @@ const routeMotion = {
     <link
       rel="alternate"
       type="application/rss+xml"
-      title={`${site.name} RSS`}
+      title={`${defaultInfo.name} RSS`}
       href={absoluteUrl('/rss.xml')}
     />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content={type} />
     <meta property="og:url" content={canonicalUrl} />
-    <meta property="og:site_name" content={site.name} />
+    <meta property="og:site_name" content={defaultInfo.name} />
     <meta property="og:locale" content="zh_CN" />
     {imageUrl && <meta property="og:image" content={imageUrl} />}
     <meta name="twitter:card" content={imageUrl ? 'summary_large_image' : 'summary'} />

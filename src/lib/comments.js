@@ -94,7 +94,11 @@ const rel = (ts) => {
   if (d < 3600) return `${Math.floor(d / 60)} 分钟前`;
   if (d < 86400) return `${Math.floor(d / 3600)} 小时前`;
   if (d < 2592000) return `${Math.floor(d / 86400)} 天前`;
-  return new Date(ts).toLocaleDateString('zh-CN');
+  const dt = new Date(ts);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 export function callTwikoo(envId, event, params = {}) {

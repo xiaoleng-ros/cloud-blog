@@ -1,8 +1,13 @@
 ---
 import Icon from './Icon.astro';
 import { site } from '../lib/posts';
+import { getSiteSettings } from '../lib/site-settings';
 
 const year = new Date().getFullYear();
+
+// 作者名：优先后台站点设置，后台不可用时回退本地配置
+const settings = await getSiteSettings();
+const author = settings?.siteAuthor ?? site.author;
 
 const channels = [
   { name: 'Bilibili', icon: 'bilibili', href: 'https://space.bilibili.com/46377861' },
@@ -21,13 +26,13 @@ const groups = [
     <div class="site-footer__id">
       <img
         src="/avatars/avatar.png"
-        alt={site.author}
+        alt={author}
         class="site-footer__avatar"
         width="40"
         height="40"
       />
       <div class="site-footer__id-text">
-        <strong>{site.author}</strong>
+        <strong>{author}</strong>
         <span>AI · Code · Web</span>
       </div>
     </div>
@@ -65,7 +70,7 @@ const groups = [
   </div>
 
   <div class="site-footer__bar">
-    <span>© {year} {site.author}</span>
+    <span>© {year} {author}</span>
     <span aria-hidden="true">·</span>
     <a href={site.url}>{site.url.replace('https://', '')}</a>
     <span aria-hidden="true">·</span>
