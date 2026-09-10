@@ -1,3 +1,6 @@
+// 注意：两个数据库适配器都必须静态导入，让 webpack 打包进产物。
+// 之前用动态 import + webpackIgnore 导致包不进产物，EdgeOne 运行时报 ERR_MODULE_NOT_FOUND。
+import { postgresAdapter } from '@payloadcms/db-postgres'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { zh } from '@payloadcms/translations/languages/zh'
@@ -5,21 +8,18 @@ import { zh } from '@payloadcms/translations/languages/zh'
 /**
  * 数据库选择：
  *  - 开发/本地：默认 SQLite（零安装、单文件，无需额外服务）
- *  - 上线/VPS：可通过环境变量切换到 PostgreSQL 等托管数据库
+ *  - 上线/VPS：通过环境变量切换到 PostgreSQL 等托管数据库
  *
  * 切换方法（.env）：
  *   DATABASE_DRIVER=postgres
  *   POSTGRES_URL=postgres://user:pass@host:5432/dbname
- *   并安装依赖： npm i @payloadcms/db-postgres
- * 生产环境建议先用 `npm run payload migrate` 生成迁移文件，
- * 避免依赖开发模式的自动建表。默认 sqlite 时无需任何额外配置。
  */
 const DATABASE_DRIVER = process.env.DATABASE_DRIVER || 'sqlite'
 
-/** 按环境变量选定的数据库适配器 */
+/** 按环境变量选定的数据库适配器（构建时静态选择，两分支均打包） */
 const db =
   DATABASE_DRIVER === 'postgres'
-    ? (await import(/* webpackIgnore: true */ '@payloadcms/db-postgres')).postgresAdapter({
+    ? postgresAdapter({
         pool: { connectionString: process.env.POSTGRES_URL },
         // 与 sqlite 分支一致：PAYLOAD_FORCE_PUSH=1 时非交互建表（用于首次切换到线上库）
         push: process.env.PAYLOAD_FORCE_PUSH === '1',
