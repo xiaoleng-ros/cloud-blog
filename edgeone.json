@@ -1,5 +1,5 @@
 {
   "buildCommand": "npm run setup && npm run build:all",
   "outputDirectory": "apps/cms/.next",
-  "nodeVersion": "22.21.0"
+  "nodeVersion": "22.21.1"
 }
