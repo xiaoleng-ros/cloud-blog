@@ -1,12 +1,13 @@
-// 把 Astro 构建产物（apps/blog/dist/）复制到 CMS standalone 部署目录的 public/ 子目录。
-// 触发方式：npm run build:all 最后手动执行（postbuild 钩子已在 blog/package.json 中移除，
-// 因为 postbuild 在 Next.js 构建之前执行，会被 Next.js 重建覆盖）。
+// 把 Astro 构建产物（apps/blog/dist/）复制到 CMS 的 public/ 目录。
+// EdgeOne Makers 部署 Next.js 时，会把 public/ 下的文件作为静态资源直接服务，
+// 这样博客页面（/、/posts/* 等）与 Payload 后台（/admin/*、/api/*）共存于同一域名。
+// 触发方式：npm run build:all 最后手动执行（必须在 next build 之后，避免被覆盖）。
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BLOG_DIST = join(import.meta.dirname, '../../blog/dist');
-// standalone/cloud/apps/cms/public/ —— EdgeOne Makers 部署时 Next.js server 从这里服务静态文件
-const STANDALONE_PUBLIC = join(import.meta.dirname, '../.next/standalone/cloud/apps/cms/public');
+// apps/cms/public/ —— Next.js 约定的静态资源目录，EdgeOne 会自动部署
+const CMS_PUBLIC = join(import.meta.dirname, '../public');
 
 if (!existsSync(BLOG_DIST)) {
   console.error('[copy-blog] 找不到 Astro 构建产物，跳过复制: ' + BLOG_DIST);
@@ -29,6 +30,6 @@ function copyDir(src, dest) {
   }
 }
 
-mkdirSync(STANDALONE_PUBLIC, { recursive: true });
-copyDir(BLOG_DIST, STANDALONE_PUBLIC);
-console.log('[copy-blog] 已复制到 .next/standalone/public/（EdgeOne Makers 部署）');
+mkdirSync(CMS_PUBLIC, { recursive: true });
+copyDir(BLOG_DIST, CMS_PUBLIC);
+console.log('[copy-blog] 已复制到 apps/cms/public/（EdgeOne Makers 部署）');

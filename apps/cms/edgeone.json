@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npm --prefix ../blog install && npm --prefix ../blog run build && npm run build && node scripts/copy-blog-to-public.mjs && rm -rf .next/cache",
+  "outputDirectory": ".next",
+  "nodeVersion": "22.21.1"
+}
