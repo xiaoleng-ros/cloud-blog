@@ -85,7 +85,7 @@ const articleSchema = {
       返回首页
     </a>
 
-    <header class="article__header">
+    <header class="article__header" data-sync-block="articleHeader">
       <div class="post-meta">
         {category && <span>{category}</span>}
         {post.data.date && (
@@ -131,11 +131,11 @@ const articleSchema = {
             onerror="this.onerror=null;this.src='/covers/default-cover.svg'"
           />
         )}
-        <div class="post-content">
+        <div class="post-content" data-sync-block="postContent">
           <Content />
         </div>
 
-        <footer class="article__footer">
+        <footer class="article__footer" data-sync-block="articleFooter">
           {(newer || older) && (
             <nav class="post-nav" aria-label="相邻文章">
               {older && (
@@ -171,7 +171,7 @@ const articleSchema = {
       </div>
 
       {tableOfContents.length >= 2 && (
-        <aside class="article__aside">
+        <aside class="article__aside" data-sync-block="tocSidebar">
           <nav class="toc" aria-labelledby="toc-heading">
             <h2 id="toc-heading">目录</h2>
             <ol>

@@ -434,98 +434,105 @@ const routeMotion = {
           return copied;
         };
 
-        document.querySelectorAll('.post-content pre').forEach((pre) => {
-          if (pre.querySelector('[data-copy-code]')) {
-            return;
-          }
-
-          const code = pre.querySelector('code');
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'copy-code-button';
-          button.dataset.copyCode = '';
-          button.textContent = '复制';
-          button.setAttribute('aria-label', '复制代码');
-          pre.append(button);
-
-          button.addEventListener('click', async () => {
-            const text = code?.innerText ?? pre.innerText.replace(button.innerText, '');
-
-            try {
-              const copied = await writeClipboard(text.trimEnd());
-
-              if (!copied) {
-                throw new Error('Copy command failed');
-              }
-
-              button.textContent = '已复制';
-              button.classList.add('is-copied');
-              window.setTimeout(() => {
-                button.textContent = '复制';
-                button.classList.remove('is-copied');
-              }, 1800);
-            } catch {
-              button.textContent = '复制失败';
-              window.setTimeout(() => {
-                button.textContent = '复制';
-              }, 1800);
+        // 绑定文章正文交互（代码复制按钮 + 图片灯箱）。可安全重入：
+        // 轮询脚本更新 postContent 后再次调用，保证新内容也带交互。
+        const initPostContent = () => {
+          // 代码复制按钮（已有 data-copy-code 标记防重）
+          document.querySelectorAll('.post-content pre').forEach((pre) => {
+            if (pre.querySelector('[data-copy-code]')) {
+              return;
             }
-          }, { signal });
-        });
-      })();
 
-      (() => {
-        const signal = window.__blogPageController.signal;
-        const images = document.querySelectorAll(
-          '.post-content img:not(.legacy-inline-image)',
-        );
+            const code = pre.querySelector('code');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'copy-code-button';
+            button.dataset.copyCode = '';
+            button.textContent = '复制';
+            button.setAttribute('aria-label', '复制代码');
+            pre.append(button);
 
-        if (!images.length) {
-          return;
-        }
+            button.addEventListener('click', async () => {
+              const text = code?.innerText ?? pre.innerText.replace(button.innerText, '');
 
-        let overlay = null;
+              try {
+                const copied = await writeClipboard(text.trimEnd());
 
-        const onKey = (event) => {
-          if (event.key === 'Escape') {
-            close();
+                if (!copied) {
+                  throw new Error('Copy command failed');
+                }
+
+                button.textContent = '已复制';
+                button.classList.add('is-copied');
+                window.setTimeout(() => {
+                  button.textContent = '复制';
+                  button.classList.remove('is-copied');
+                }, 1800);
+              } catch {
+                button.textContent = '复制失败';
+                window.setTimeout(() => {
+                  button.textContent = '复制';
+                }, 1800);
+              }
+            }, { signal });
+          });
+
+          // 图片灯箱（data-lightbox 标记防重，避免重复绑定点击）
+          let overlay = null;
+
+          const onKey = (event) => {
+            if (event.key === 'Escape') {
+              close();
+            }
+          };
+
+          function close() {
+            if (!overlay) {
+              return;
+            }
+
+            const node = overlay;
+            overlay = null;
+            node.classList.remove('is-open');
+            document.removeEventListener('keydown', onKey);
+            window.setTimeout(() => node.remove(), 200);
           }
+
+          const open = (source, alt) => {
+            overlay = document.createElement('div');
+            overlay.className = 'lightbox';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+            overlay.setAttribute('aria-label', alt || '图片预览');
+
+            const full = document.createElement('img');
+            full.src = source;
+            full.alt = alt || '';
+            overlay.append(full);
+            overlay.addEventListener('click', close, { signal });
+            document.body.append(overlay);
+            requestAnimationFrame(() => overlay?.classList.add('is-open'));
+            document.addEventListener('keydown', onKey, { signal });
+          };
+
+          document.querySelectorAll('.post-content img:not(.legacy-inline-image)').forEach((image) => {
+            if (image.dataset.lightbox) {
+              return;
+            }
+            image.dataset.lightbox = '1';
+            image.addEventListener(
+              'click',
+              () => {
+                open(image.currentSrc || image.src, image.alt);
+              },
+              { signal },
+            );
+          });
         };
 
-        function close() {
-          if (!overlay) {
-            return;
-          }
-
-          const node = overlay;
-          overlay = null;
-          node.classList.remove('is-open');
-          document.removeEventListener('keydown', onKey);
-          window.setTimeout(() => node.remove(), 200);
-        }
-
-        const open = (source, alt) => {
-          overlay = document.createElement('div');
-          overlay.className = 'lightbox';
-          overlay.setAttribute('role', 'dialog');
-          overlay.setAttribute('aria-modal', 'true');
-          overlay.setAttribute('aria-label', alt || '图片预览');
-
-          const full = document.createElement('img');
-          full.src = source;
-          full.alt = alt || '';
-          overlay.append(full);
-          overlay.addEventListener('click', close, { signal });
-          document.body.append(overlay);
-          requestAnimationFrame(() => overlay?.classList.add('is-open'));
-          document.addEventListener('keydown', onKey, { signal });
-        };
-
-        images.forEach((image) => {
-          image.addEventListener('click', () => {
-            open(image.currentSrc || image.src, image.alt);
-          }, { signal });
-        });
+        // 暴露给轮询脚本：内容区块更新后重新绑定正文交互
+        window.__blogInitPostContent = initPostContent;
+        initPostContent();
       })();
 
       (() => {
@@ -627,6 +634,95 @@ const routeMotion = {
           { passive: true, signal },
         );
         sync();
+      })();
+    </script>
+    <script is:inline data-astro-rerun>
+      (() => {
+        // 后台数据实时同步：轮询 CMS 的 /api/blog-sync，数据版本变化时局部更新页面区块。
+        // 使用 data-astro-rerun，路由切换（ClientRouter 换页）后自动重新初始化。
+        window.__blogSyncController?.abort();
+        const controller = new AbortController();
+        window.__blogSyncController = controller;
+        const signal = controller.signal;
+
+        const KEY = 'blog-data-version';
+        const POLL_MS = 4000;
+        // 与 CMS 渲染层约定的区块 ID → 页面锚点（data-sync-block 属性）映射
+        const BLOCK_SELECTOR = '[data-sync-block]';
+        // 滚动显现（scroll reveal）目标：新插入的 DOM 默认无 is-revealed 会隐藏，
+        // 需要手动补类，保证同步更新后的内容立即可见
+        const REVEAL_SEL = [
+          '.hero__intro > *', '.hero__picks',
+          '.section__header', '.section__more', '.post-row',
+          '.related-posts', '.post-nav', '.article__header > *', '.article__main > .article__cover',
+          '.proj-section__head', '.proj',
+          '.page-header', '.archive-summary', '.archive-year__head',
+          '.about__intro > *', '.note',
+        ].join(', ');
+
+        // 更新某个锚点的内容；找不到锚点或内容为空则跳过，返回是否更新成功
+        const applyBlock = (id, html) => {
+          if (html == null || html === '') return false;
+          const el = document.querySelector(`[data-sync-block="${id}"]`);
+          if (!el) return false;
+          if (el.innerHTML === html) return false; // 内容相同无需重写
+          el.innerHTML = html;
+          // 新内容补 reveal 类，避免被「未显现隐藏」规则遮住
+          el.querySelectorAll(REVEAL_SEL).forEach((node) => {
+            node.classList.add('is-revealed');
+            node.dataset.revealed = '1';
+          });
+          return true;
+        };
+
+        // 单次同步：请求最新区块并对比版本号
+        const sync = async () => {
+          try {
+            const path = window.location.pathname;
+            const res = await fetch(
+              `/api/blog-sync?path=${encodeURIComponent(path)}`,
+              { signal, cache: 'no-store' },
+            );
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || typeof data.version !== 'string') return;
+
+            let stored = null;
+            try {
+              stored = localStorage.getItem(KEY);
+            } catch {}
+            if (stored === data.version) return; // 无变化
+
+            const blocks = data.blocks || {};
+            let updatedAny = false;
+            for (const [id, html] of Object.entries(blocks)) {
+              const applied = applyBlock(id, html);
+              updatedAny = updatedAny || applied;
+            }
+            if (data.title) {
+              document.title = data.title;
+            }
+            // 正文被替换后，重新绑定复制按钮/图片灯箱等交互
+            if (updatedAny) {
+              if (window.__blogInitPostContent) {
+                window.__blogInitPostContent();
+              }
+              // 通知页面级脚本（如归档页「展开其余标签」）重新绑定
+              document.dispatchEvent(new CustomEvent('blog:sync-updated'));
+            }
+            try {
+              localStorage.setItem(KEY, data.version);
+            } catch {}
+          } catch (err) {
+            if (err?.name === 'AbortError') return;
+            // 网络失败静默重试，避免控制台刷屏
+          }
+        };
+
+        // 立即同步一次，之后定时轮询
+        sync();
+        const timer = window.setInterval(sync, POLL_MS);
+        signal.addEventListener('abort', () => window.clearInterval(timer));
       })();
     </script>
     <script is:inline>

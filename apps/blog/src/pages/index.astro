@@ -67,7 +67,7 @@ const coverHue = (value: string) => {
 
 <BaseLayout title={siteName} description={site.description} pageClass="home-page">
   <section class="hero">
-    <div class="hero__card">
+    <div class="hero__card" data-sync-block="heroCard">
       <!-- 手绘箭头装饰 -->
       <span class="hero__arrow" aria-hidden="true"></span>
       <!-- 黄色圆点贴纸 -->
@@ -102,7 +102,7 @@ const coverHue = (value: string) => {
     </div>
 
     {heroPicks.length > 0 && (
-      <aside class="hero__picks" aria-label="精选文章">
+      <aside class="hero__picks" aria-label="精选文章" data-sync-block="heroPicks">
         <p class="hero__picks-label">精选</p>
         <div class="picks">
           <a class="pick-hero" href={`/posts/${heroPicks[0].id}/`}>
@@ -175,11 +175,11 @@ const coverHue = (value: string) => {
         <p>持续更新 AI、开发和建站相关笔记。</p>
       </div>
       <a class="section__more" href="/archive/">
-        全部 {posts.length} 篇
+        <span data-sync-block="heroCount">全部 {posts.length} 篇</span>
         <Icon name="arrow-right" size={16} />
       </a>
     </div>
-    <div class="post-list" aria-label="文章列表">
+    <div class="post-list" aria-label="文章列表" data-sync-block="latestPosts">
       {latestPosts.map((post) => <PostSummary post={post} />)}
     </div>
   </section>

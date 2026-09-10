@@ -16,7 +16,7 @@ const groups = footer.groups;
 ---
 
 <footer class="site-footer">
-  <div class="site-footer__inner">
+  <div class="site-footer__inner" data-sync-block="footerInner">
     <div class="site-footer__id">
       <img
         src="/avatars/avatar.png"
@@ -63,7 +63,7 @@ const groups = footer.groups;
     </nav>
   </div>
 
-  <div class="site-footer__bar">
+  <div class="site-footer__bar" data-sync-block="footerBar">
     <span>© {year} {author}</span>
     <span aria-hidden="true">·</span>
     <a href={site.url}>{site.url.replace('https://', '')}</a>

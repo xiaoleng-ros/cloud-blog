@@ -39,10 +39,10 @@ const { category, posts, categories } = Astro.props;
     <header class="page-header">
       <p class="eyebrow">Category</p>
       <h1>{category}</h1>
-      <p>这个分类下共有 {posts.length} 篇文章。</p>
+      <p data-sync-block="termCount">这个分类下共有 {posts.length} 篇文章。</p>
     </header>
 
-    <nav class="term-switcher" aria-label="全部分类">
+    <nav class="term-switcher" aria-label="全部分类" data-sync-block="termSwitcher">
       {categories.map((item) => (
         <a
           href={getCategoryPath(item.name)}
@@ -54,7 +54,7 @@ const { category, posts, categories } = Astro.props;
       ))}
     </nav>
 
-    <div class="post-list">
+    <div class="post-list" data-sync-block="termPostList">
       {posts.map((post) => <PostSummary post={post} compact />)}
     </div>
   </section>

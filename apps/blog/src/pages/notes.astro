@@ -90,7 +90,7 @@ const moodIcon = (mood?: string) => {
 
     {entries.length > 0 ? (
       <div class:list={['notes-layout', byYear.length > 1 && 'notes-layout--indexed']}>
-        <div class="notes-feed">
+      <div class="notes-feed" data-sync-block="notesFeed">
         {byYear.map((group) => (
           <section class="notes-year" id={`y-${group.year}`}>
             <h2 class="notes-year__label"><span>{group.year}</span></h2>
@@ -128,7 +128,7 @@ const moodIcon = (mood?: string) => {
         ))}
         </div>
         {byYear.length > 1 && (
-          <aside class="notes-aside">
+          <aside class="notes-aside" data-sync-block="notesAside">
             <nav class="toc" aria-labelledby="notes-time-heading">
               <h2 id="notes-time-heading">时间</h2>
               <ol>

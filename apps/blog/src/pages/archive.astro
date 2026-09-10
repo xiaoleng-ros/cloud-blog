@@ -28,13 +28,13 @@ const restTags = tags.slice(16);
   pageClass="content-page"
 >
   <section class="archive-page">
-    <header class="page-header">
+    <header class="page-header" data-sync-block="archiveHeader">
       <p class="eyebrow">Archive</p>
       <h1>文章归档</h1>
       <p>目前收录 {posts.length} 篇文章，可以按时间、分类或标签浏览。</p>
     </header>
 
-    <section class="archive-summary" aria-label="内容索引">
+    <section class="archive-summary" aria-label="内容索引" data-sync-block="archiveSummary">
       <div class="taxonomy-panel">
         <h2><Icon name="layers" size={16} />分类</h2>
         <div class="term-list">
@@ -90,7 +90,7 @@ const restTags = tags.slice(16);
       </div>
     </section>
 
-    <div class="archive-years">
+    <div class="archive-years" data-sync-block="archiveYears">
       {years.map((group) => (
         <section class="archive-year">
           <header class="archive-year__head">
@@ -107,18 +107,25 @@ const restTags = tags.slice(16);
 
   <script is:inline data-astro-rerun>
     (() => {
-      const btn = document.querySelector('[data-term-toggle]');
-      const more = document.querySelector('[data-term-more]');
-      if (!btn || !more) return;
-      const label = btn.querySelector('.term-toggle__text');
-      const rest = more.querySelectorAll('a').length;
-      btn.addEventListener('click', () => {
-        const open = !more.classList.contains('is-open');
-        more.classList.toggle('is-open', open);
-        btn.classList.toggle('is-open', open);
-        btn.setAttribute('aria-expanded', String(open));
-        if (label) label.textContent = open ? '收起标签' : `展开其余 ${rest} 个`;
-      });
+      // 绑定「展开其余标签」交互；区块被轮询更新后需重新绑定
+      const bind = () => {
+        const btn = document.querySelector('[data-term-toggle]');
+        const more = document.querySelector('[data-term-more]');
+        if (!btn || !more) return;
+        if (btn.dataset.termBound) return;
+        btn.dataset.termBound = '1';
+        const label = btn.querySelector('.term-toggle__text');
+        const rest = more.querySelectorAll('a').length;
+        btn.addEventListener('click', () => {
+          const open = !more.classList.contains('is-open');
+          more.classList.toggle('is-open', open);
+          btn.classList.toggle('is-open', open);
+          btn.setAttribute('aria-expanded', String(open));
+          if (label) label.textContent = open ? '收起标签' : `展开其余 ${rest} 个`;
+        });
+      };
+      bind();
+      document.addEventListener('blog:sync-updated', bind);
     })();
   </script>
 </BaseLayout>

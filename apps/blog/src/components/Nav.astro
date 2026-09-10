@@ -24,20 +24,22 @@ const navItems = await getNavItems();
     <!-- 左侧站点手账标题 -->
     <a href="/" class="site-nav__brand" aria-label="返回首页">
       <span class="site-nav__brand-dot" aria-hidden="true"></span>
-      <span class="site-nav__brand-name">{brandName}</span>
+      <span class="site-nav__brand-name" data-sync-block="brandName">{brandName}</span>
     </a>
 
     <!-- 右侧标签式导航 -->
     <nav class="site-nav__tags" aria-label="主导航">
-      {navItems.map((item) => (
-        <a
-          href={item.href}
-          class:list={['site-nav__tag', isCurrent(item.href) && 'is-current']}
-          data-nav-route
-        >
-          {item.label}
-        </a>
-      ))}
+      <span data-sync-block="navLinks" style="display: contents">
+        {navItems.map((item) => (
+          <a
+            href={item.href}
+            class:list={['site-nav__tag', isCurrent(item.href) && 'is-current']}
+            data-nav-route
+          >
+            {item.label}
+          </a>
+        ))}
+      </span>
       <a
         href="/search/"
         class:list={['site-nav__tag site-nav__tag--icon', isCurrent('/search/') && 'is-current']}
