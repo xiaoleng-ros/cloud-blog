@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run setup && npm run build:all",
+  "buildCommand": "npm run setup && npm run build:all && rm -rf apps/cms/.next/cache",
   "outputDirectory": "apps/cms/.next",
   "nodeVersion": "22.21.1"
 }
