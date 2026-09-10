@@ -7,7 +7,7 @@
  * 3. 同步 分类/标签 → 文章/随笔，保持前台 id（文件相对路径）与后台 slug 一致
  * 4. 幂等：已存在的记录按 slug 更新，不重复创建
  *
- * 用法（在 payload-blog 目录下执行）：
+ * 用法（在 apps/cms 目录下执行）：
  *   npm run import:data
  */
 import 'dotenv/config'
@@ -17,8 +17,8 @@ import matter from 'gray-matter'
 import { getPayload } from 'payload'
 import config from '../payload.config'
 
-/** 前台内容根目录（跨项目引用）：scripts → src → payload-blog → cloud → cloud-blog */
-const CLOUD_BLOG_DIR = path.resolve(import.meta.dirname, '../../../cloud-blog')
+/** 前台内容根目录（跨项目引用）：scripts → src → cms → apps → blog（apps/blog） */
+const CLOUD_BLOG_DIR = path.resolve(import.meta.dirname, '../../../blog')
 
 /** 递归收集目录下所有 .md 文件，返回 [文件相对路径(去扩展名), 绝对路径] */
 function collectMarkdown(dir: string, base: string): Array<[string, string]> {

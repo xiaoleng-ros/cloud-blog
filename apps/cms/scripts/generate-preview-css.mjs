@@ -1,10 +1,10 @@
-// 生成脚本：读取前台 global.css，产出后台预览用的 TS 样式字符串模块
+// 生成脚本：读取前台 apps/blog 的 global.css，产出后台预览用的 TS 样式字符串模块
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const src = resolve(here, '../../cloud-blog/src/styles/global.css')
+const src = resolve(here, '../../blog/src/styles/global.css')
 const out = resolve(here, '../src/editor/markdown-preview-css.ts')
 
 // 1) 读前台全局样式

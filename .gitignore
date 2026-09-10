@@ -3,12 +3,17 @@ dist/
 .astro/
 .next/
 
-# Payload Blog 子项目（独立依赖、构建产物、本地数据库）
-payload-blog/node_modules/
-payload-blog/.next/
-payload-blog/dist/
-payload-blog/payload.db*
-payload-blog/dev.log
+# CMS 后台（apps/cms）独立依赖、构建产物、本地数据库
+apps/cms/payload.db*
+apps/cms/dev.log
+apps/cms/.next/
+apps/cms/dist/
+apps/cms/node_modules/
+
+# 前端（apps/blog）独立依赖与构建产物
+apps/blog/node_modules/
+apps/blog/dist/
+apps/blog/.astro/
 
 # Local environment
 .env
