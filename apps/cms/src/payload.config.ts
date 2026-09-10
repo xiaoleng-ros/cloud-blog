@@ -20,7 +20,12 @@ const DATABASE_DRIVER = process.env.DATABASE_DRIVER || 'sqlite'
 const db =
   DATABASE_DRIVER === 'postgres'
     ? postgresAdapter({
-        pool: { connectionString: process.env.POSTGRES_URL },
+        pool: {
+          connectionString: process.env.POSTGRES_URL,
+          // EdgeOne 出口网络存在 TLS 拦截（自签证书链），关闭证书校验避免 SELF_SIGNED_CERT_IN_CHAIN
+          // 连接本身仍是 TLS 加密的，只是不再校验证书链
+          ssl: { rejectUnauthorized: false },
+        },
         // 与 sqlite 分支一致：PAYLOAD_FORCE_PUSH=1 时非交互建表（用于首次切换到线上库）
         push: process.env.PAYLOAD_FORCE_PUSH === '1',
       })
