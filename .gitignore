@@ -15,15 +15,23 @@ apps/blog/node_modules/
 apps/blog/dist/
 apps/blog/.astro/
 
+# CMS public 中由 Astro 构建生成的博客静态文件（每次构建重新复制，不提交）
+apps/cms/public/*
+!apps/cms/public/cloud-icons/
+!apps/cms/public/cloud-icons/**
+
 # Local environment
 .env
 .env.*
 !.env.example
+# 前台（apps/blog）的 .env.production 只含公开链接，允许提交供云端构建保底
+!apps/blog/.env.production
 
 # Local tool/editor state
 .claude/
 .vscode/
 .idea/
+.workbuddy/
 
 # Logs and OS caches
 npm-debug.log*

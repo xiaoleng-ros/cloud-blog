@@ -248,21 +248,77 @@ async function main() {
 
     // 导航已拆分到「导航管理」(navigation) Global
     const navGlobal = await payload.findGlobal({ slug: 'navigation' })
-    const navItems =
-      navGlobal?.navItems?.length
-        ? navGlobal.navItems
-        : [
-            { href: '/', label: '首页' },
-            { href: '/notes/', label: '随笔' },
-            { href: '/archive/', label: '归档' },
-            { href: '/about/', label: '关于' },
-          ]
+    // navItems 应为 textarea 纯文本（每行「文字 链接」）。
+    // 兼容两处脏数据：①存成对象数组后序列化的 JSON（含 { 或 "）；②空值。
+    // 只要不是合法纯文本就统一覆盖为默认导航，保证前台 parseNavLines 能解析。
+    const rawNav = navGlobal?.navItems
+    const navIsPlainText =
+      typeof rawNav === 'string' && !rawNav.includes('{') && !rawNav.includes('"') && rawNav.trim()
+    const navItems = navIsPlainText
+      ? rawNav
+      : ['首页 /', '随笔 /notes/', '归档 /archive/', '关于 /about/'].join('\n')
     await payload.updateGlobal({
       slug: 'navigation',
-      data: { navItems: navItems as never },
+      data: { navItems },
     })
 
-    console.log('✅ 站点设置已从 site.config.json 同步（含导航同步到导航管理）')
+    // ---- 页脚（均已拆到站点设置 Global，仅当为空时写入默认值，避免覆盖后台改动） ----
+    const footerSubtitle =
+      global?.footerSubtitle ?? 'AI · Code · Web'
+    const footerChannels =
+      global?.footerChannels
+      ?? [
+        'Bilibili https://space.bilibili.com/46377861',
+        'YouTube https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg',
+        'RSS /rss.xml',
+      ].join('\n')
+    const footerGroups =
+      global?.footerGroups
+      ?? ['QQ 交流群', '微信交流群'].join('\n')
+
+    // ---- 关于页（同样仅当为空时写入默认值） ----
+    const aboutLead = global?.aboutLead ?? '关于我'
+    const aboutParagraphs =
+      global?.aboutParagraphs
+      ?? [
+        '我喜欢<span class="marker-highlight">歪一点</span>的东西——太正了反而不真实。',
+        '白天：<span class="marker-highlight">前端工程师 + 视觉设计师</span>，做正经的项目。<br />晚上：<span class="marker-highlight">画涂鸦</span>、写小工具、做声音装置。',
+        '梦想是让互联网上多一点<span class="marker-highlight">好玩的角落</span>。',
+      ].join('\n')
+    const aboutNotes =
+      global?.aboutNotes
+      ?? [
+        '坐标广州|1995 年生|yellow',
+        '独立创作者|8 年经验|cyan',
+        '一天三杯咖啡|（不是广告）|pink',
+      ].join('\n')
+    const skills =
+      global?.skills
+      ?? [
+        'HTML / CSS|画框搭的|95|yellow',
+        'JavaScript|会耍魔术|90|cyan',
+        'AI 工具|乱点乱用|88|pink',
+        'Astro|让人省点|85|purple',
+        '视觉设计|爱涂爱画|82|yellow',
+      ].join('\n')
+
+    await payload.updateGlobal({
+      slug: 'site-settings',
+      data: {
+        ...site,
+        ...hero,
+        socials,
+        footerSubtitle,
+        footerChannels,
+        footerGroups,
+        aboutLead,
+        aboutParagraphs,
+        aboutNotes,
+        skills,
+      },
+    })
+
+    console.log('✅ 站点设置已从 site.config.json 同步（含导航同步到导航管理、页脚与关于页默认值）')
   }
 
   console.log('\n🎉 迁移完成')

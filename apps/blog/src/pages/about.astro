@@ -4,6 +4,7 @@ import Icon from '../components/Icon.astro';
 import SkillRing from '../components/SkillRing.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { sortPosts } from '../lib/posts';
+import { getAboutContent } from '../lib/site-settings';
 
 const posts = sortPosts(await getCollection('posts'));
 const postCount = posts.length;
@@ -11,6 +12,9 @@ const firstYear = posts.reduce((min, post) => {
   const year = post.data.date?.getFullYear();
   return year && year < min ? year : min;
 }, new Date().getFullYear());
+
+// 关于页正文/便签/技能：优先后台站点设置（可随时在后台修改），缺失时回退默认值
+const about = await getAboutContent();
 
 // ---- 开源项目：构建时从 GitHub API 自动同步 ----
 interface GhRepo {
@@ -94,15 +98,6 @@ const projectGroups = [
     })),
   })),
 ];
-
-// 技能数据
-const skills = [
-  { label: 'HTML / CSS', sublabel: '画框搭的', value: 95, color: 'yellow' as const },
-  { label: 'JavaScript', sublabel: '会耍魔术', value: 90, color: 'cyan' as const },
-  { label: 'AI 工具', sublabel: '乱点乱用', value: 88, color: 'pink' as const },
-  { label: 'Astro', sublabel: '让人省点', value: 85, color: 'purple' as const },
-  { label: '视觉设计', sublabel: '爱涂爱画', value: 82, color: 'yellow' as const },
-];
 ---
 
 <BaseLayout
@@ -116,18 +111,11 @@ const skills = [
       <div class="about__intro-card">
         <span class="about__eyebrow">ABOUT</span>
         <h1 id="about-heading" class="about__lead">
-          关于我
+          {about.lead}
         </h1>
-        <p class="about__text">
-          我喜欢<span class="marker-highlight">歪一点</span>的东西——太正了反而不真实。
-        </p>
-        <p class="about__text">
-          白天：<span class="marker-highlight">前端工程师 + 视觉设计师</span>，做正经的项目。<br />
-          晚上：<span class="marker-highlight">画涂鸦</span>、写小工具、做声音装置。
-        </p>
-        <p class="about__text">
-          梦想是让互联网上多一点<span class="marker-highlight">好玩的角落</span>。
-        </p>
+        {about.paragraphs.map((paragraph) => (
+          <p class="about__text" set:html={paragraph} />
+        ))}
         <div class="about__facts">
           <span class="about__fact">{postCount} 篇文章</span>
           <span class="about__fact">写于 {firstYear} 至今</span>
@@ -136,21 +124,13 @@ const skills = [
       </div>
 
       <div class="about__notes">
-        <div class="about__note about__note--yellow">
-          <span class="about__note-tape" aria-hidden="true"></span>
-          <strong>坐标广州</strong>
-          <span>1995 年生</span>
-        </div>
-        <div class="about__note about__note--cyan">
-          <span class="about__note-tape" aria-hidden="true"></span>
-          <strong>独立创作者</strong>
-          <span>8 年经验</span>
-        </div>
-        <div class="about__note about__note--pink">
-          <span class="about__note-tape" aria-hidden="true"></span>
-          <strong>一天三杯咖啡</strong>
-          <span>（不是广告）</span>
-        </div>
+        {about.notes.map((note) => (
+          <div class={`about__note about__note--${note.color}`}>
+            <span class="about__note-tape" aria-hidden="true"></span>
+            <strong>{note.title}</strong>
+            <span>{note.subtitle}</span>
+          </div>
+        ))}
       </div>
     </section>
 
@@ -160,7 +140,7 @@ const skills = [
         <h2 id="skills-heading">我的小本领</h2>
       </div>
       <div class="skill-grid">
-        {skills.map((skill) => <SkillRing {...skill} />)}
+        {about.skills.map((skill) => <SkillRing {...skill} />)}
       </div>
     </section>
 

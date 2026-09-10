@@ -499,6 +499,28 @@ export interface SiteSetting {
   bio?: string | null;
   buttonLabel?: string | null;
   socials?: string | null;
+  footerSubtitle?: string | null;
+  /**
+   * 每行一条「名称 链接」。支持 Bilibili / YouTube / RSS 图标，其余名称按文字展示。链接以 http 开头用新标签打开。
+   */
+  footerChannels?: string | null;
+  /**
+   * 每行一条「名称 链接」，链接可留空仅填名称（展示为纯文字标签）。支持 QQ / 微信图标。
+   */
+  footerGroups?: string | null;
+  aboutLead?: string | null;
+  /**
+   * 每个段落一行。可使用简单 HTML，如 <span class="marker-highlight">高亮</span> 来给部分文字加高亮标记。
+   */
+  aboutParagraphs?: string | null;
+  /**
+   * 每行一条「标题｜副文字｜颜色」，颜色可选 yellow / cyan / pink。
+   */
+  aboutNotes?: string | null;
+  /**
+   * 每行一条「名称｜副标题｜数值｜颜色」，数值 0-100，颜色可选 yellow / cyan / pink / purple。
+   */
+  skills?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -535,6 +557,13 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   bio?: T;
   buttonLabel?: T;
   socials?: T;
+  footerSubtitle?: T;
+  footerChannels?: T;
+  footerGroups?: T;
+  aboutLead?: T;
+  aboutParagraphs?: T;
+  aboutNotes?: T;
+  skills?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

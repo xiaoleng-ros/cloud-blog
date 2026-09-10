@@ -3,8 +3,10 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
-    "dev": "astro dev",
+    "dev": "astro dev --port 3000",
+    "dev:proxy": "concurrently \"node proxy.mjs\" \"astro dev --port 3000\" --names proxy,astro --prefix-colors cyan,green",
     "build": "astro build",
+    "postbuild": "node ../cms/scripts/copy-blog-to-public.mjs",
     "preview": "astro preview"
   },
   "dependencies": {
@@ -12,5 +14,8 @@
     "@phosphor-icons/core": "^2.1.1",
     "astro": "^7.2.0",
     "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

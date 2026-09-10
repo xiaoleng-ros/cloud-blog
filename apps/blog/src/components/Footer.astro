@@ -1,7 +1,7 @@
 ---
 import Icon from './Icon.astro';
 import { site } from '../lib/posts';
-import { getSiteSettings } from '../lib/site-settings';
+import { getFooter, getSiteSettings } from '../lib/site-settings';
 
 const year = new Date().getFullYear();
 
@@ -9,16 +9,10 @@ const year = new Date().getFullYear();
 const settings = await getSiteSettings();
 const author = settings?.siteAuthor ?? site.author;
 
-const channels = [
-  { name: 'Bilibili', icon: 'bilibili', href: 'https://space.bilibili.com/46377861' },
-  { name: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg' },
-  { name: 'RSS', icon: 'rss', href: '/rss.xml' },
-];
-
-const groups = [
-  { name: 'QQ 交流群', icon: 'qq', href: '' },
-  { name: '微信交流群', icon: 'wechat', href: '' },
-];
+// 页脚副标题/链接/群组：优先后台站点设置（可随时在后台修改），缺失时回退默认值
+const footer = await getFooter();
+const channels = footer.channels;
+const groups = footer.groups;
 ---
 
 <footer class="site-footer">
@@ -33,7 +27,7 @@ const groups = [
       />
       <div class="site-footer__id-text">
         <strong>{author}</strong>
-        <span>AI · Code · Web</span>
+        <span>{footer.subtitle}</span>
       </div>
     </div>
 

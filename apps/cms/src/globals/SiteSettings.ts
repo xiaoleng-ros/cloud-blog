@@ -73,6 +73,66 @@ export const SiteSettings: GlobalConfig = {
             },
           ],
         },
+        {
+          label: '页脚',
+          fields: [
+            { name: 'footerSubtitle', type: 'text', label: '页脚副标题', admin: { width: '50%' } },
+            {
+              name: 'footerChannels',
+              type: 'textarea',
+              label: '页脚链接',
+              admin: {
+                rows: 5,
+                description:
+                  '每行一条「名称 链接」。支持 Bilibili / YouTube / RSS 图标，其余名称按文字展示。链接以 http 开头用新标签打开。',
+              },
+            },
+            {
+              name: 'footerGroups',
+              type: 'textarea',
+              label: '页脚群组',
+              admin: {
+                rows: 4,
+                description:
+                  '每行一条「名称 链接」，链接可留空仅填名称（展示为纯文字标签）。支持 QQ / 微信图标。',
+              },
+            },
+          ],
+        },
+        {
+          label: '关于页',
+          fields: [
+            { name: 'aboutLead', type: 'text', label: '关于页大标题', admin: { width: '50%' } },
+            {
+              name: 'aboutParagraphs',
+              type: 'textarea',
+              label: '关于页正文',
+              admin: {
+                rows: 6,
+                description:
+                  '每个段落一行。可使用简单 HTML，如 <span class="marker-highlight">高亮</span> 来给部分文字加高亮标记。',
+              },
+            },
+            {
+              name: 'aboutNotes',
+              type: 'textarea',
+              label: '关于页便签',
+              admin: {
+                rows: 4,
+                description: '每行一条「标题｜副文字｜颜色」，颜色可选 yellow / cyan / pink。',
+              },
+            },
+            {
+              name: 'skills',
+              type: 'textarea',
+              label: '技能环',
+              admin: {
+                rows: 6,
+                description: '每行一条「名称｜副标题｜数值｜颜色」，数值 0-100，颜色可选 yellow / cyan / pink / purple。',
+              },
+            },
+          ],
+        },
       ],
     },
   ],

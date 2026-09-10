@@ -34,6 +34,7 @@ function payloadHotReload() {
 
 export default defineConfig({
   site: process.env.SITE_URL ?? 'https://example.com',
+  base: '/',
   redirects: {
     '/projects': '/about',
   },
@@ -43,3 +44,4 @@ export default defineConfig({
   },
   integrations: [payloadHotReload()],
 });
+

@@ -22,16 +22,7 @@ const db =
     ? (await import(/* webpackIgnore: true */ '@payloadcms/db-postgres')).postgresAdapter({
         pool: { connectionString: process.env.POSTGRES_URL },
         // 与 sqlite 分支一致：PAYLOAD_FORCE_PUSH=1 时非交互建表（用于首次切换到线上库）
-        push:
-          process.env.PAYLOAD_FORCE_PUSH === '1'
-            ? {
-                forceAcceptWarning: true,
-                onError: (err: Error) => {
-                  console.error('[payload] postgres schema push 失败：', err)
-                  process.exit(1)
-                },
-              }
-            : undefined,
+        push: process.env.PAYLOAD_FORCE_PUSH === '1',
       })
     : sqliteAdapter({
         client: {
@@ -39,16 +30,7 @@ const db =
         },
         // 仅当需要接受破坏性 schema 变更时设置（如临时清理表）；
         // 正常环境下保持默认，改动 schema 时由交互式确认保护数据。
-        push:
-          process.env.PAYLOAD_FORCE_PUSH === '1'
-            ? {
-                forceAcceptWarning: true,
-                onError: (err: Error) => {
-                  console.error('[payload] schema push 失败：', err)
-                  process.exit(1)
-                },
-              }
-            : undefined,
+        push: process.env.PAYLOAD_FORCE_PUSH === '1',
       })
 import path from 'path'
 import { buildConfig } from 'payload'
