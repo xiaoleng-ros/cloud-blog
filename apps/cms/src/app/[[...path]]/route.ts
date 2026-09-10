@@ -1,18 +1,38 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, extname } from 'node:path'
 import { NextResponse } from 'next/server'
 
 // public 目录的绝对路径（相对于项目根目录）
 const PUBLIC_DIR = join(process.cwd(), 'public')
 
-// 静态文件扩展名（这些直接从 public 提供，不需要处理）
-const STATIC_EXTENSIONS = new Set([
-  '.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
-  '.woff', '.woff2', '.ttf', '.eot', '.otf',
-  '.mp4', '.webm', '.ogg', '.mp3', '.wav',
-  '.json', '.xml', '.txt', '.pdf',
-  '.webmanifest',
-])
+// 静态文件 Content-Type 映射（EdgeOne 上静态资源请求会进入此路由，需要直接读取返回）
+const MIME_TYPES: Record<string, string> = {
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.eot': 'application/vnd.ms-fontobject',
+  '.otf': 'font/otf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.json': 'application/json; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.pdf': 'application/pdf',
+  '.webmanifest': 'application/manifest+json',
+  '.html': 'text/html; charset=utf-8',
+}
 
 /**
  * 从 public 目录读取并返回静态 HTML 文件
@@ -61,16 +81,21 @@ export async function GET(
   const { path } = await params
   const pathname = '/' + (path?.join('/') ?? '')
 
-  // 跳过 Payload 后台和管理 API 路由，由对应的具体路由处理器处理
-  if (pathname.startsWith('/admin') || pathname.startsWith('/api')) {
-    return NextResponse.next()
-  }
-
-  // 检查是否是静态资源（有扩展名），如果是，让 Next.js 直接从 public 提供
-  const ext = pathname.slice(pathname.lastIndexOf('.'))
-  if (STATIC_EXTENSIONS.has(ext)) {
-    // 让 Next.js 直接从 public 目录提供静态资源
-    return NextResponse.next()
+  // 有扩展名的路径按静态文件处理：直接从 public 读取并返回
+  // 注意：不能使用 NextResponse.next()（app route handler 不支持），必须返回实际内容
+  const ext = extname(pathname).toLowerCase()
+  if (ext && MIME_TYPES[ext]) {
+    const filePath = join(PUBLIC_DIR, ...pathname.split('/').filter(Boolean))
+    if (existsSync(filePath)) {
+      const data = readFileSync(filePath)
+      return new NextResponse(data, {
+        headers: {
+          'Content-Type': MIME_TYPES[ext],
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable',
+        },
+      })
+    }
+    // 文件不存在时继续尝试 HTML 路径补全（如 /posts/xxx/index.html）
   }
 
   // 尝试读取对应的静态 HTML 文件
