@@ -37,8 +37,10 @@ const db =
   DATABASE_DRIVER === 'postgres'
     ? postgresAdapter({
         pool: {
-          connectionString: process.env.POSTGRES_URL,
-          // EdgeOne 出口网络存在 TLS 拦截（自签证书链），关闭证书校验避免 SELF_SIGNED_CERT_IN_CHAIN
+          connectionString: process.env.POSTGRES_URL
+            ? process.env.POSTGRES_URL + (process.env.POSTGRES_URL.includes('?') ? '&' : '?') + 'sslmode=no-verify'
+            : undefined,
+          // EdgeOne 出口网络存在 TLS 拦截（自签证书链），通过连接字符串强制关闭证书校验
           // 连接本身仍是 TLS 加密的，只是不再校验证书链
           ssl: { rejectUnauthorized: false },
         },
