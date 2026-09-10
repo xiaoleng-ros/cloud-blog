@@ -61,6 +61,11 @@ export async function GET(
   const { path } = await params
   const pathname = '/' + (path?.join('/') ?? '')
 
+  // 跳过 Payload 后台和管理 API 路由，由对应的具体路由处理器处理
+  if (pathname.startsWith('/admin') || pathname.startsWith('/api')) {
+    return NextResponse.next()
+  }
+
   // 检查是否是静态资源（有扩展名），如果是，让 Next.js 直接从 public 提供
   const ext = pathname.slice(pathname.lastIndexOf('.'))
   if (STATIC_EXTENSIONS.has(ext)) {
