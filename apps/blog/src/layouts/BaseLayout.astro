@@ -675,6 +675,12 @@ const routeMotion = {
           return true;
         };
 
+        // 页面加载后的首次同步必须无条件应用区块：
+        // 刷新后页面是构建时的静态快照（可能落后于后台最新数据），
+        // 而 localStorage 里往往已存有最新版本号；若首次也跳过，
+        // 会出现「刷新后回退成旧内容」的问题。
+        let firstSync = true;
+
         // 单次同步：请求最新区块并对比版本号
         const sync = async () => {
           try {
@@ -691,7 +697,9 @@ const routeMotion = {
             try {
               stored = localStorage.getItem(KEY);
             } catch {}
-            if (stored === data.version) return; // 无变化
+            // 仅在非首次同步时用版本号判断「无变化」
+            if (!firstSync && stored === data.version) return;
+            firstSync = false;
 
             const blocks = data.blocks || {};
             let updatedAny = false;
