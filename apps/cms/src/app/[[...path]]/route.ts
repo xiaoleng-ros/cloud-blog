@@ -106,7 +106,10 @@ export async function GET(
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+        // HTML 外壳禁止缓存：页面动态数据靠 /api/blog-sync 轮询更新，
+        // 若 HTML 被 CDN/浏览器缓存，旧外壳里的同步脚本版本过旧会导致「后台改了前台不变」。
+        // no-store 让 EdgeOne CDN 与浏览器每次都回源拿最新外壳。
+        'Cache-Control': 'no-store',
       },
     })
   }
