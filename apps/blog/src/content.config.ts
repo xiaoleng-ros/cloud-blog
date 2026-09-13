@@ -1,5 +1,5 @@
 import { defineCollection, z } from 'astro:content';
-import { payloadNotesLoader, payloadPostsLoader } from './lib/payload-loader';
+import { payloadNotesLoader, payloadPostsLoader, payloadProjectsLoader } from './lib/payload-loader';
 
 const stringList = z.preprocess((value) => {
   if (value === undefined || value === null) {
@@ -45,4 +45,23 @@ const notes = defineCollection({
     .passthrough(),
 });
 
-export const collections = { posts, notes };
+const projects = defineCollection({
+  loader: payloadProjectsLoader,
+  schema: z
+    .object({
+      group: z.string(),
+      groupDescription: z.string().optional(),
+      title: z.string(),
+      owner: z.string().optional(),
+      description: z.string().optional(),
+      icon: z.string().default('github'),
+      href: z.string().optional(),
+      articleHref: z.string().optional(),
+      stars: z.coerce.number().default(0),
+      tags: stringList,
+      sortOrder: z.coerce.number().default(0),
+    })
+    .passthrough(),
+});
+
+export const collections = { posts, notes, projects };

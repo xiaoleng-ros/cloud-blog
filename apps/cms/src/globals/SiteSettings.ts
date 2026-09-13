@@ -1,4 +1,5 @@
 import type { GlobalConfig } from 'payload'
+import { syncInvalidateHook } from '../lib/sync-cache'
 
 /** 站点设置（单例）：收纳前台 site.config.json、Hero、社交、歌单等配置（导航已拆到 Navigation） */
 export const SiteSettings: GlobalConfig = {
@@ -7,6 +8,9 @@ export const SiteSettings: GlobalConfig = {
   access: {
     read: () => true,
     update: () => true,
+  },
+  hooks: {
+    afterChange: [syncInvalidateHook],
   },
   admin: {
     description: '管理站点基本信息、首页 Hero 与社交链接。导航请到「导航管理」。',

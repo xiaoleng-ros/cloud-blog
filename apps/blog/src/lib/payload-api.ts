@@ -94,6 +94,39 @@ export interface MdEntry {
   body: string;
 }
 
+/** Payload projects 集合的 API 形状 */
+interface ApiProject {
+  id: number;
+  group: string;
+  groupDescription?: string | null;
+  title: string;
+  owner?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  href?: string | null;
+  articleHref?: string | null;
+  stars?: number | null;
+  tags?: string | null;
+  sortOrder?: number | null;
+  status: string;
+}
+
+/** 关于页项目条目（来自后台 projects 集合） */
+export interface ProjectEntry {
+  id: string;
+  group: string;
+  groupDescription?: string;
+  title: string;
+  owner?: string;
+  description?: string;
+  icon: string;
+  href?: string;
+  articleHref?: string;
+  stars: number;
+  tags?: string[];
+  sortOrder: number;
+}
+
 /** 把浅关系字段归一为字符串名列表 */
 function namesOf(refs?: (RefDoc | number)[]): string[] | undefined {
   if (!refs?.length) return undefined;
@@ -190,4 +223,28 @@ export async function fetchNavItems(): Promise<Array<{ href: string; label: stri
   } catch {
     return null;
   }
+}
+
+/** 拉取项目列表（关于页项目区，按 sortOrder 升序） */
+export async function fetchProjects(): Promise<ProjectEntry[]> {
+  const { docs } = await fetchJson<PayloadListResponse<ApiProject>>(
+    '/api/projects?limit=0&sort=sortOrder',
+  );
+
+  return docs
+    .filter((doc) => doc.status === 'published')
+    .map((doc) => ({
+      id: String(doc.id),
+      group: doc.group,
+      groupDescription: doc.groupDescription ?? undefined,
+      title: doc.title,
+      owner: doc.owner ?? undefined,
+      description: doc.description ?? undefined,
+      icon: doc.icon ?? 'github',
+      href: doc.href ?? undefined,
+      articleHref: doc.articleHref ?? undefined,
+      stars: Number(doc.stars ?? 0),
+      tags: linesOf(doc.tags),
+      sortOrder: Number(doc.sortOrder ?? 0),
+    }));
 }

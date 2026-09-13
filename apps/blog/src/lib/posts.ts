@@ -1,13 +1,13 @@
 import type { CollectionEntry } from 'astro:content';
-import siteConfig from '../data/site.config.json';
+import { SITE_DEFAULTS } from './site-defaults';
 
 export type BlogPost = CollectionEntry<'posts'>;
 
 export const site = {
-  name: siteConfig.siteName,
-  description: siteConfig.siteDescription,
-  url: import.meta.env.SITE_URL ?? 'https://example.com',
-  author: siteConfig.siteAuthor,
+  name: SITE_DEFAULTS.siteName,
+  description: SITE_DEFAULTS.siteDescription,
+  url: SITE_DEFAULTS.siteUrl,
+  author: SITE_DEFAULTS.siteAuthor,
 };
 
 const getTime = (date?: Date) => date?.getTime() ?? 0;

@@ -1,5 +1,6 @@
 import * as migration_20260910_061332_init from './20260910_061332_init';
 import * as migration_20260910_062703_footer_about_fields from './20260910_062703_footer_about_fields';
+import * as migration_20260913_000000_projects_collection from './20260913_000000_projects_collection';
 
 export const migrations = [
   {
@@ -11,5 +12,10 @@ export const migrations = [
     up: migration_20260910_062703_footer_about_fields.up,
     down: migration_20260910_062703_footer_about_fields.down,
     name: '20260910_062703_footer_about_fields'
+  },
+  {
+    up: migration_20260913_000000_projects_collection.up,
+    down: migration_20260913_000000_projects_collection.down,
+    name: '20260913_000000_projects_collection'
   },
 ];

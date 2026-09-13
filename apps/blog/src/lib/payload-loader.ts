@@ -18,7 +18,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import matter from 'gray-matter';
 import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
-import { fetchNavItems, fetchNotes, fetchPosts, fetchSiteSettings, type MdEntry } from './payload-api';
+import { fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, type MdEntry, type ProjectEntry } from './payload-api';
 
 /** dev 自动同步轮询间隔（毫秒）：3s，接近实时 */
 const AUTO_REFRESH_MS = 3_000
@@ -30,6 +30,7 @@ const DIGEST_KEYS = {
   notes: 'digest-notes',
   settings: 'digest-settings',
   nav: 'digest-nav',
+  projects: 'digest-projects',
 } as const
 
 /** 递归收集目录下所有 .md 文件，返回 [id(相对路径去扩展名), 绝对路径] */
@@ -149,6 +150,26 @@ export const payloadNotesLoader: Loader = {
   },
 };
 
+/** 项目加载器：API 优先（项目已全部入库，无本地 markdown 兜底） */
+export const payloadProjectsLoader: Loader = {
+  name: 'payload-projects-loader',
+  async load(ctx) {
+    try {
+      const entries = await fetchProjects();
+      ctx.logger.info(`[payload-loader] 项目：从后台 API 载入 ${entries.length} 条`);
+      for (const entry of entries) {
+        const data = await ctx.parseData({ id: entry.id, data: entry });
+        ctx.store.set({ id: entry.id, data });
+      }
+      ctx.meta.set(DIGEST_KEYS.projects, ctx.generateDigest(JSON.stringify(entries)));
+    } catch (error) {
+      ctx.logger.warn(`[payload-loader] 项目后台不可用（${(error as Error).message}），跳过`);
+    }
+
+    schedulePolling(ctx, '项目', pollProjects);
+  },
+};
+
 /** touch 刷新信号文件，通知 dev 集成广播浏览器整页刷新 */
 function touchSyncMarker() {
   try {
@@ -229,5 +250,19 @@ async function pollNotes(ctx: LoaderContext): Promise<boolean> {
   if (ctx.meta.get(DIGEST_KEYS.notes) === digest) return false;
   ctx.meta.set(DIGEST_KEYS.notes, digest);
   await storeEntries(ctx, ctx.store, entries);
+  return true;
+}
+
+/** 轮询项目：有变化时清空并重新写入，返回是否变化 */
+async function pollProjects(ctx: LoaderContext): Promise<boolean> {
+  const entries = await fetchProjects();
+  const digest = ctx.generateDigest(JSON.stringify(entries));
+  if (ctx.meta.get(DIGEST_KEYS.projects) === digest) return false;
+  ctx.meta.set(DIGEST_KEYS.projects, digest);
+  ctx.store.clear();
+  for (const entry of entries) {
+    const data = await ctx.parseData({ id: entry.id, data: entry });
+    ctx.store.set({ id: entry.id, data });
+  }
   return true;
 }
