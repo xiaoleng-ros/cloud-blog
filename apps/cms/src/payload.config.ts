@@ -13,6 +13,7 @@ import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
 import { Notes } from './collections/Notes'
 import { Posts } from './collections/Posts'
+import { Projects } from './collections/Projects'
 import { Tags } from './collections/Tags'
 import { Users } from './collections/Users'
 import { Navigation } from './globals/Navigation'
@@ -111,7 +112,7 @@ export default buildConfig({
     supportedLanguages: { zh },
   },
   // 数据模型：文章、随笔、分类、标签、图片、用户 + 站点设置/导航管理单例
-  collections: [Posts, Notes, Categories, Tags, Media, Users],
+  collections: [Posts, Notes, Categories, Tags, Media, Projects, Users],
   globals: [SiteSettings, Navigation],
   // 富文本编辑器
   editor: lexicalEditor(),

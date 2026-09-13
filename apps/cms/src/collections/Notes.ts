@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { syncInvalidateHook } from '../lib/sync-cache'
 
 /** 随笔集合：对齐前台 src/content/notes/*.md */
 export const Notes: CollectionConfig = {
@@ -13,6 +14,10 @@ export const Notes: CollectionConfig = {
   },
   access: {
     read: () => true,
+  },
+  hooks: {
+    afterChange: [syncInvalidateHook],
+    afterDelete: [syncInvalidateHook],
   },
   fields: [
     {

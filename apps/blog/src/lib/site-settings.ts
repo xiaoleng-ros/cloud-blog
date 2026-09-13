@@ -2,7 +2,7 @@
  * 站点设置接入模块
  *
  * 从 Payload 后台的「站点设置」Global 读取配置（站点信息/导航/社交/Hero 文案），
- * 后台不可用时自动回退到本地 data/site.config.json 或组件内默认值。
+ * 后台不可用时自动回退到组件内默认值（见 lib/site-defaults.ts）。
  * 模块级缓存：整个构建/开发过程只请求一次后台。
  */
 import { fetchNavItems, fetchSiteSettings } from './payload-api';

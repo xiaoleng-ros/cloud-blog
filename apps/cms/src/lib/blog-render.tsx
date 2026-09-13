@@ -21,22 +21,22 @@ import remarkLegacyShortcodes from '../../../blog/src/lib/remark-legacy-shortcod
 import rehypeLegacyShortcodes from '../../../blog/src/lib/rehype-legacy-shortcodes.mjs'
 import rehypeImgAttrs from '../../../blog/src/lib/rehype-img-attrs.mjs'
 
-import siteConfig from '../../../blog/src/data/site.config.json'
 import {
-  fetchNotes,
-  fetchPosts,
-  getNavData,
-  getSiteSettingsData,
-  getDataVersion,
   type MdEntry,
+  type ProjectEntry,
+  getSyncData,
 } from './blog-sync'
+import { getBlock, setBlock } from './sync-cache'
 
-export const site = {
-  name: siteConfig.siteName,
-  description: siteConfig.siteDescription,
-  url: process.env.NEXT_PUBLIC_SERVER_URL ?? siteConfig.siteUrl ?? 'https://example.com',
-  author: siteConfig.siteAuthor,
+// 站点默认值（后台 SiteSettings 缺失时兜底）。原 site.config.json 已移除，统一在此维护。
+const SITE_DEFAULTS = {
+  name: '云岫的博客',
+  description: '记录 AI、代码、网站搭建和技术观察。',
+  url: process.env.NEXT_PUBLIC_SERVER_URL ?? 'https://example.com',
+  author: '段枫',
 }
+
+export const site = { ...SITE_DEFAULTS }
 
 // ---------------------------------------------------------------------------
 // 基础工具
@@ -291,9 +291,13 @@ const icons: Record<string, string> = {
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   'arrow-right': '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  'arrow-up-right': '<path d="M7 17 17 7M8 7h9v9"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5M3 17l9 5 9-5"/>',
   hash: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
+  github: '<path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.7 4.7 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.3 4.3 0 0 0-.1 3.2A4.7 4.7 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/>',
+  download: '<path d="M12 3v11M7 10l5 5 5-5M5 19h14"/>',
   cloud: '<path d="M7 18h9.5a3.5 3.5 0 0 0 .3-6.98 5 5 0 0 0-9.65-1.35A3.75 3.75 0 0 0 7 18Z"/>',
   'cloud-drizzle': '<path d="M8 12.5a4 4 0 0 1 .2-7.97 5 5 0 0 1 9.5 1.3 3.5 3.5 0 0 1 .3 6.67"/><path d="M8 17v1.5M8 20.5V21M12 18v1.5M12 21.5V22M16 17v1.5M16 20.5V21"/>',
   'cloud-rain': '<path d="M8 12.5a4 4 0 0 1 .2-7.97 5 5 0 0 1 9.5 1.3 3.5 3.5 0 0 1 .3 6.67"/><path d="M8 16v4M12 17v4M16 16v4"/>',
@@ -980,12 +984,255 @@ export async function renderNotesFeed(notes: MdEntry[]): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// 关于页（about.astro）：正文/便签/技能环 + 项目区
+// ---------------------------------------------------------------------------
+
+interface SkillItem {
+  label: string
+  sublabel: string
+  value: number
+  color: 'yellow' | 'cyan' | 'pink' | 'purple'
+}
+interface NoteItem {
+  title: string
+  subtitle: string
+  color: 'yellow' | 'cyan' | 'pink'
+}
+interface AboutData {
+  lead: string
+  paragraphs: string[]
+  notes: NoteItem[]
+  skills: SkillItem[]
+}
+
+const SKILL_COLORS = ['yellow', 'cyan', 'pink', 'purple']
+const NOTE_COLORS = ['yellow', 'cyan', 'pink']
+
+function safeSkillColor(color: string): SkillItem['color'] {
+  return (color && SKILL_COLORS.includes(color) ? color : 'yellow') as SkillItem['color']
+}
+function safeNoteColor(color: string): NoteItem['color'] {
+  return (color && NOTE_COLORS.includes(color) ? color : 'pink') as NoteItem['color']
+}
+
+function parseSkills(raw?: string | null): SkillItem[] {
+  if (!raw) return []
+  const out: SkillItem[] = []
+  for (const line of String(raw).split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const parts = trimmed.split('|').map((s) => s.trim())
+    if (!parts[0]) continue
+    out.push({
+      label: parts[0],
+      sublabel: parts[1] ?? '',
+      value: Math.min(100, Math.max(0, Number(parts[2]) || 0)),
+      color: safeSkillColor(parts[3] ?? ''),
+    })
+  }
+  return out
+}
+
+function parseAboutNotes(raw?: string | null): NoteItem[] {
+  if (!raw) return []
+  const out: NoteItem[] = []
+  for (const line of String(raw).split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const parts = trimmed.split('|').map((s) => s.trim())
+    if (!parts[0]) continue
+    out.push({ title: parts[0], subtitle: parts[1] ?? '', color: safeNoteColor(parts[2] ?? '') })
+  }
+  return out
+}
+
+/** 关于页文案：优先后台 SiteSettings，缺失回退默认（与前台 site-settings.ts 一致） */
+function getAboutData(settings: Record<string, any> | null): AboutData {
+  const skills = parseSkills(settings?.skills)
+  const notes = parseAboutNotes(settings?.aboutNotes)
+  const paragraphs = (settings?.aboutParagraphs ?? '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return {
+    lead: settings?.aboutLead ?? '关于我',
+    paragraphs:
+      paragraphs.length > 0
+        ? paragraphs
+        : [
+            '我喜欢<span class="marker-highlight">歪一点</span>的东西——太正了反而不真实。',
+            '白天：<span class="marker-highlight">前端工程师 + 视觉设计师</span>，做正经的项目。<br />晚上：<span class="marker-highlight">画涂鸦</span>、写小工具、做声音装置。',
+            '梦想是让互联网上多一点<span class="marker-highlight">好玩的角落</span>。',
+          ],
+    notes:
+      notes.length > 0
+        ? notes
+        : [
+            { title: '坐标广州', subtitle: '1995 年生', color: 'yellow' },
+            { title: '独立创作者', subtitle: '8 年经验', color: 'cyan' },
+            { title: '一天三杯咖啡', subtitle: '（不是广告）', color: 'pink' },
+          ],
+    skills:
+      skills.length > 0
+        ? skills
+        : [
+            { label: 'HTML / CSS', sublabel: '画框搭的', value: 95, color: 'yellow' },
+            { label: 'JavaScript', sublabel: '会耍魔术', value: 90, color: 'cyan' },
+            { label: 'AI 工具', sublabel: '乱点乱用', value: 88, color: 'pink' },
+            { label: 'Astro', sublabel: '让人省点', value: 85, color: 'purple' },
+            { label: '视觉设计', sublabel: '爱涂爱画', value: 82, color: 'yellow' },
+          ],
+  }
+}
+
+const SKILL_RING_COLOR: Record<SkillItem['color'], string> = {
+  yellow: 'var(--sticky-yellow)',
+  cyan: 'var(--sticky-cyan)',
+  pink: 'var(--sticky-pink)',
+  purple: 'var(--sticky-purple)',
+}
+
+/** 技能环（与 SkillRing.astro 结构一致） */
+function renderSkillRing(skill: SkillItem): string {
+  const ringColor = SKILL_RING_COLOR[skill.color]
+  const percent = Math.min(100, Math.max(0, skill.value))
+  return `<div class="skill-ring">
+  <div class="skill-ring__track" aria-hidden="true">
+    <div class="skill-ring__fill" style="--ring-color: ${ringColor}; --percent: ${percent}%"></div>
+    <span class="skill-ring__value">${percent}%</span>
+  </div>
+  <div class="skill-ring__text">
+    <strong>${escapeHtml(skill.label)}</strong>
+    ${skill.sublabel ? `<small>${escapeHtml(skill.sublabel)}</small>` : ''}
+  </div>
+</div>`
+}
+
+/** 关于页顶部：左文案 + 右便签（about.astro .about__profile） */
+function renderAboutProfile(about: AboutData, postCount: number, firstYear: number): string {
+  const paragraphsHtml = about.paragraphs
+    .map((p) => `<p class="about__text">${p}</p>`)
+    .join('')
+  const notesHtml = about.notes
+    .map(
+      (n) => `<div class="about__note about__note--${escapeAttr(n.color)}">
+    <span class="about__note-tape" aria-hidden="true"></span>
+    <strong>${escapeHtml(n.title)}</strong>
+    <span>${escapeHtml(n.subtitle)}</span>
+  </div>`,
+    )
+    .join('')
+  return `<section class="about__profile" aria-labelledby="about-heading">
+  <div class="about__intro-card">
+    <span class="about__eyebrow">ABOUT</span>
+    <h1 id="about-heading" class="about__lead">${escapeHtml(about.lead)}</h1>
+    ${paragraphsHtml}
+    <div class="about__facts">
+      <span class="about__fact">${postCount} 篇文章</span>
+      <span class="about__fact">写于 ${firstYear} 至今</span>
+      <span class="about__fact">全站由 AI 开发</span>
+    </div>
+  </div>
+  <div class="about__notes">${notesHtml}</div>
+</section>`
+}
+
+/** 关于页技能环区（about.astro .about__skills） */
+function renderAboutSkills(skills: SkillItem[]): string {
+  return `<section class="about__skills" aria-labelledby="skills-heading">
+  <div class="section__header">
+    <h2 id="skills-heading">我的小本领</h2>
+  </div>
+  <div class="skill-grid">${skills.map(renderSkillRing).join('')}</div>
+</section>`
+}
+
+/** 实心星星图标（项目 Star 数） */
+const STAR_FILL_SVG =
+  '<svg class="proj__stars-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
+
+interface ProjectGroup {
+  title: string
+  description: string
+  items: ProjectEntry[]
+}
+
+/** 把扁平项目列表按 group 聚合，组内按 sortOrder 升序，保留首次出现的分组描述 */
+function groupProjects(projects: ProjectEntry[]): ProjectGroup[] {
+  const order: string[] = []
+  const byGroup = new Map<string, { description: string; items: ProjectEntry[] }>()
+  for (const p of projects) {
+    if (!byGroup.has(p.group)) {
+      byGroup.set(p.group, { description: p.groupDescription ?? '', items: [] })
+      order.push(p.group)
+    }
+    byGroup.get(p.group)!.items.push(p)
+  }
+  return order.map((title) => {
+    const g = byGroup.get(title)!
+    return { title, description: g.description, items: g.items }
+  })
+}
+
+/** 单个项目卡片（about.astro .proj） */
+function renderProject(item: ProjectEntry): string {
+  const starsHtml =
+    item.stars > 0
+      ? `<span class="proj__stars">${STAR_FILL_SVG}${item.stars}</span>`
+      : ''
+  const tagsHtml = (item.tags ?? [])
+    .map((t) => `<small>${escapeHtml(t)}</small>`)
+    .join('')
+  const noteHtml = item.articleHref
+    ? `<a class="proj__note" href="${escapeAttr(item.articleHref)}">笔记${iconSvg('arrow-right', 13)}</a>`
+    : ''
+  return `<article class="proj">
+  <span class="proj__icon">${iconSvg(item.icon, 18)}</span>
+  <div class="proj__body">
+    <span class="proj__owner">${escapeHtml(item.owner ?? '')}${starsHtml}</span>
+    <h3 class="proj__title">
+      <a href="${escapeAttr(item.href ?? '#')}"${
+        item.href && item.href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : ''
+      }>
+        ${escapeHtml(item.title)}${iconSvg('arrow-up-right', 16, 'proj__go')}
+      </a>
+    </h3>
+    <p class="proj__desc">${escapeHtml(item.description ?? '')}</p>
+    <div class="proj__foot">
+      <span class="proj__tags">${tagsHtml}</span>
+      ${noteHtml}
+    </div>
+  </div>
+</article>`
+}
+
+/** 关于页项目区（按分组聚合，与 about.astro 结构一致） */
+function renderAboutProjects(projects: ProjectEntry[]): string {
+  const groups = groupProjects(projects)
+  const sections = groups
+    .map(
+      (group) => group.items.length > 0
+        ? `<section class="proj-section" aria-labelledby="${escapeAttr(group.title)}-heading">
+  <div class="proj-section__head">
+    <h2 class="proj-section__label" id="${escapeAttr(group.title)}-heading">${escapeHtml(group.title)}</h2>
+    <p class="proj-section__desc">${escapeHtml(group.description)}</p>
+  </div>
+  <div class="proj-grid">${group.items.map(renderProject).join('')}</div>
+</section>`
+        : '',
+    )
+    .join('')
+  return sections
+}
+
+// ---------------------------------------------------------------------------
 // 各页面 blocks 组装
 // ---------------------------------------------------------------------------
 
 interface SyncData {
   posts: MdEntry[]
   notes: MdEntry[]
+  projects: ProjectEntry[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string }>
   version: string
@@ -1119,47 +1366,91 @@ async function termBlocks(
   }
 }
 
+/** 关于页 */
+async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
+  const posts = sortPosts(ctx.posts)
+  const postCount = posts.length
+  const firstYear = posts.reduce((min, post) => {
+    const year = toDate(post.data.date)?.getFullYear()
+    return year && year < min ? year : min
+  }, new Date().getFullYear())
+  const about = getAboutData(ctx.settings)
+  const settings = ctx.settings
+  const siteName = settings?.siteName ?? site.name
+
+  return {
+    brandName: siteName,
+    navLinks: renderNavLinks(ctx.nav, '/about/'),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    aboutProfile: renderAboutProfile(about, postCount, firstYear),
+    aboutSkills: renderAboutSkills(about.skills),
+    aboutProjects: renderAboutProjects(ctx.projects),
+  }
+}
+
 /**
  * 根据页面路径组装动态区块（/api/blog-sync 的主入口）。
- * pathname 形如 '/posts/xxx'、'/archive'、'/notes'、'/categories/xxx'、'/tags/xxx'。
+ * pathname 形如 '/'、'/posts/xxx'、'/archive'、'/notes'、'/about'、'/categories/xxx'、'/tags/xxx'。
+ *
+ * 性能：先取 sync-cache 的数据快照（命中则零查库）；若该 pathname 的区块缓存版本号
+ * 与当前一致，直接返回缓存（零渲染）。否则渲染一次并写回区块缓存。afterChange 钩子
+ * 会清除缓存，使下一次请求重新渲染最新数据。
  */
 export async function renderBlocksForPathname(pathname: string): Promise<{
   version: string
   title: string | null
   blocks: Record<string, string | null>
 }> {
-  const [posts, notes, settings, nav, version] = await Promise.all([
-    fetchPosts(),
-    fetchNotes(),
-    getSiteSettingsData(),
-    getNavData(),
-    getDataVersion(),
-  ])
-  const ctx: SyncData = { posts, notes, settings, nav, version }
+  const snapshot = await getSyncData()
+  const version = snapshot.version
+
+  // 命中区块缓存：版本号一致 → 直接返回，零查库、零渲染（~1ms）
+  const cached = getBlock(pathname)
+  if (cached && cached.version === version) {
+    return { version, title: cached.title, blocks: cached.blocks }
+  }
+
+  const ctx: SyncData = {
+    posts: snapshot.posts,
+    notes: snapshot.notes,
+    projects: snapshot.projects,
+    settings: snapshot.settings,
+    nav: snapshot.nav,
+    version,
+  }
   const path = pathname.endsWith('/') ? pathname : `${pathname}/`
-  const siteName = settings?.siteName ?? site.name
+  const siteName = snapshot.settings?.siteName ?? site.name
+
+  let title: string | null = siteName
+  let blocks: Record<string, string | null>
 
   if (path === '/') {
-    const blocks = await homeBlocks(ctx)
-    return { version, title: siteName, blocks }
+    blocks = await homeBlocks(ctx)
+    title = siteName
+  } else if (path.startsWith('/posts/')) {
+    blocks = await postBlocks(ctx, path)
+    title = (blocks.pageTitle as string) ?? siteName
+  } else if (path === '/notes/') {
+    blocks = await notesBlocks(ctx)
+    title = `随笔 - ${siteName}`
+  } else if (path === '/archive/') {
+    blocks = await archiveBlocks(ctx)
+    title = `归档 - ${siteName}`
+  } else if (path === '/about/') {
+    blocks = await aboutBlocks(ctx)
+    title = `关于 - ${siteName}`
+  } else if (path.startsWith('/categories/')) {
+    blocks = await termBlocks(ctx, path, 'categories')
+    title = `分类 - ${siteName}`
+  } else if (path.startsWith('/tags/')) {
+    blocks = await termBlocks(ctx, path, 'tags')
+    title = `标签 - ${siteName}`
+  } else {
+    blocks = {}
+    title = siteName
   }
-  if (path.startsWith('/posts/')) {
-    const blocks = await postBlocks(ctx, path)
-    return { version, title: (blocks.pageTitle as string) ?? siteName, blocks }
-  }
-  if (path === '/notes/') {
-    return { version, title: `随笔 - ${siteName}`, blocks: await notesBlocks(ctx) }
-  }
-  if (path === '/archive/') {
-    return { version, title: `归档 - ${siteName}`, blocks: await archiveBlocks(ctx) }
-  }
-  if (path.startsWith('/categories/')) {
-    const blocks = await termBlocks(ctx, path, 'categories')
-    return { version, title: `分类 - ${siteName}`, blocks }
-  }
-  if (path.startsWith('/tags/')) {
-    const blocks = await termBlocks(ctx, path, 'tags')
-    return { version, title: `标签 - ${siteName}`, blocks }
-  }
-  return { version, title: siteName, blocks: {} }
+
+  setBlock(pathname, { version, title, blocks, ts: Date.now() })
+  return { version, title, blocks }
 }

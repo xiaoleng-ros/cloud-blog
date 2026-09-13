@@ -1,5 +1,5 @@
 ---
-import { getCollection } from 'astro:content';
+import { getCollection, type CollectionEntry } from 'astro:content';
 import Icon from '../components/Icon.astro';
 import SkillRing from '../components/SkillRing.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -16,88 +16,31 @@ const firstYear = posts.reduce((min, post) => {
 // 关于页正文/便签/技能：优先后台站点设置（可随时在后台修改），缺失时回退默认值
 const about = await getAboutContent();
 
-// ---- 开源项目：构建时从 GitHub API 自动同步 ----
-interface GhRepo {
-  name: string;
-  description: string | null;
-  html_url: string;
-  stargazers_count: number;
-  language: string | null;
-  topics: string[];
-  fork: boolean;
-}
+// ---- 项目：全部来自 Payload 后台 projects 集合，构建时载入 ----
+// loader 已按 sortOrder 升序写入 store，分组时保持该顺序
+const projects = await getCollection('projects');
 
-import cachedRepos from '../data/github-projects.json';
-import siteConfig from '../data/site.config.json';
-import starFillIcon from '@phosphor-icons/core/assets/fill/star-fill.svg?raw';
-
-const GITHUB_USER = siteConfig.githubUser;
-
-const articleByRepo: Record<string, string> = Object.fromEntries(
-  Object.entries(siteConfig.projectOverrides)
-    .filter(([, v]) => v.article)
-    .map(([name, v]) => [name, v.article as string]),
-);
-
-const iconByRepo: Record<string, string> = Object.fromEntries(
-  Object.entries(siteConfig.projectOverrides)
-    .filter(([, v]) => v.icon)
-    .map(([name, v]) => [name, v.icon as string]),
-);
-
-const fetchGithubRepos = async (): Promise<GhRepo[]> => {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(
-      `https://api.github.com/users/${GITHUB_USER}/repos?per_page=100&sort=pushed&type=source`,
-      {
-        headers: {
-          'User-Agent': 'laogou717-blog/astro',
-          Accept: 'application/vnd.github+json',
-        },
-        signal: controller.signal,
-      },
-    );
-    clearTimeout(timer);
-    if (!res.ok) return cachedRepos as GhRepo[];
-    const repos = (await res.json()) as GhRepo[];
-    return repos.length ? repos : (cachedRepos as GhRepo[]);
-  } catch {
-    return cachedRepos as GhRepo[];
+// 分组聚合：镜像后台 blog-render.tsx 的 groupProjects()——
+// 保留首次出现的分组描述，组内顺序即 sortOrder 顺序
+const projectGroups = (() => {
+  const order: string[] = [];
+  const byGroup = new Map<string, { description: string; items: CollectionEntry<'projects'>[] }>();
+  for (const p of projects) {
+    if (!byGroup.has(p.data.group)) {
+      byGroup.set(p.data.group, { description: p.data.groupDescription ?? '', items: [] });
+      order.push(p.data.group);
+    }
+    byGroup.get(p.data.group)!.items.push(p);
   }
-};
+  return order.map((title) => {
+    const g = byGroup.get(title)!;
+    return { title, description: g.description, items: g.items.map((entry) => entry.data) };
+  });
+})();
 
-const githubRepos = (await fetchGithubRepos())
-  .filter((repo) => !repo.fork)
-  .sort((a, b) => b.stargazers_count - a.stargazers_count);
-
-const openSourceItems = githubRepos.map((repo) => ({
-  title: repo.name,
-  owner: GITHUB_USER,
-  description: repo.description ?? '开源项目。',
-  icon: iconByRepo[repo.name] ?? 'github',
-  href: repo.html_url,
-  articleHref: articleByRepo[repo.name],
-  stars: repo.stargazers_count,
-  tags: repo.topics?.length ? repo.topics.slice(0, 4) : [repo.language ?? 'GitHub'],
-}));
-
-const projectGroups = [
-  {
-    title: '开源项目',
-    description: '自己写的一些开源项目，构建时从 GitHub 自动同步，欢迎 Star 和提建议。',
-    items: openSourceItems,
-  },
-  ...siteConfig.projectGroups.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({
-      ...item,
-      articleHref: (item as { article?: string }).article,
-      stars: 0,
-    })),
-  })),
-];
+// 实心星星（项目 Star 数）：内联 SVG，与后台渲染的 STAR_FILL_SVG 逐字一致
+const STAR_FILL_SVG =
+  '<svg class="proj__stars-icon" aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
 ---
 
 <BaseLayout
@@ -106,8 +49,8 @@ const projectGroups = [
   pageClass="content-page"
 >
   <article class="about">
-    <!-- 关于我：左文字 + 右便签 -->
-    <section class="about__profile" aria-labelledby="about-heading">
+    <!-- 关于我：左文字 + 右便签（运行时同步区块） -->
+    <section class="about__profile" aria-labelledby="about-heading" data-sync-block="aboutProfile">
       <div class="about__intro-card">
         <span class="about__eyebrow">ABOUT</span>
         <h1 id="about-heading" class="about__lead">
@@ -134,8 +77,8 @@ const projectGroups = [
       </div>
     </section>
 
-    <!-- 我的小本领 -->
-    <section class="about__skills" aria-labelledby="skills-heading">
+    <!-- 我的小本领（运行时同步区块） -->
+    <section class="about__skills" aria-labelledby="skills-heading" data-sync-block="aboutSkills">
       <div class="section__header">
         <h2 id="skills-heading">我的小本领</h2>
       </div>
@@ -144,57 +87,61 @@ const projectGroups = [
       </div>
     </section>
 
-    <!-- 项目 -->
-    {projectGroups.map((section) =>
-      section.items.length > 0 ? (
-        <section class="proj-section" aria-labelledby={`${section.title}-heading`}>
-          <div class="proj-section__head">
-            <h2 class="proj-section__label" id={`${section.title}-heading`}>{section.title}</h2>
-            <p class="proj-section__desc">{section.description}</p>
-          </div>
+    <!-- 项目区（运行时同步区块）
+         后端返回多个 .proj-section（无统一根节点），用 display:contents 的
+         透明锚点承载，子元素仍按 .about 直接子级参与布局 -->
+    <div data-sync-block="aboutProjects" style="display: contents">
+      {projectGroups.map((section) =>
+        section.items.length > 0 ? (
+          <section class="proj-section" aria-labelledby={`${section.title}-heading`}>
+            <div class="proj-section__head">
+              <h2 class="proj-section__label" id={`${section.title}-heading`}>{section.title}</h2>
+              <p class="proj-section__desc">{section.description}</p>
+            </div>
 
-          <div class="proj-grid">
-            {section.items.map((item) => (
-              <article class="proj">
-                <span class="proj__icon"><Icon name={item.icon} size={18} /></span>
-                <div class="proj__body">
-                  <span class="proj__owner">
-                    {item.owner}
-                    {item.stars > 0 && (
-                      <span class="proj__stars">
-                        <span class="proj__stars-icon" aria-hidden="true" set:html={starFillIcon}></span>
-                        {item.stars}
-                      </span>
-                    )}
-                  </span>
-                  <h3 class="proj__title">
-                    <a
-                      href={item.href}
-                      target={item.href.startsWith('http') ? '_blank' : undefined}
-                      rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                    >
-                      {item.title}
-                      <Icon name="arrow-up-right" size={16} class="proj__go" />
-                    </a>
-                  </h3>
-                  <p class="proj__desc">{item.description}</p>
-                  <div class="proj__foot">
-                    <span class="proj__tags">
-                      {item.tags.map((tag) => <small>{tag}</small>)}
+            <div class="proj-grid">
+              {section.items.map((item) => (
+                <article class="proj">
+                  <span class="proj__icon"><Icon name={item.icon} size={18} /></span>
+                  <div class="proj__body">
+                    <span class="proj__owner">
+                      {item.owner ?? ''}
+                      {item.stars > 0 && (
+                        <span class="proj__stars">
+                          <Fragment set:html={STAR_FILL_SVG} />
+                          {item.stars}
+                        </span>
+                      )}
                     </span>
-                    {item.articleHref && (
-                      <a class="proj__note" href={item.articleHref}>
-                        笔记
-                        <Icon name="arrow-right" size={13} />
+                    <h3 class="proj__title">
+                      <a
+                        href={item.href ?? '#'}
+                        target={item.href?.startsWith('http') ? '_blank' : undefined}
+                        rel={item.href?.startsWith('http') ? 'noopener noreferrer' : undefined}
+                      >
+                        {item.title}
+                        <Icon name="arrow-up-right" size={16} class="proj__go" />
                       </a>
-                    )}
+                    </h3>
+                    <p class="proj__desc">{item.description ?? ''}</p>
+                    <div class="proj__foot">
+                      <span class="proj__tags">
+                        {(item.tags ?? []).map((tag) => <small>{tag}</small>)}
+                      </span>
+                      {item.articleHref && (
+                        <a class="proj__note" href={item.articleHref}>
+                          笔记
+                          <Icon name="arrow-right" size={13} />
+                        </a>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null
-    )}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null
+      )}
+    </div>
   </article>
 </BaseLayout>

@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { syncInvalidateHook } from '../lib/sync-cache'
 
 /** 博客文章集合：字段与前台 markdown frontmatter 对齐，正文用 Markdown 源码 + 实时预览 */
 export const Posts: CollectionConfig = {
@@ -14,6 +15,10 @@ export const Posts: CollectionConfig = {
   },
   access: {
     read: () => true,
+  },
+  hooks: {
+    afterChange: [syncInvalidateHook],
+    afterDelete: [syncInvalidateHook],
   },
   fields: [
     { name: 'title', type: 'text', required: true, label: '标题' },

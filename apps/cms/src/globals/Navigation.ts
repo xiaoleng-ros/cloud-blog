@@ -1,4 +1,5 @@
 import type { GlobalConfig } from 'payload'
+import { syncInvalidateHook } from '../lib/sync-cache'
 
 /** 导航管理（单例）：配置前台顶部导航菜单（对应从前 SiteSettings.navItems 拆出） */
 export const Navigation: GlobalConfig = {
@@ -7,6 +8,9 @@ export const Navigation: GlobalConfig = {
   access: {
     read: () => true,
     update: () => true,
+  },
+  hooks: {
+    afterChange: [syncInvalidateHook],
   },
   admin: {
     description: '配置前台顶部导航菜单（支持增删、排序）。',
