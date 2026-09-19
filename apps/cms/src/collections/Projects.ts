@@ -10,10 +10,11 @@ import { syncInvalidateHook } from '../lib/sync-cache'
  */
 export const Projects: CollectionConfig = {
   slug: 'projects',
+  // 列表默认按 group 排序（defaultSort 属于 CollectionConfig 顶层，不在 admin 下）
+  defaultSort: 'group',
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'group', 'sortOrder', 'status', 'updatedAt'],
-    defaultSort: 'group',
   },
   labels: {
     singular: '项目',

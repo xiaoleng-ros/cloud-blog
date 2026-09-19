@@ -6,10 +6,13 @@
  * 2. 将 Payload API 返回的数据结构转换为前台 content schema 兼容的格式
  * 3. 请求失败/后台不可用时抛出异常，由调用方回退到本地 markdown
  *
- * 说明：使用 node:http 而非全局 fetch——本机网络环境下 undici(fetch) 可能
- * 无法连接 localhost 后台，而 node:http 工作正常，且 loader 仅在 Node 侧运行。
+ * 说明：使用 node:http / node:https 而非全局 fetch——本机网络环境下 undici(fetch)
+ * 可能无法连接 localhost 后台，而 node 原生模块工作正常，且 loader 仅在 Node 侧运行。
+ * 注意：node:http 只支持 http 协议，线上后台是 https，必须按协议选择对应模块，
+ * 否则会报 `Protocol "https:" not supported. Expected "http:"` 导致构建时拉不到数据。
  */
 import { get as httpGet } from 'node:http';
+import { get as httpsGet } from 'node:https';
 
 /** 后台 API 根地址（在 .env 中配置 PUBLIC_PAYLOAD_URL）
  *  注意：显式替换为 127.0.0.1 —— Windows 上 localhost 可能被解析为 IPv6 ::1，
@@ -20,9 +23,12 @@ export const PAYLOAD_URL = (import.meta.env.PUBLIC_PAYLOAD_URL ?? 'http://localh
 
 /** 基于 node:http 的 GET+JSON 请求，超时或非 2xx 时抛错（超时放宽以容忍后台首次编译） */
 function fetchJson<T>(path: string, timeoutMs = 20000): Promise<T> {
+  const url = `${PAYLOAD_URL}${path}`;
+  // http / https 共用同一套 options 与回调签名，按协议选择模块
+  const get = url.startsWith('https:') ? httpsGet : httpGet;
   return new Promise<T>((resolve, reject) => {
-    const req = httpGet(
-      `${PAYLOAD_URL}${path}`,
+    const req = get(
+      url,
       { timeout: timeoutMs, headers: { accept: 'application/json' } },
       (res) => {
         let raw = '';

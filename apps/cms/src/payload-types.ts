@@ -72,6 +72,7 @@ export interface Config {
     categories: Category;
     tags: Tag;
     media: Media;
+    projects: Project;
     users: User;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -85,6 +86,7 @@ export interface Config {
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     tags: TagsSelect<false> | TagsSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    projects: ProjectsSelect<false> | ProjectsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -227,6 +229,62 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "projects".
+ */
+export interface Project {
+  id: number;
+  /**
+   * 同一分组会聚合成一个区块，如「开源项目」「资源下载」。
+   */
+  group: string;
+  /**
+   * 显示在分组标题下方，可留空。同一分组取第一条。
+   */
+  groupDescription?: string | null;
+  title: string;
+  owner?: string | null;
+  description?: string | null;
+  /**
+   * 与前台 Icon 组件一致的图标名，如 github / download / globe / wechat。
+   */
+  icon?: string | null;
+  href?: string | null;
+  articleHref?: string | null;
+  stars?: number | null;
+  /**
+   * 每行一个
+   */
+  tags?: string | null;
+  /**
+   * 数字越小越靠前
+   */
+  sortOrder?: number | null;
+  status: 'draft' | 'published';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "projects_select".
+ */
+export interface ProjectsSelect<T extends boolean = true> {
+  group?: T;
+  groupDescription?: T;
+  title?: T;
+  owner?: T;
+  description?: T;
+  icon?: T;
+  href?: T;
+  articleHref?: T;
+  stars?: T;
+  tags?: T;
+  sortOrder?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
