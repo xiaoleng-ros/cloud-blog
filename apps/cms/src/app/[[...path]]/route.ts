@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join, extname } from 'node:path'
+import { join, extname, resolve } from 'node:path'
 import { NextResponse } from 'next/server'
 import { renderBlocksForPathname } from '../../lib/blog-render'
 import { injectSyncBlocks } from '../../lib/html-inject'
@@ -7,20 +7,66 @@ import { injectSyncBlocks } from '../../lib/html-inject'
 // 每个 HTML 响应都要按最新后台数据渲染区块，必须走运行时（不能在构建期预渲染）
 export const dynamic = 'force-dynamic'
 
-// public 目录：Next / EdgeOne 会自动把这里的文件当静态资源直接返回
-const PUBLIC_DIR = join(process.cwd(), 'public')
-
 /**
- * 博客 HTML 外壳目录（public/__blog/…）。
- *
- * 为什么单独放一层而不是直接放 public/：
- * public/index.html 会被静态托管**直接命中**、绕过这个路由，
- * 那样就没机会在响应时注入最新数据，首屏仍会闪现构建时的旧内容。
- * 把 HTML 挪进一个独立子目录后，所有页面请求都会落到这里，
- * 由本路由读取外壳 → 注入后台数据 → 返回（CSS/JS/图片等静态资源仍在 public/ 里走静态托管）。
+ * 目录定位说明（踩过坑，务必看清）：
+ * EdgeOne 运行时容器的工作目录（process.cwd()）**不一定等于项目根目录**，
+ * 所以不能只靠 `join(process.cwd(), 'public')` 读文件，否则会出现
+ * 「静态托管能返回 /__blog/index.html，但路由死活找不到它 → HTML 全站 404」。
+ * 这里按候选顺序探测，取第一个真实存在的目录；
+ * 同时保留 `CMS_HTML_DIR` / `CMS_PUBLIC_DIR` 环境变量作为应急覆盖（可在控制台直接改，不必重新部署）。
  */
 const HTML_DIR_NAME = '__blog'
-const HTML_DIR = join(PUBLIC_DIR, HTML_DIR_NAME)
+
+function firstExistingDir(candidates: Array<string | undefined>): string | null {
+  for (const dir of candidates) {
+    if (!dir) continue
+    try {
+      if (existsSync(dir)) return dir
+    } catch {
+      // 忽略探测异常，继续下一个候选
+    }
+  }
+  return null
+}
+
+/** 博客 HTML 外壳目录（放 __blog 里是为了不被静态托管直接命中，从而留出注入机会） */
+function resolveHtmlDir(): string | null {
+  return firstExistingDir([
+    process.env.CMS_HTML_DIR,
+    // 常见情况：cwd 就是 apps/cms
+    join(process.cwd(), 'public', HTML_DIR_NAME),
+    // cwd 是仓库根目录时
+    join(process.cwd(), 'apps', 'cms', 'public', HTML_DIR_NAME),
+    // 容器把应用放在 /var/task 之类的目录时
+    join('/var/task', 'public', HTML_DIR_NAME),
+    // 兜底：从 cwd 逐级向上找「哪个目录下的 public/__blog 存在」
+    ...walkUpFor(`public/${HTML_DIR_NAME}`),
+  ])
+}
+
+/** 静态资源根目录（CSS/JS/图片；正常情况下 Next 的静态处理器先命中，这里只是兜底） */
+function resolveAssetDir(): string | null {
+  return firstExistingDir([
+    process.env.CMS_PUBLIC_DIR,
+    join(process.cwd(), 'public'),
+    join(process.cwd(), 'apps', 'cms', 'public'),
+    join('/var/task', 'public'),
+    ...walkUpFor('public'),
+  ])
+}
+
+/** 从 cwd 起逐级向上，收集「cwd/相对路径」候选（覆盖 cwd 位于子目录/被替换的情况） */
+function walkUpFor(relative: string): string[] {
+  const out: string[] = []
+  let dir = process.cwd()
+  for (let depth = 0; depth < 4; depth += 1) {
+    const parent = resolve(dir, '..')
+    if (parent === dir) break
+    out.push(join(parent, relative))
+    dir = parent
+  }
+  return out
+}
 
 // 静态文件 Content-Type 映射（EdgeOne 上静态资源请求会进入此路由，需要直接读取返回）
 const MIME_TYPES: Record<string, string> = {
@@ -52,8 +98,7 @@ const MIME_TYPES: Record<string, string> = {
 }
 
 /**
- * 从 HTML 外壳目录读取并返回静态 HTML 文件
- * 支持路径自动补全：
+ * 在 HTML 外壳目录里定位页面文件
  *   /              → __blog/index.html
  *   /posts         → __blog/posts/index.html
  *   /posts/        → __blog/posts/index.html
@@ -61,33 +106,28 @@ const MIME_TYPES: Record<string, string> = {
  *   /about         → __blog/about/index.html
  */
 function getStaticHtmlPath(pathname: string): string | null {
+  const htmlDir = resolveHtmlDir()
+  if (!htmlDir) return null
+
   // 移除开头和结尾的斜杠，拆分路径段
   const segments = pathname.split('/').filter(Boolean)
-
-  // 尝试路径补全规则
   const candidates: string[] = []
 
   if (segments.length === 0) {
-    // 根路径 /
-    candidates.push(join(HTML_DIR, 'index.html'))
+    candidates.push(join(htmlDir, 'index.html'))
   } else {
-    // 子路径 /posts/foo
-    const basePath = join(HTML_DIR, ...segments)
+    const basePath = join(htmlDir, ...segments)
     candidates.push(join(basePath, 'index.html'))
-    // 也尝试不带 index.html 的情况（如 /posts 对应 __blog/posts/index.html）
+    // 也尝试不带 index.html 的情况（如 /posts 对应 __blog/posts.html）
     candidates.push(basePath + '.html')
-    // 尝试 /posts 对应 __blog/posts.html（兼容旧结构）
     if (segments.length === 1) {
-      candidates.push(join(HTML_DIR, segments[0] + '.html'))
+      candidates.push(join(htmlDir, segments[0] + '.html'))
     }
   }
 
   for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate
-    }
+    if (existsSync(candidate)) return candidate
   }
-
   return null
 }
 
@@ -102,16 +142,16 @@ const WARM_INJECT_TIMEOUT_MS = 2500
 let injectWarmedUp = false
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), ms)
+  return new Promise((settle) => {
+    const timer = setTimeout(() => settle(null), ms)
     promise
       .then((value) => {
         clearTimeout(timer)
-        resolve(value)
+        settle(value)
       })
       .catch(() => {
         clearTimeout(timer)
-        resolve(null)
+        settle(null)
       })
   })
 }
@@ -151,15 +191,18 @@ export async function GET(
   // 注意：不能使用 NextResponse.next()（app route handler 不支持），必须返回实际内容
   const ext = extname(pathname).toLowerCase()
   if (ext && MIME_TYPES[ext] && ext !== '.html') {
-    const filePath = join(PUBLIC_DIR, ...pathname.split('/').filter(Boolean))
-    if (existsSync(filePath)) {
-      const data = readFileSync(filePath)
-      return new NextResponse(data, {
-        headers: {
-          'Content-Type': MIME_TYPES[ext],
-          'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable',
-        },
-      })
+    const assetDir = resolveAssetDir()
+    if (assetDir) {
+      const filePath = join(assetDir, ...pathname.split('/').filter(Boolean))
+      if (existsSync(filePath)) {
+        const data = readFileSync(filePath)
+        return new NextResponse(data, {
+          headers: {
+            'Content-Type': MIME_TYPES[ext],
+            'Cache-Control': 'public, max-age=86400, s-maxage=86400, immutable',
+          },
+        })
+      }
     }
     // 文件不存在时继续尝试 HTML 路径补全（如 /posts/xxx/index.html）
   }
@@ -169,21 +212,21 @@ export async function GET(
 
   if (htmlPath) {
     const shell = readFileSync(htmlPath, 'utf-8')
-    // 路径统一成带尾斜杠的形式再交给渲染层，保证与前台轮询共用同一份区块缓存
     const html = await renderShellWithData(shell, pathname)
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        // HTML 外壳禁止缓存：页面数据虽然是响应时注入的最新数据，
-        // 但 CDN/浏览器一旦缓存住外壳，后台改动就会延迟可见。
+        // HTML 外壳禁止缓存：数据虽是响应时注入的，但 CDN/浏览器一旦缓存外壳，
+        // 后台改动就会延迟可见。
         'Cache-Control': 'no-store',
       },
     })
   }
 
   // 找不到对应的页面：返回 Astro 生成的 404 页面（没有则退回纯文本）
-  const notFoundPath = join(HTML_DIR, '404.html')
-  if (existsSync(notFoundPath)) {
+  const htmlDir = resolveHtmlDir()
+  const notFoundPath = htmlDir ? join(htmlDir, '404.html') : null
+  if (notFoundPath && existsSync(notFoundPath)) {
     return new NextResponse(readFileSync(notFoundPath, 'utf-8'), {
       status: 404,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },

@@ -1,12 +1,17 @@
 // 把 Astro 构建产物（apps/blog/dist/）复制到 CMS 的 public/ 目录。
 // EdgeOne Makers 部署 Next.js 时，会把 public/ 下的文件作为静态资源直接服务，
-// 这样博客资源（CSS/JS/图片）与 Payload 后台（/admin/*、/api/*）共存于同一域名。
+// 这样博客页面（/、/posts/* 等）与 Payload 后台（/admin/*、/api/*）共存于同一域名。
 //
-// 关键：HTML 外壳要单独放到 public/__blog/ 里，不能直接摊在 public/ 下。
-//   · public/index.html 会被静态托管直接命中并绕过 Next 路由 → 首屏永远停留在构建时的旧内容；
-//   · 放进 public/__blog/ 后，页面请求会落到 src/app/[[...path]]/route.ts，
-//     由该路由读取外壳、注入后台最新数据再返回 → 首屏即为最新内容，不再闪烁；
-//   · CSS/JS/图片等仍复制到 public/ 根下，继续走静态托管（长缓存、不经过 Node）。
+// 复制策略（两份 HTML，暂时是故意的）：
+//   1. 全部产物按原样复制到 public/ 根 —— 与历史行为一致，静态托管能直接命中
+//      /、/about、/posts/x 等路径，站点必然可用（保底）。
+//   2. HTML 额外再复制一份到 public/__blog/<同样的相对路径> —— 供
+//      src/app/[[...path]]/route.ts 读取「外壳」，在响应时注入后台最新数据。
+//
+// 为什么需要第 2 份：public/index.html 会被静态托管直接命中、绕过 Next 路由，
+// 于是永远返回构建时的旧内容（这就是「首屏先闪旧文案」的根因）。
+// 等确认路由侧能稳定读到 public/__blog/ 之后，把第 1 份里的 .html 去掉即可切换为
+// 「响应时注入」；在那之前两份并存，优先保证站点不 404。
 // 触发方式：npm run build:all 最后手动执行（必须在 next build 之后，避免被覆盖）。
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,7 +19,7 @@ import { dirname, join } from 'node:path';
 const BLOG_DIST = join(import.meta.dirname, '../../blog/dist');
 // apps/cms/public/ —— Next.js 约定的静态资源目录，EdgeOne 会自动部署
 const CMS_PUBLIC = join(import.meta.dirname, '../public');
-// HTML 外壳目录：刻意与静态资源隔开（见文件头说明）
+// HTML 外壳目录（第二份，供运行时注入使用）
 const HTML_ROOT = join(CMS_PUBLIC, '__blog');
 
 // 不参与清理的目录（后台媒体上传、图标等非构建产物）
@@ -51,7 +56,7 @@ function removeStaleHtml(dir) {
   return removed;
 }
 
-/** 将 dist/ 内容递归复制：.html → HTML_ROOT，其余 → public/ */
+/** 将 dist/ 内容递归复制到 public/ 根；HTML 额外再写一份到 HTML_ROOT */
 function copyDir(src, destDir, destHtmlDir) {
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
@@ -60,11 +65,15 @@ function copyDir(src, destDir, destHtmlDir) {
       copyDir(srcPath, join(destDir, entry.name), join(destHtmlDir, entry.name));
       continue;
     }
-    const target = entry.name.toLowerCase().endsWith('.html')
-      ? join(destHtmlDir, entry.name)
-      : join(destDir, entry.name);
-    mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(srcPath, target);
+    const rootTarget = join(destDir, entry.name);
+    mkdirSync(dirname(rootTarget), { recursive: true });
+    copyFileSync(srcPath, rootTarget);
+
+    if (entry.name.toLowerCase().endsWith('.html')) {
+      const shellTarget = join(destHtmlDir, entry.name);
+      mkdirSync(dirname(shellTarget), { recursive: true });
+      copyFileSync(srcPath, shellTarget);
+    }
   }
 }
 
@@ -79,4 +88,4 @@ rmSync(HTML_ROOT, { recursive: true, force: true });
 mkdirSync(HTML_ROOT, { recursive: true });
 
 copyDir(BLOG_DIST, CMS_PUBLIC, HTML_ROOT);
-console.log('[copy-blog] 已复制到 apps/cms/public/（HTML 外壳 → public/__blog/）');
+console.log('[copy-blog] 已复制到 apps/cms/public/（HTML 同时产出 public/ 根与 public/__blog/ 两份）');
