@@ -29,6 +29,10 @@ export const enum_notes_status = pgEnum("enum_notes_status", [
   "draft",
   "published",
 ]);
+export const enum_projects_status = pgEnum("enum_projects_status", [
+  "draft",
+  "published",
+]);
 
 export const posts = pgTable(
   "posts",
@@ -320,6 +324,44 @@ export const users = pgTable(
   ],
 );
 
+export const projects = pgTable(
+  "projects",
+  {
+    id: serial("id").primaryKey(),
+    group: varchar("group").notNull(),
+    groupDescription: varchar("group_description"),
+    title: varchar("title").notNull(),
+    owner: varchar("owner"),
+    description: varchar("description"),
+    icon: varchar("icon"),
+    href: varchar("href"),
+    articleHref: varchar("article_href"),
+    stars: numeric("stars", { mode: "number" }),
+    tags: varchar("tags"),
+    sortOrder: numeric("sort_order", { mode: "number" }),
+    status: enum_projects_status("status").notNull().default("draft"),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+      precision: 3,
+    })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+      precision: 3,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (columns) => [
+    index("projects_group_idx").on(columns.group),
+    index("projects_updated_at_idx").on(columns.updatedAt),
+    index("projects_created_at_idx").on(columns.createdAt),
+  ],
+);
+
 export const payload_kv = pgTable(
   "payload_kv",
   {
@@ -369,6 +411,7 @@ export const payload_locked_documents_rels = pgTable(
     categoriesID: integer("categories_id"),
     tagsID: integer("tags_id"),
     mediaID: integer("media_id"),
+    projectsID: integer("projects_id"),
     usersID: integer("users_id"),
   },
   (columns) => [
@@ -382,6 +425,7 @@ export const payload_locked_documents_rels = pgTable(
     ),
     index("payload_locked_documents_rels_tags_id_idx").on(columns.tagsID),
     index("payload_locked_documents_rels_media_id_idx").on(columns.mediaID),
+    index("payload_locked_documents_rels_projects_id_idx").on(columns.projectsID),
     index("payload_locked_documents_rels_users_id_idx").on(columns.usersID),
     foreignKey({
       columns: [columns["parent"]],
@@ -412,6 +456,11 @@ export const payload_locked_documents_rels = pgTable(
       columns: [columns["mediaID"]],
       foreignColumns: [media.id],
       name: "payload_locked_documents_rels_media_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [columns["projectsID"]],
+      foreignColumns: [projects.id],
+      name: "payload_locked_documents_rels_projects_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [columns["usersID"]],
@@ -594,6 +643,7 @@ export const relations_notes = relations(notes, ({ many }) => ({
 export const relations_categories = relations(categories, () => ({}));
 export const relations_tags = relations(tags, () => ({}));
 export const relations_media = relations(media, () => ({}));
+export const relations_projects = relations(projects, () => ({}));
 export const relations_users_sessions = relations(
   users_sessions,
   ({ one }) => ({
@@ -643,6 +693,11 @@ export const relations_payload_locked_documents_rels = relations(
       references: [media.id],
       relationName: "media",
     }),
+    projectsID: one(projects, {
+      fields: [payload_locked_documents_rels.projectsID],
+      references: [projects.id],
+      relationName: "projects",
+    }),
     usersID: one(users, {
       fields: [payload_locked_documents_rels.usersID],
       references: [users.id],
@@ -691,6 +746,7 @@ export const relations_navigation = relations(navigation, () => ({}));
 type DatabaseSchema = {
   enum_posts_status: typeof enum_posts_status;
   enum_notes_status: typeof enum_notes_status;
+  enum_projects_status: typeof enum_projects_status;
   posts: typeof posts;
   posts_rels: typeof posts_rels;
   notes: typeof notes;
@@ -700,6 +756,7 @@ type DatabaseSchema = {
   media: typeof media;
   users_sessions: typeof users_sessions;
   users: typeof users;
+  projects: typeof projects;
   payload_kv: typeof payload_kv;
   payload_locked_documents: typeof payload_locked_documents;
   payload_locked_documents_rels: typeof payload_locked_documents_rels;
@@ -717,6 +774,7 @@ type DatabaseSchema = {
   relations_media: typeof relations_media;
   relations_users_sessions: typeof relations_users_sessions;
   relations_users: typeof relations_users;
+  relations_projects: typeof relations_projects;
   relations_payload_kv: typeof relations_payload_kv;
   relations_payload_locked_documents_rels: typeof relations_payload_locked_documents_rels;
   relations_payload_locked_documents: typeof relations_payload_locked_documents;

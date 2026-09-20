@@ -9,6 +9,7 @@ apps/cms/dev.log
 apps/cms/.next/
 apps/cms/dist/
 apps/cms/node_modules/
+apps/cms/tsconfig.tsbuildinfo
 
 # 前端（apps/blog）独立依赖与构建产物
 apps/blog/node_modules/

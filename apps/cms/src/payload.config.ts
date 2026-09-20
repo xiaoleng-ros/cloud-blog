@@ -18,14 +18,17 @@ import { Tags } from './collections/Tags'
 import { Users } from './collections/Users'
 import { Navigation } from './globals/Navigation'
 import { SiteSettings } from './globals/SiteSettings'
+// 迁移必须静态导入：一是让 webpack 打进 EdgeOne 运行产物（动态 import 不会被打包），
+// 二是供 prodMigrations 在生产启动时自动补跑未执行的迁移（见下方 postgresAdapter）。
+import { migrations } from './migrations'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 /**
  * 数据库选择：
- *  - 开发/本地：默认 SQLite（零安装、单文件，无需额外服务）
- *  - 上线/VPS：通过环境变量切换到 PostgreSQL 等托管数据库
+ *  - 本地/开发：默认 SQLite（单文件，零配置）；如需与线上用同一套数据，设 DATABASE_DRIVER=postgres + POSTGRES_URL
+ *  - 上线/EdgeOne：DATABASE_DRIVER=postgres + POSTGRES_URL（指向 Supabase）
  *
  * 切换方法（.env）：
  *   DATABASE_DRIVER=postgres
@@ -45,8 +48,17 @@ const db =
           // 连接本身仍是 TLS 加密的，只是不再校验证书链
           ssl: { rejectUnauthorized: false },
         },
-        // 与 sqlite 分支一致：PAYLOAD_FORCE_PUSH=1 时非交互建表（用于首次切换到线上库）
+        // 默认关闭 dev 模式的自动 schema push（push: false）。
+        // 原因：本地若连的是线上 Supabase，dev push 会直接改动生产库的 schema，并往
+        // payload_migrations 写入 batch=-1 的 dev 标记（会让后续 migrate 弹交互确认卡死）。
+        // 只有当本地明确要「改 schema 并同步到当前连接的库」时，才设 PAYLOAD_FORCE_PUSH=1 临时开启。
         push: process.env.PAYLOAD_FORCE_PUSH === '1',
+        // 生产环境（NODE_ENV=production）启动时自动执行未跑的迁移（按 payload_migrations 记录跳过已跑的）。
+        // 背景：生产环境 Payload 永远不做 schema push（db-postgres 的 connect 只在非 production 才 push），
+        // EdgeOne 部署又没有 migrate 构建步骤，之前 projects 集合上线后线上库从未同步导致 /admin 500。
+        // 注意：新增/修改集合后要用 `payload migrate:create` 生成完整迁移（含 locked_documents_rels 的列变更），
+        // 部署后这里会在启动时自动补跑。
+        prodMigrations: migrations,
       })
     : sqliteAdapter({
         client: {
