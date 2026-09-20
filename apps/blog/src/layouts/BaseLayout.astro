@@ -661,12 +661,19 @@ const routeMotion = {
         ].join(', ');
 
         // 更新某个锚点的内容；找不到锚点或内容为空则跳过，返回是否更新成功
-        const applyBlock = (id, html) => {
+        const applyBlock = (id, html, version) => {
           if (html == null || html === '') return false;
           const el = document.querySelector(`[data-sync-block="${id}"]`);
           if (!el) return false;
-          if (el.innerHTML === html) return false; // 内容相同无需重写
+          // 服务端在返回 HTML 时已经用**同一版本号**注入过这一块 → 直接跳过。
+          // 否则首次同步会把刚渲染好的同一份内容再重写一遍，白白的闪烁 + 重排。
+          if (version && el.dataset.syncVersion === version) return false;
+          if (el.innerHTML === html) {
+            if (version) el.dataset.syncVersion = version;
+            return false; // 内容相同无需重写
+          }
           el.innerHTML = html;
+          if (version) el.dataset.syncVersion = version;
           // 新内容补 reveal 类，避免被「未显现隐藏」规则遮住
           el.querySelectorAll(REVEAL_SEL).forEach((node) => {
             node.classList.add('is-revealed');
@@ -676,9 +683,11 @@ const routeMotion = {
         };
 
         // 页面加载后的首次同步必须无条件应用区块：
-        // 刷新后页面是构建时的静态快照（可能落后于后台最新数据），
+        // 刷新后页面可能是构建时的静态快照（落后于后台最新数据），
         // 而 localStorage 里往往已存有最新版本号；若首次也跳过，
         // 会出现「刷新后回退成旧内容」的问题。
+        // 注：服务端注入（[[...path]]/route.ts）后，正常情况下首次同步会因
+        // 版本号一致而全部跳过 DOM 写入，页面首屏已经是后台最新数据，不再闪烁。
         let firstSync = true;
 
         // 单次同步：请求最新区块并对比版本号
@@ -704,10 +713,10 @@ const routeMotion = {
             const blocks = data.blocks || {};
             let updatedAny = false;
             for (const [id, html] of Object.entries(blocks)) {
-              const applied = applyBlock(id, html);
+              const applied = applyBlock(id, html, data.version);
               updatedAny = updatedAny || applied;
             }
-            if (data.title) {
+            if (data.title && document.title !== data.title) {
               document.title = data.title;
             }
             // 正文被替换后，重新绑定复制按钮/图片灯箱等交互

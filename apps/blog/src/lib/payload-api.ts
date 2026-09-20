@@ -14,12 +14,29 @@
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 
-/** 后台 API 根地址（在 .env 中配置 PUBLIC_PAYLOAD_URL）
- *  注意：显式替换为 127.0.0.1 —— Windows 上 localhost 可能被解析为 IPv6 ::1，
- *  导致连接后台超时（TypeError: network error）。 */
-export const PAYLOAD_URL = (import.meta.env.PUBLIC_PAYLOAD_URL ?? 'http://localhost:9527')
-  .replace(/\/$/, '')
-  .replace(/localhost/gi, '127.0.0.1');
+/**
+ * 后台地址解析优先级：
+ *   1. PUBLIC_PAYLOAD_URL（显式配置，本地/云端都可用）
+ *   2. SITE_URL（一体化部署时前台后台同域，直接用它拼 /api）
+ *   3. http://localhost:9527（本地开发后台的默认端口）
+ * 只填域名，**不要带 /api 后缀**（下面的请求路径会自己拼 /api/xxx）。
+ *
+ * 注意：显式替换 localhost 为 127.0.0.1 —— Windows 上 localhost 可能被解析为 IPv6 ::1，
+ * 导致连接后台超时（TypeError: network error）。
+ */
+function resolvePayloadUrl(): string {
+  const explicit = import.meta.env.PUBLIC_PAYLOAD_URL?.trim();
+  const siteUrl = import.meta.env.SITE_URL?.trim();
+  const base = explicit || siteUrl || 'http://localhost:9527';
+  return base
+    .trim()
+    .replace(/\/+$/, '')
+    // 容忍误填成 https://domain/api 的写法
+    .replace(/\/api$/i, '')
+    .replace(/localhost/gi, '127.0.0.1');
+}
+
+export const PAYLOAD_URL = resolvePayloadUrl();
 
 /** 基于 node:http 的 GET+JSON 请求，超时或非 2xx 时抛错（超时放宽以容忍后台首次编译） */
 function fetchJson<T>(path: string, timeoutMs = 20000): Promise<T> {

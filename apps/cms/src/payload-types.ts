@@ -268,26 +268,6 @@ export interface Project {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "projects_select".
- */
-export interface ProjectsSelect<T extends boolean = true> {
-  group?: T;
-  groupDescription?: T;
-  title?: T;
-  owner?: T;
-  description?: T;
-  icon?: T;
-  href?: T;
-  articleHref?: T;
-  stars?: T;
-  tags?: T;
-  sortOrder?: T;
-  status?: T;
-  updatedAt?: T;
-  createdAt?: T;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
 export interface User {
@@ -355,6 +335,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'projects';
+        value: number | Project;
       } | null)
     | ({
         relationTo: 'users';
@@ -472,6 +456,26 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "projects_select".
+ */
+export interface ProjectsSelect<T extends boolean = true> {
+  group?: T;
+  groupDescription?: T;
+  title?: T;
+  owner?: T;
+  description?: T;
+  icon?: T;
+  href?: T;
+  articleHref?: T;
+  stars?: T;
+  tags?: T;
+  sortOrder?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

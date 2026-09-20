@@ -2,12 +2,17 @@
 /**
  * 博客前台数据同步 —— 服务端渲染层
  *
- * 功能：把 Payload 最新数据渲染为与 Astro 静态构建**完全一致**的 HTML 区块，
- * 由 /api/blog-sync 返回给前台客户端，客户端用 innerHTML 局部替换页面内容区，
- * 实现「后台改数据 → 前台自动更新」。
+ * 功能：把 Payload 最新数据渲染为与 Astro 静态构建**完全一致**的 HTML 区块。
+ * 两个消费方：
+ *   1. /api/blog-sync → 前台客户端轮询/SSE 后用 innerHTML 局部替换；
+ *   2. [[...path]]/route.ts → 响应 HTML 前直接注入，保证首屏就是最新数据（不闪烁）。
  *
- * 说明：所有动态文本都经过 escapeHtml 转义，避免 XSS 与结构破坏；
- * 区块 HTML 结构与 Astro 模板（*.astro）严格对应，class 名一致以保证样式不变。
+ * 说明：所有动态文本都经过 escapeHtml 转义，避免 XSS 与结构破坏。
+ *
+ * ⚠️ 区块约定：**每个区块返回的都是锚点元素的 innerHTML**，
+ *    即 <div class="hero__card" data-sync-block="heroCard">…这里…</div>
+ *    渲染函数不再自带这一层容器，否则每同步一次就会多套一层同名容器（双层内边距/边框）。
+ *    内层结构与对应 *.astro 模板保持一致，class 名一致以保证样式不变。
  */
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
@@ -505,7 +510,7 @@ export function renderPostSummary(
 </article>`
 }
 
-/** 首页 Hero 卡片（index.astro hero__card） */
+/** 首页 Hero 卡片内容（锚点 index.astro 的 div[data-sync-block="heroCard"]） */
 export function renderHeroCard(
   hero: { greeting: string; name: string; subtitle: string; bio: string; buttonLabel: string },
   socials: Array<{ href: string; icon: string; label: string }>,
@@ -519,8 +524,7 @@ export function renderHeroCard(
     )
     .join('')
 
-  return `<div class="hero__card">
-  <span class="hero__arrow" aria-hidden="true"></span>
+  return `<span class="hero__arrow" aria-hidden="true"></span>
   <span class="hero__sticker hero__sticker--1" aria-hidden="true"></span>
   <span class="hero__sticker hero__sticker--2" aria-hidden="true"></span>
   <h1 class="hero__title">${escapeHtml(hero.greeting)}<span class="hero__name">${escapeHtml(hero.name)}</span>！</h1>
@@ -529,11 +533,10 @@ export function renderHeroCard(
   <div class="hero__actions">
     <a class="hero__tag" href="/archive/">${escapeHtml(hero.buttonLabel)}${iconSvg('arrow-right', 16)}</a>
     <span class="hero__social" aria-label="社交链接">${socialHtml}</span>
-  </div>
-</div>`
+  </div>`
 }
 
-/** 首页精选（index.astro hero__picks） */
+/** 首页精选内容（锚点 index.astro 的 aside[data-sync-block="heroPicks"]） */
 export function renderHeroPicks(picks: MdEntry[]): string {
   if (picks.length === 0) return ''
   const first = picks[0]
@@ -561,8 +564,7 @@ export function renderHeroPicks(picks: MdEntry[]): string {
 </li>`
   }).join('')
 
-  return `<aside class="hero__picks" aria-label="精选文章">
-  <p class="hero__picks-label">精选</p>
+  return `<p class="hero__picks-label">精选</p>
   <div class="picks">
     <a class="pick-hero" href="${escapeAttr(getPostPath(first))}">
       ${thumb}
@@ -574,8 +576,7 @@ export function renderHeroPicks(picks: MdEntry[]): string {
       <span class="pick-hero__desc">${escapeHtml(getPostDescription(first))}</span>
     </a>
     ${picks.length > 1 ? `<ul class="pick-side">${side}</ul>` : ''}
-  </div>
-</aside>`
+  </div>`
 }
 
 /** 导航链接（Nav.astro 中 .site-nav__tags 的动态链接部分） */
@@ -595,7 +596,7 @@ export function renderNavLinks(
     .join('')
 }
 
-/** 页脚主体（Footer.astro .site-footer__inner） */
+/** 页脚主体内容（锚点 Footer.astro 的 div[data-sync-block="footerInner"]） */
 export function renderFooterInner(
   footer: { subtitle: string; channels: Array<{ name: string; icon: string; href: string }>; groups: Array<{ name: string; icon: string; href: string }> },
   author: string,
@@ -608,8 +609,7 @@ export function renderFooterInner(
   const channelsHtml = footer.channels.map((c) => link(c)).join('')
   const groupsHtml = footer.groups.map((g) => (g.href ? link(g) : link(g, true))).join('')
 
-  return `<div class="site-footer__inner">
-  <div class="site-footer__id">
+  return `<div class="site-footer__id">
     <img src="/avatars/avatar.png" alt="${escapeAttr(author)}" class="site-footer__avatar" width="40" height="40" />
     <div class="site-footer__id-text">
       <strong>${escapeHtml(author)}</strong>
@@ -620,22 +620,19 @@ export function renderFooterInner(
     ${channelsHtml}
     <span class="site-footer__sep" aria-hidden="true"></span>
     ${groupsHtml}
-  </nav>
-</div>`
+  </nav>`
 }
 
-/** 页脚底栏（Footer.astro .site-footer__bar） */
+/** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]） */
 export function renderFooterBar(author: string, year: number): string {
-  return `<div class="site-footer__bar">
-  <span>© ${year} ${escapeHtml(author)}</span>
+  return `<span>© ${year} ${escapeHtml(author)}</span>
   <span aria-hidden="true">·</span>
   <a href="${escapeAttr(site.url)}">${escapeHtml(site.url.replace('https://', ''))}</a>
   <span aria-hidden="true">·</span>
-  <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>
-</div>`
+  <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>`
 }
 
-/** 文章详情头部（posts/[slug].astro article__header） */
+/** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]） */
 export function renderArticleHeader(
   post: MdEntry,
   opts: { hasToc: boolean },
@@ -665,22 +662,20 @@ export function renderArticleHeader(
       ? `<div class="tag-list" aria-label="标签">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</div>`
       : ''
 
-  return `<header class="article__header">
-  <div class="post-meta">${meta}</div>
+  return `<div class="post-meta">${meta}</div>
   <h1>${escapeHtml(post.data.title)}</h1>
   <p>${escapeHtml(description)}</p>
   ${tagHtml}
-  ${coverHtml}
-</header>`
+  ${coverHtml}`
 }
 
-/** 文章正文（.post-content，markdown 渲染） */
+/** 文章正文内容（锚点 posts/[...slug].astro 的 div[data-sync-block="postContent"]） */
 export async function renderArticleContent(post: MdEntry): Promise<string> {
   const { html } = await renderMarkdown(post.body)
-  return `<div class="post-content">${html}</div>`
+  return html
 }
 
-/** 文章侧栏目录（posts/[slug].astro article__aside） */
+/** 文章侧栏目录内容（锚点 posts/[...slug].astro 的 aside[data-sync-block="tocSidebar"]） */
 export function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; children: Array<{ slug: string; text: string }> }>): string {
   const items = tocGroups
     .map(
@@ -699,15 +694,13 @@ export function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; 
 </li>`
     )
     .join('')
-  return `<aside class="article__aside">
-  <nav class="toc" aria-labelledby="toc-heading">
+  return `<nav class="toc" aria-labelledby="toc-heading">
     <h2 id="toc-heading">目录</h2>
     <ol>${items}</ol>
-  </nav>
-</aside>`
+  </nav>`
 }
 
-/** 文章页脚（相邻文章 + 相关文章） */
+/** 文章页脚内容（锚点 posts/[...slug].astro 的 footer[data-sync-block="articleFooter"]） */
 export function renderArticleFooter(
   newer: MdEntry | undefined,
   older: MdEntry | undefined,
@@ -747,22 +740,18 @@ export function renderArticleFooter(
 </section>`
       : ''
 
-  return `<footer class="article__footer">
-  ${navHtml}
-  ${relatedHtml}
-</footer>`
+  return `${navHtml}
+  ${relatedHtml}`
 }
 
-/** 归档页头部（含文章数） */
+/** 归档页头部内容（锚点 archive.astro 的 header[data-sync-block="archiveHeader"]） */
 export function renderArchiveHeader(count: number): string {
-  return `<header class="page-header">
-  <p class="eyebrow">Archive</p>
+  return `<p class="eyebrow">Archive</p>
   <h1>文章归档</h1>
-  <p>目前收录 ${count} 篇文章，可以按时间、分类或标签浏览。</p>
-</header>`
+  <p>目前收录 ${count} 篇文章，可以按时间、分类或标签浏览。</p>`
 }
 
-/** 归档页分类/标签索引面板 */
+/** 归档页分类/标签索引面板内容（锚点 archive.astro 的 section[data-sync-block="archiveSummary"]） */
 export function renderArchiveSummary(
   categories: Array<{ name: string; count: number }>,
   tags: Array<{ name: string; count: number }>,
@@ -798,8 +787,7 @@ export function renderArchiveSummary(
 </button>`
       : ''
 
-  return `<section class="archive-summary" aria-label="内容索引">
-  <div class="taxonomy-panel">
+  return `<div class="taxonomy-panel">
     <h2>${iconSvg('layers', 16)}分类</h2>
     <div class="term-list">${catHtml}</div>
   </div>
@@ -807,8 +795,7 @@ export function renderArchiveSummary(
     <h2>${iconSvg('hash', 16)}标签</h2>
     <div class="term-list">${tagHtml}</div>
     ${restHtml}
-  </div>
-</section>`
+  </div>`
 }
 
 /** 归档页按年份分组列表 */
@@ -828,21 +815,19 @@ export function renderArchiveYears(years: Array<{ year: string; posts: MdEntry[]
     .join('')
 }
 
-/** 分类/标签切换器（categories/[category].astro term-switcher） */
+/** 分类/标签切换器内容（锚点 categories|tags/*.astro 的 nav[data-sync-block="termSwitcher"]） */
 export function renderTermSwitcher(
   terms: Array<{ name: string; count: number }>,
   current: string,
   kind: 'categories' | 'tags',
 ): string {
   const pathFor = kind === 'categories' ? getCategoryPath : getTagPath
-  return `<nav class="term-switcher" aria-label="全部${kind === 'categories' ? '分类' : '标签'}">
-  ${terms
+  return terms
     .map(
       (item) =>
         `<a href="${escapeAttr(pathFor(item.name))}" class="${item.name === current ? 'is-current' : ''}"><span>${escapeHtml(item.name)}</span><small>${item.count}</small></a>`,
     )
-    .join('')}
-</nav>`
+    .join('')
 }
 
 /** 文章列表（通用：分类/标签页 post-list） */
@@ -909,7 +894,8 @@ async function renderNote(note: MdEntry, anchor?: string): Promise<string> {
 </article>`
 }
 
-/** 随笔页完整 feed（含年份分组与时间索引） */
+/** 随笔页 feed 内容（锚点 notes.astro 的 div[data-sync-block="notesFeed"]）与
+ *  时间索引内容（锚点 aside[data-sync-block="notesAside"]） */
 export async function renderNotesFeed(notes: MdEntry[]): Promise<{
   feed: string
   aside: string
@@ -961,8 +947,7 @@ export async function renderNotesFeed(notes: MdEntry[]): Promise<{
 
   const aside =
     byYear.length > 1
-      ? `<aside class="notes-aside">
-  <nav class="toc" aria-labelledby="notes-time-heading">
+      ? `<nav class="toc" aria-labelledby="notes-time-heading">
     <h2 id="notes-time-heading">时间</h2>
     <ol>
       ${timeIndex
@@ -976,11 +961,10 @@ export async function renderNotesFeed(notes: MdEntry[]): Promise<{
         )
         .join('')}
     </ol>
-  </nav>
-</aside>`
+  </nav>`
       : ''
 
-  return { feed: `<div class="notes-feed">${feedParts.join('')}</div>`, aside }
+  return { feed: feedParts.join(''), aside }
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,7 +1092,7 @@ function renderSkillRing(skill: SkillItem): string {
 </div>`
 }
 
-/** 关于页顶部：左文案 + 右便签（about.astro .about__profile） */
+/** 关于页顶部内容（锚点 about.astro 的 section[data-sync-block="aboutProfile"]） */
 function renderAboutProfile(about: AboutData, postCount: number, firstYear: number): string {
   const paragraphsHtml = about.paragraphs
     .map((p) => `<p class="about__text">${p}</p>`)
@@ -1122,8 +1106,7 @@ function renderAboutProfile(about: AboutData, postCount: number, firstYear: numb
   </div>`,
     )
     .join('')
-  return `<section class="about__profile" aria-labelledby="about-heading">
-  <div class="about__intro-card">
+  return `<div class="about__intro-card">
     <span class="about__eyebrow">ABOUT</span>
     <h1 id="about-heading" class="about__lead">${escapeHtml(about.lead)}</h1>
     ${paragraphsHtml}
@@ -1133,18 +1116,15 @@ function renderAboutProfile(about: AboutData, postCount: number, firstYear: numb
       <span class="about__fact">全站由 AI 开发</span>
     </div>
   </div>
-  <div class="about__notes">${notesHtml}</div>
-</section>`
+  <div class="about__notes">${notesHtml}</div>`
 }
 
-/** 关于页技能环区（about.astro .about__skills） */
+/** 关于页技能环内容（锚点 about.astro 的 section[data-sync-block="aboutSkills"]） */
 function renderAboutSkills(skills: SkillItem[]): string {
-  return `<section class="about__skills" aria-labelledby="skills-heading">
-  <div class="section__header">
+  return `<div class="section__header">
     <h2 id="skills-heading">我的小本领</h2>
   </div>
-  <div class="skill-grid">${skills.map(renderSkillRing).join('')}</div>
-</section>`
+  <div class="skill-grid">${skills.map(renderSkillRing).join('')}</div>`
 }
 
 /** 实心星星图标（项目 Star 数） */
@@ -1295,9 +1275,11 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
     navLinks: renderNavLinks(ctx.nav, pathname),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
-    pageTitle: `${escapeHtml(post.data.title)} - ${siteName}`,
+    // 标题保持原始文本（未转义）：客户端直接赋给 document.title，
+    // 服务端注入 <title> 时再统一做一次 HTML 转义。
+    pageTitle: `${post.data.title} - ${siteName}`,
     articleHeader: renderArticleHeader(post, { hasToc }),
-    postContent: `<div class="post-content">${html}</div>`,
+    postContent: html,
     tocSidebar: hasToc ? renderTocSidebar(tocGroups) : '',
     articleFooter: renderArticleFooter(newer, older, related),
   }
@@ -1405,8 +1387,11 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
   const snapshot = await getSyncData()
   const version = snapshot.version
 
+  // 路径归一化：/about 与 /about/ 视为同一份缓存（服务端注入与前台轮询拿到的 URL 形式可能不同）
+  const path = pathname.endsWith('/') ? pathname : `${pathname}/`
+
   // 命中区块缓存：版本号一致 → 直接返回，零查库、零渲染（~1ms）
-  const cached = getBlock(pathname)
+  const cached = getBlock(path)
   if (cached && cached.version === version) {
     return { version, title: cached.title, blocks: cached.blocks }
   }
@@ -1419,7 +1404,6 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
     nav: snapshot.nav,
     version,
   }
-  const path = pathname.endsWith('/') ? pathname : `${pathname}/`
   const siteName = snapshot.settings?.siteName ?? site.name
 
   let title: string | null = siteName
@@ -1451,6 +1435,6 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
     title = siteName
   }
 
-  setBlock(pathname, { version, title, blocks, ts: Date.now() })
+  setBlock(path, { version, title, blocks, ts: Date.now() })
   return { version, title, blocks }
 }

@@ -4,7 +4,7 @@ import Icon from '../components/Icon.astro';
 import SkillRing from '../components/SkillRing.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { sortPosts } from '../lib/posts';
-import { getAboutContent } from '../lib/site-settings';
+import { getAboutContent, getSiteSettings } from '../lib/site-settings';
 
 const posts = sortPosts(await getCollection('posts'));
 const postCount = posts.length;
@@ -15,6 +15,10 @@ const firstYear = posts.reduce((min, post) => {
 
 // 关于页正文/便签/技能：优先后台站点设置（可随时在后台修改），缺失时回退默认值
 const about = await getAboutContent();
+
+// 作者名：页面的 description / SEO 用，优先后台站点设置
+const settings = await getSiteSettings();
+const authorName = settings?.siteAuthor ?? '我';
 
 // ---- 项目：全部来自 Payload 后台 projects 集合，构建时载入 ----
 // loader 已按 sortOrder 升序写入 store，分组时保持该顺序
@@ -45,7 +49,7 @@ const STAR_FILL_SVG =
 
 <BaseLayout
   title="关于"
-  description="关于段枫，以及这个完全由 AI 开发的博客会持续记录的内容。"
+  description={`关于 ${authorName}，以及这个完全由 AI 开发的博客会持续记录的内容。`}
   pageClass="content-page"
 >
   <article class="about">

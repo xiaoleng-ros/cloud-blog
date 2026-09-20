@@ -18,12 +18,12 @@ import xIcon from '@phosphor-icons/core/assets/regular/x.svg?raw';
 import { getSiteSettings } from '../lib/site-settings';
 
 const settings = await getSiteSettings();
-const playlistId =
-  String(
-    settings?.neteasePlaylistId ??
-      import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID ??
-      '8792942606',
-  ).trim() || '8792942606';
+// 后台站点设置的歌单 ID 只在「纯数字」时才采用：
+// 历史上这个字段被填过 "NaN"，会把播放器导向一个不存在的歌单，比兜底值更糟。
+const rawPlaylistId = String(
+  settings?.neteasePlaylistId ?? import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID ?? '',
+).trim();
+const playlistId = /^\d+$/.test(rawPlaylistId) ? rawPlaylistId : '8792942606';
 const apiBase =
   String(import.meta.env.PUBLIC_MUSIC_API ?? 'https://meting.mikus.ink/api').trim() ||
   'https://meting.mikus.ink/api';
@@ -1998,10 +1998,14 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
       const updateMediaSession = (track) => {
         if (!('mediaSession' in navigator) || !('MediaMetadata' in window)) return;
         try {
+          // 专辑名用站点品牌名（导航上的站名，运行时已注入后台最新站名），
+          // 不再写死模板作者名
+          const brand =
+            document.querySelector('.site-nav__brand-name')?.textContent?.trim() || '博客';
           navigator.mediaSession.metadata = new MediaMetadata({
             title: track.title,
             artist: track.artist,
-            album: '段枫的博客 · 网易云歌单',
+            album: `${brand} · 网易云歌单`,
             artwork: track.cover
               ? [{ src: track.cover, sizes: '300x300', type: 'image/jpeg' }]
               : [],

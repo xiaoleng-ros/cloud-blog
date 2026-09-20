@@ -101,10 +101,13 @@ const coverHue = (value: string) => {
       </div>
     </div>
 
-    {heroPicks.length > 0 && (
-      <aside class="hero__picks" aria-label="精选文章" data-sync-block="heroPicks">
-        <p class="hero__picks-label">精选</p>
-        <div class="picks">
+    {/* 精选区块：锚点始终渲染（即使构建时后台还没有文章），
+        这样响应时注入 / 客户端同步才有落脚点；内容为空时由 CSS 隐藏。 */}
+    <aside class="hero__picks" aria-label="精选文章" data-sync-block="heroPicks">
+      {heroPicks.length > 0 && (
+        <>
+          <p class="hero__picks-label">精选</p>
+          <div class="picks">
           <a class="pick-hero" href={`/posts/${heroPicks[0].id}/`}>
             {getPostCover(heroPicks[0]) ? (
               <span class="pick-hero__thumb">
@@ -162,9 +165,10 @@ const coverHue = (value: string) => {
               ))}
             </ul>
           )}
-        </div>
-      </aside>
-    )}
+          </div>
+        </>
+      )}
+    </aside>
   </section>
 
 

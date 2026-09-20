@@ -1,5 +1,6 @@
 ---
 import Icon from './Icon.astro';
+import { SITE_DEFAULTS } from '../lib/site-defaults';
 import { getNavItems, getSiteSettings } from '../lib/site-settings';
 
 // 尾斜杠统一处理，避免跨文档视图切换时被主机 301 跳转
@@ -9,9 +10,10 @@ const pathname = Astro.url.pathname.endsWith('/')
 const isCurrent = (href: string) =>
   href === '/' ? pathname === '/' : pathname.startsWith(href);
 
-// 品牌名与导航项：优先从后台站点设置读取，后台不可用时回退默认
+// 品牌名与导航项：优先从后台站点设置读取，后台不可用时回退本地默认站名
+// （与 baseLayout / 页脚保持一致，避免出现两套不同的兜底站名）
 const settings = await getSiteSettings();
-const brandName = settings?.siteName ?? '段枫的手账';
+const brandName = settings?.siteName ?? SITE_DEFAULTS.siteName;
 const navItems = await getNavItems();
 ---
 

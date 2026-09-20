@@ -18,7 +18,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import matter from 'gray-matter';
 import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
-import { fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, type MdEntry, type ProjectEntry } from './payload-api';
+import { PAYLOAD_URL, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, type MdEntry, type ProjectEntry } from './payload-api';
 
 /** dev 自动同步轮询间隔（毫秒）：3s，接近实时 */
 const AUTO_REFRESH_MS = 3_000
@@ -113,6 +113,13 @@ export const payloadPostsLoader: Loader = {
       ctx.logger.warn(
         `[payload-loader] 后台不可用（${(error as Error).message}），回退本地 markdown：${entries.length} 篇`,
       );
+      if (entries.length === 0) {
+        ctx.logger.error(
+          '[payload-loader] ⚠️ 后台拉取失败且没有任何本地 markdown 兜底：' +
+            '前台会用默认文案（模板作者名）构建，并且不会生成任何文章详情页（/posts/* 会 404）。' +
+            `请检查 PUBLIC_PAYLOAD_URL 是否指向真实线上域名（当前解析为 ${PAYLOAD_URL}）。`,
+        );
+      }
       await storeEntries(ctx, ctx.store, entries, (id) => urlsOf.get(id));
     }
 
@@ -142,6 +149,12 @@ export const payloadNotesLoader: Loader = {
       ctx.logger.warn(
         `[payload-loader] 后台不可用（${(error as Error).message}），回退本地 markdown：${entries.length} 条`,
       );
+      if (entries.length === 0) {
+        ctx.logger.error(
+          '[payload-loader] ⚠️ 后台拉取失败且没有任何本地 markdown 兜底：随笔页会显示「还没有随笔」。' +
+            `请检查 PUBLIC_PAYLOAD_URL（当前解析为 ${PAYLOAD_URL}）。`,
+        );
+      }
       await storeEntries(ctx, ctx.store, entries, (id) => urlsOf.get(id));
     }
 

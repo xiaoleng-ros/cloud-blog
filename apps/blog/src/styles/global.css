@@ -682,6 +682,12 @@ p {
   border-top: 1px solid var(--border);
 }
 
+/* 精选区块的锚点始终存在（便于运行时注入），内容为空时整块收起，
+   避免后台还没有文章时留下一条孤立的分割线 */
+.hero__picks:not(:has(*)) {
+  display: none;
+}
+
 .hero__picks-label {
   display: flex;
   align-items: center;

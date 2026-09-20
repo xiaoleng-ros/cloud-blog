@@ -18,7 +18,7 @@
 
 ## 🧬 仓库速览
 
-两个应用相互独立、各自带 `package.json` 与 lockfile，可**在 EdgeOne Makers 中分别建成两个独立项目**部署：
+两个应用相互独立、各自带 `package.json` 与 lockfile；**部署时作为同一个 EdgeOne Makers 项目**（根目录 `apps/cms`）一起上线，前后台同域名：
 
 | 📦 目录 | 🚀 应用 | 🧰 技术栈 | 💡 说明 |
 | --- | --- | --- | --- |
@@ -69,14 +69,21 @@ cloud/
 - 🗄️ **数据源**：`apps/cms` 的 Payload 集合是唯一事实来源 — 文章（Posts）、随笔（Notes）、项目（Projects）、分类（Categories）、标签（Tags），外加两个全局：站点设置（SiteSettings）与导航（Navigation）。
 - 📡 **前台取数**：`apps/blog` 通过 Astro content loader（`payload-loader.ts`）在构建 / 开发时从后台 REST API 拉取 posts / notes / projects；站点名称、描述、作者在后台缺失时回退到 `lib/site-defaults.ts` 的默认值。
 - 🧩 **关于页项目**：开源项目与资源下载卡片全部来自后台 `projects` 集合（按 `group` 分组聚合），不再依赖 GitHub API 构建时抓取或本地缓存 JSON。
-- 🔥 **运行时热同步**：后台数据变更后，前台已打开的页面借助 SSE（`/api/blog-sync/stream`）近实时收到 `update` 事件，或用轮询兜底（`/api/blog-sync?version=1` 版本探测 + 全量区块），局部替换带 `data-sync-block` 锚点的区块，实现「后台改 → 前台数秒内自动更新」。
+- 🔥 **首屏就是最新数据**：`apps/cms` 的 catch-all 路由（`src/app/[[...path]]/route.ts`）在返回 HTML 前，会用 `blog-render` 按后台最新数据渲染区块并**直接注入静态外壳**，所以打开页面不会先闪一下构建时的旧内容。博客 HTML 单独放在 `apps/cms/public/__blog/`（不能摊在 `public/` 根下，否则会被静态托管直接命中、绕过注入）。
+- 🔁 **页面打开后继续同步**：后台数据变更后，已打开的页面通过轮询（`/api/blog-sync?version=1` 版本探测 + 全量区块，SSE `/api/blog-sync/stream` 亦可）局部替换带 `data-sync-block` 锚点的区块。服务端已注入过的区块带 `data-sync-version`，版本一致时客户端不会重复改写 DOM。
+
+> [!IMPORTANT]
+> 区块约定：`blog-render` 里每个渲染函数返回的是**锚点元素的 innerHTML**（不含外层容器），
+> 与 `*.astro` 模板中 `<xxx data-sync-block="id">` 一一对应。若返回里再带一层同名容器，
+> 每次同步都会多套一层（双层边框/内边距）。
 
 ```mermaid
 flowchart LR
-  B[💼 Payload CMS 后台] -->|SSE / 轮询| D[🌐 浏览器页面]
+  B[💼 Payload CMS 后台] -->|响应时注入区块| D[🌐 浏览器页面]
   B -->|loader 构建时取数| A[🌠 Astro 前端]
-  A -->|静态构建| D
-  A -.->|运行时 /api/blog-sync| B
+  A -->|静态外壳 public/__blog| C[cms catch-all 路由]
+  C -->|注入最新数据| D
+  B -->|轮询 / SSE 增量更新| D
 ```
 
 ---
@@ -108,10 +115,12 @@ npm run dev:cms
 
 | 🎛️ 变量 | 💡 用途 |
 | --- | --- |
-| `SITE_URL` | 站点正式域名（RSS / sitemap / canonical） |
-| `PUBLIC_PAYLOAD_URL` | Payload 后台地址，默认 `http://localhost:9527` |
+| `SITE_URL` | 站点正式域名（RSS / sitemap / canonical），构建时写入静态产物 |
+| `PUBLIC_PAYLOAD_URL` | Payload 后台地址，本地默认 `http://localhost:9527`；线上填**真实域名**（不带 `/api`） |
 | `PUBLIC_TWIKOO_ENV_ID` | Twikoo 评论后端，不配则评论隐藏 |
 | `PUBLIC_NETEASE_PLAYLIST_ID` / `PUBLIC_MUSIC_API` | 🎵 音乐播放器歌单 |
+
+> 前台取数地址的优先级：`PUBLIC_PAYLOAD_URL` → `SITE_URL`（一体化部署前后台同域）→ `http://localhost:9527`。
 
 `apps/cms` 生产环境变量（本地 SQLite 无需配置）：
 
@@ -124,24 +133,35 @@ npm run dev:cms
 
 ---
 
-## 🚢 部署到 EdgeOne Makers
+## 🚢 部署到 EdgeOne Makers（一体化：前台 + 后台同一个项目）
 
-可在 EdgeOne Makers（控制台 → EdgeOne → Makers）中创建 **两个相互独立的项目**，同一仓库、不同根目录：
+前后台部署在**同一个 EdgeOne Makers 项目**里，同域名：`/` 是博客，`/admin`、`/api` 是 Payload 后台。
 
-| 📦 项目 | 🧭 仓库根目录 | 🧰 类型 | 🔧 构建命令 | 📂 输出目录 |
-| --- | --- | --- | --- | --- |
-| 博客站点 | `apps/blog` | 静态站（Astro） | `npm install && npm run build` | `dist` |
-| 内容后台 | `apps/cms` | Next.js 全栈（Node 运行时） | `npm install && npm run build` | 按 Next.js 预设（`.next`） |
+| 🧭 配置项 | 🔧 值 |
+| --- | --- |
+| 仓库根目录 | `apps/cms` |
+| 框架预设 | `Next.js`（必须是这个，否则 catch-all 路由与 SSR 不生效） |
+| 构建命令 | 见 `apps/cms/edgeone.json`（装 blog 依赖 → `astro build` → `next build` → 复制产物到 `public/`） |
+| 输出目录 | `.next` |
+| Node 版本 | 22.21.1 |
 
-**操作步骤：**
+**环境变量要配在 cms 项目上：**
 
-1. 📤 先将本仓库推送至 GitHub / Gitee（当前仓库尚未配置远程地址：`git remote add origin <你的仓库地址> && git push -u origin main`）。
-2. 🌐 腾讯云控制台打开 EdgeOne → Makers → **创建项目 → 导入 Git 仓库**，授权并选择上述仓库与分支。
-3. 🏗️ **项目 1（站点）**：根目录填 `apps/blog`，构建命令 `npm run build`，输出目录 `dist`。环境变量需设置 `SITE_URL` 与 **`PUBLIC_PAYLOAD_URL`（指向项目 2 的线上域名，构建时用于拉取内容）**。
-4. 💾 **项目 2（后台）**：根目录填 `apps/cms`，选择 Next.js / Node 运行时预设。环境变量配置 `DATABASE_DRIVER=postgres`、`POSTGRES_URL`（Neon 等托管库）、`PAYLOAD_SECRET`；首次建表时加 `PAYLOAD_FORCE_PUSH=1`。
-5. 🎉 等待部署完成后，把项目 2 的域名填入项目 1 的 `PUBLIC_PAYLOAD_URL`，重新部署站点即可全量上线。
+| 🎛️ 变量 | 💡 用途 |
+| --- | --- |
+| `DATABASE_DRIVER` | `postgres` |
+| `POSTGRES_URL` | Supabase / Neon 连接串 |
+| `PAYLOAD_SECRET` | Payload 加密密钥 |
+| `NEXT_PUBLIC_SERVER_URL` | 站点正式域名（如 `https://blog.iceuu.icu`） |
+| `SITE_URL` | 同上（Astro 构建用：canonical / RSS / sitemap） |
+| `PUBLIC_PAYLOAD_URL` | **只要域名**（如 `https://blog.iceuu.icu`），不要带 `/api` |
+| `PAYLOAD_FORCE_PUSH=1` | 仅首次建表用，建完请删掉 |
 
 > [!WARNING]
+> - `PUBLIC_PAYLOAD_URL` / `SITE_URL` 必须是**真实线上域名**。若留占位域名，Astro 构建时拉不到后台数据，
+>   会退化成「模板默认文案 + 0 篇文章」，并且**不会生成任何文章详情页**（`/posts/*` 全部 404）。
+>   构建日志里会打印明确的 `[payload-loader] ⚠️` 提示。
+> - 首次部署（站点还没上线时）构建必然拉不到数据，属正常；上线后在控制台填好域名重新部署一次即可。
 > - **Serverless 无持久磁盘，CMS 的 SQLite 单文件只适合本地开发；线上必须用 `postgres` 托管库**（项目已内置 `@payloadcms/db-postgres`，并带 `projects` 集合的迁移）。
 > - CMS 依赖 Node 运行时与 `sharp`，请在 Makers 中选择支持 Node/Next SSR 的方案（而非纯边缘函数）。
 > - **运行时常量**：SSE 与内存缓存均为单实例级；EdgeOne 多实例时靠 5s TTL 快照 + 前台轮询兜底，最终一致。
