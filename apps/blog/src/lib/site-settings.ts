@@ -34,13 +34,23 @@ export interface SiteSettingsData {
   skills?: string;
 }
 
-// 注意：不缓存，每次渲染都实时请求后台，保证后台改动前台立即可见；
-// 后台不可用时返回 null，由各调用方回退本地配置或默认值。
+// 站点设置模块级缓存：同一构建/开发会话内重复调用不会每次都请求后台。
+// TTL 过期后重新拉取，兼顾实时性与带宽。后台不可用时返回 null 并保留过期缓存作为降级。
+const SETTINGS_CACHE_TTL = 60_000;
+let settingsCache: { data: SiteSettingsData | null; ts: number } | null = null;
+
 export async function getSiteSettings(): Promise<SiteSettingsData | null> {
+  // 缓存未过期直接复用，避免同一页面多次请求
+  if (settingsCache && Date.now() - settingsCache.ts < SETTINGS_CACHE_TTL) {
+    return settingsCache.data;
+  }
   try {
-    return await fetchSiteSettings();
+    const data = await fetchSiteSettings();
+    settingsCache = { data, ts: Date.now() };
+    return data;
   } catch {
-    return null;
+    // 请求失败时保留过期缓存（比完全不可用更好）
+    return settingsCache?.data ?? null;
   }
 }
 

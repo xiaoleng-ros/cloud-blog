@@ -79,7 +79,7 @@ function stringifySocials(items: SocialItem[]): string {
  */
 export const SocialLinksField: React.FC<{ path: string; label?: string }> = ({ path, label }) => {
   // 通过 Payload 的 useField 读写字段值
-  const { value, setValue } = useField<string>({ path })
+  const { value, setValue } = useField({ path })
 
   // 将当前值解析为结构化列表
   const items = useMemo(() => parseSocials(value), [value])

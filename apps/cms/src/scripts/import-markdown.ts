@@ -322,7 +322,7 @@ async function main() {
   }
 
   console.log('\n🎉 迁移完成')
-  await payload.db.destroy()
+  await payload.db?.destroy?.()
   process.exit(0)
 }
 

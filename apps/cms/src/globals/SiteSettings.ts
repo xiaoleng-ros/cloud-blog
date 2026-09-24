@@ -7,7 +7,8 @@ export const SiteSettings: GlobalConfig = {
   label: '站点设置',
   access: {
     read: () => true,
-    update: () => true,
+    // 仅登录用户可修改站点设置，防止未授权篡改
+    update: ({ req }) => Boolean(req.user),
   },
   hooks: {
     afterChange: [syncInvalidateHook],

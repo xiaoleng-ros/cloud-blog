@@ -27,7 +27,7 @@ interface CategoryListResponse {
  */
 export const SlugField: React.FC<{ path: string; label?: string }> = ({ path, label }) => {
   // value / setValue 与表单的 slug 字段双向绑定
-  const { value, setValue, showError, errorMessage } = useField<string>({ path })
+  const { value, setValue, showError, errorMessage } = useField({ path })
 
   /** 把已有 slug 拆成「分类 / 标识」两部分（如 技术/deploy-static → 技术 + deploy-static） */
   const splitSlug = (slug: string) => {

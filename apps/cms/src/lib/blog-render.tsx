@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 博客前台数据同步 —— 服务端渲染层
  *
@@ -129,7 +128,7 @@ export const getRelatedPosts = (posts: MdEntry[], current: MdEntry, limit = 3) =
   return sortPostsByDate(posts)
     .filter((post) => post.id !== current.id)
     .map((post) => {
-      const sharedTags = getPostTags(post).filter((tag) => currentTags.has(tag))
+      const sharedTags = getPostTags(post).filter((tag: string) => currentTags.has(tag))
       const sameCategory = currentCategory && getPostCategory(post) === currentCategory ? 1 : 0
       return { post, score: sameCategory * 3 + sharedTags.length }
     })
@@ -362,7 +361,7 @@ const SHIKI_LANGS = [
   'go', 'rust', 'java', 'c', 'cpp', 'dockerfile', 'makefile', 'graphql', 'plaintext',
 ]
 
-let highlighterPromise: Promise<ReturnType<typeof createHighlighter>> | null = null
+let highlighterPromise: Promise<Awaited<ReturnType<typeof createHighlighter>>> | null = null
 
 function getHighlighter() {
   if (!highlighterPromise) {
@@ -390,6 +389,7 @@ function decodeHtmlEntities(value: string): string {
 /** 用 shiki 高亮代码块，输出与 Astro 构建一致的 astro-code 结构 */
 async function highlightCodeBlocks(html: string): Promise<string> {
   const highlighter = await getHighlighter()
+  if (!highlighter) return html
   const pattern = /<pre><code class="language-([^"]+)">([\s\S]*?)<\/code><\/pre>/g
   let match
   let out = ''
@@ -659,7 +659,7 @@ export function renderArticleHeader(
 
   const tagHtml =
     tags.length > 0
-      ? `<div class="tag-list" aria-label="标签">${tags.map((t) => `<span>${escapeHtml(t)}</span>`).join('')}</div>`
+      ? `<div class="tag-list" aria-label="标签">${tags.map((t: string) => `<span>${escapeHtml(t)}</span>`).join('')}</div>`
       : ''
 
   return `<div class="post-meta">${meta}</div>
@@ -1034,7 +1034,7 @@ function parseAboutNotes(raw?: string | null): NoteItem[] {
 function getAboutData(settings: Record<string, any> | null): AboutData {
   const skills = parseSkills(settings?.skills)
   const notes = parseAboutNotes(settings?.aboutNotes)
-  const paragraphs = (settings?.aboutParagraphs ?? '')
+  const paragraphs = String(settings?.aboutParagraphs ?? '')
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)

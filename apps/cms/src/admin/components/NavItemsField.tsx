@@ -67,7 +67,7 @@ function stringifyNavItems(items: NavItem[]): string {
  */
 export const NavItemsField: React.FC<{ path: string; label?: string }> = ({ path, label }) => {
   // 通过 Payload 的 useField 读写字段值（textarea 字符串）
-  const { value, setValue } = useField<string>({ path })
+  const { value, setValue } = useField({ path })
 
   // 渲染与编辑以本地 state 为准（初始化自表单文本）。
   // 这样点击「添加」产生的空卡片能立即显示；序列化只影响保存时的字段值，不会反向吞掉空行。

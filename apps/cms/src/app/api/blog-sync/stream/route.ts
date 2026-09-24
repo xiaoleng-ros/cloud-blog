@@ -48,6 +48,19 @@ export async function GET(request: Request) {
         },
       )
 
+      // 连接数达到上限时拒绝新连接
+      if (!client) {
+        safeEnqueue(
+          `event: error\ndata: ${JSON.stringify({ message: 'SSE 连接数已满' })}\n\n`,
+        )
+        try {
+          controller.close()
+        } catch {
+          // 已关闭
+        }
+        return
+      }
+
       // 握手：告知客户端连接已建立 + 在线人数
       safeEnqueue(
         `event: hello\ndata: ${JSON.stringify({ id: client.id, online: sseClientCount() })}\n\n`,
@@ -61,7 +74,7 @@ export async function GET(request: Request) {
       // 客户端断开 → 清理
       request.signal.addEventListener('abort', () => {
         clearInterval(heartbeat)
-        unregisterSseClient(client)
+        if (client) unregisterSseClient(client)
         if (closed) return
         closed = true
         try {

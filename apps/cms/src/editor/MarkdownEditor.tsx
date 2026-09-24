@@ -176,7 +176,7 @@ export const MarkdownEditorField: FieldClientComponent<TextFieldClient> = ({ fie
   // 从表单上下文获取字段路径（官方推荐，兼容所有承载环境）
   const path = useFieldPath()
   // value / setValue 与表单字段 path 双向绑定
-  const { value, setValue, showError, errorMessage } = useField<string>({ path })
+  const { value, setValue, showError, errorMessage } = useField({ path })
   // textarea 字段基类自带 label
   const label = field.label
   return (

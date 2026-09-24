@@ -26,6 +26,17 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 /**
+ * 安全校验：PAYLOAD_SECRET 是 JWT 签名密钥，空值或过短时直接拒绝启动。
+ * 防止生产环境因忘记配置密钥导致 JWT 可被伪造。
+ */
+const payloadSecret = process.env.PAYLOAD_SECRET
+if (!payloadSecret || payloadSecret.length < 32) {
+  throw new Error(
+    '[安全] PAYLOAD_SECRET 必须设置且长度不少于 32 字符。请在环境变量中配置 PAYLOAD_SECRET。',
+  )
+}
+
+/**
  * 数据库选择：
  *  - 本地/开发：默认 SQLite（单文件，零配置）；如需与线上用同一套数据，设 DATABASE_DRIVER=postgres + POSTGRES_URL
  *  - 上线/EdgeOne：DATABASE_DRIVER=postgres + POSTGRES_URL（指向 Supabase）
@@ -128,8 +139,8 @@ export default buildConfig({
   globals: [SiteSettings, Navigation],
   // 富文本编辑器
   editor: lexicalEditor(),
-  // 加密密钥（必须与 .env 中的 PAYLOAD_SECRET 一致）
-  secret: process.env.PAYLOAD_SECRET || '',
+  // 加密密钥（必须与 .env 中的 PAYLOAD_SECRET 一致，上方已校验非空）
+  secret: payloadSecret,
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

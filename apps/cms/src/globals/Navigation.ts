@@ -7,7 +7,8 @@ export const Navigation: GlobalConfig = {
   label: '导航管理',
   access: {
     read: () => true,
-    update: () => true,
+    // 仅登录用户可修改导航配置，防止未授权篡改
+    update: ({ req }) => Boolean(req.user),
   },
   hooks: {
     afterChange: [syncInvalidateHook],

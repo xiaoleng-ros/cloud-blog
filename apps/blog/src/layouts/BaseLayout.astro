@@ -638,15 +638,19 @@ const routeMotion = {
     </script>
     <script is:inline data-astro-rerun>
       (() => {
-        // 后台数据实时同步：轮询 CMS 的 /api/blog-sync，数据版本变化时局部更新页面区块。
+        // 后台数据实时同步：SSE 为主通道（近实时推送），轮询为兜底（30s 间隔）。
         // 使用 data-astro-rerun，路由切换（ClientRouter 换页）后自动重新初始化。
         window.__blogSyncController?.abort();
         const controller = new AbortController();
         window.__blogSyncController = controller;
         const signal = controller.signal;
 
+        // 同步配置常量（集中定义避免魔法值散落在逻辑中）
         const KEY = 'blog-data-version';
-        const POLL_MS = 4000;
+        const SSE_STREAM_URL = '/api/blog-sync/stream';
+        const POLL_URL = '/api/blog-sync';
+        const SSE_TIMEOUT_MS = 30_000;
+        const POLL_INTERVAL_MS = 30_000;
         // 与 CMS 渲染层约定的区块 ID → 页面锚点（data-sync-block 属性）映射
         const BLOCK_SELECTOR = '[data-sync-block]';
         // 滚动显现（scroll reveal）目标：新插入的 DOM 默认无 is-revealed 会隐藏，
@@ -695,7 +699,7 @@ const routeMotion = {
           try {
             const path = window.location.pathname;
             const res = await fetch(
-              `/api/blog-sync?path=${encodeURIComponent(path)}`,
+              `${POLL_URL}?path=${encodeURIComponent(path)}`,
               { signal, cache: 'no-store' },
             );
             if (!res.ok) return;
@@ -736,10 +740,75 @@ const routeMotion = {
           }
         };
 
-        // 立即同步一次，之后定时轮询
+        // ---- SSE 主通道 + 轮询兜底 ----
+        // 首次加载立即同步一次，确保首屏数据是最新的
         sync();
-        const timer = window.setInterval(sync, POLL_MS);
-        signal.addEventListener('abort', () => window.clearInterval(timer));
+
+        let sseSource = null;
+        let pollTimer = null;
+        let sseEstablished = false;
+
+        // 启动轮询兜底（SSE 不可用或超时后调用）
+        const startPolling = () => {
+          if (pollTimer) return;
+          pollTimer = window.setInterval(sync, POLL_INTERVAL_MS);
+        };
+
+        // 停止轮询（SSE 建立后调用）
+        const stopPolling = () => {
+          if (pollTimer) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+          }
+        };
+
+        // 尝试连接 SSE 流：收到 update 事件时触发一次 sync，建立后停止轮询
+        const connectSse = () => {
+          try {
+            sseSource = new EventSource(SSE_STREAM_URL, { withCredentials: false });
+          } catch {
+            startPolling();
+            return;
+          }
+
+          // 30 秒超时：若 SSE 未能建立稳定连接则降级为轮询
+          const timeout = window.setTimeout(() => {
+            if (!sseEstablished) {
+              sseSource?.close();
+              sseSource = null;
+              startPolling();
+            }
+          }, SSE_TIMEOUT_MS);
+
+          sseSource.addEventListener('open', () => {
+            sseEstablished = true;
+            window.clearTimeout(timeout);
+            stopPolling();
+          });
+
+          sseSource.addEventListener('update', () => {
+            sync();
+          });
+
+          sseSource.addEventListener('error', () => {
+            if (sseEstablished) {
+              // SSE 已建立后断开：尝试重连，同时启动轮询兜底
+              sseSource.close();
+              sseSource = null;
+              startPolling();
+            } else {
+              // 首次连接失败：等待超时自动降级
+            }
+          });
+        };
+
+        connectSse();
+        signal.addEventListener('abort', () => {
+          sseSource?.close();
+          sseSource = null;
+          if (pollTimer) window.clearInterval(pollTimer);
+          pollTimer = null;
+        });
       })();
     </script>
     <script is:inline>
