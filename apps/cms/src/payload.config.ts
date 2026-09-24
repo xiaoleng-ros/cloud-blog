@@ -48,7 +48,14 @@ const SUPABASE_STORAGE_ENDPOINT =
     ? `https://${new URL(process.env.POSTGRES_URL).hostname.split('.')[0]}.supabase.co/storage/v1`
     : undefined)
 
-/** 组装插件列表：仅当 S3 凭据齐全时注入 s3Storage */
+/**
+ * 组装插件列表：仅当 S3 凭据齐全时注入 s3Storage。
+ *
+ * 类型断言说明：s3Storage(...) 通过 declare module 'payload' 扩展了 ConfigureAppOptions，
+ * 本地 tsc 能识别，但 EdgeOne 编译链可能不加载该 augmentation，会误报
+ * "Property 's3Storage' does not exist on type 'ConfigureAppOptions'"。
+ * 用 `as unknown as Plugin` 强制收敛，运行时行为完全不变。
+ */
 const plugins: Plugin[] =
   SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SUPABASE_STORAGE_ENDPOINT
     ? [
@@ -58,13 +65,20 @@ const plugins: Plugin[] =
           acl: 'public-read', // 图片公开可读，浏览器可直接加载，不走 signed URL
           config: {
             endpoint: SUPABASE_STORAGE_ENDPOINT,
-            region: 'auto', // S3 兼容服务（Supabase Storage）不校验 region
+            region: 'us-east-1', // Supabase 的 S3 兼容接口固定这个 region
             credentials: {
-              accessKeyId: 'supabase-demo', // Supabase Storage 兼容模式固定占位符
+              // AWS SDK 里 accessKeyId = "supabase-demo" 是占位符，secretAccessKey 才是真 key
+              accessKeyId: 'supabase-demo',
               secretAccessKey: SUPABASE_SERVICE_ROLE_KEY,
             },
+            // 注：Supabase Storage 兼容模式使用 v4 签名，AWS SDK 默认即 v4，无需显式配置
+            // forcePathStyle: false → bucket 走虚拟主机样式（<bucket>.<endpoint>），
+            // Supabase Storage 兼容模式要求这个
+            forcePathStyle: false,
           },
-        }),
+          // 禁用本地磁盘副本，避免每次上传都落一份到容器临时目录
+          disableLocalStorage: true,
+        }) as unknown as Plugin,
       ]
     : []
 
