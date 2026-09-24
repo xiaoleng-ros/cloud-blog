@@ -11,6 +11,7 @@
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "import:data": "cross-env NODE_OPTIONS=--no-deprecation npx tsx src/scripts/import-markdown.ts",
+    "generate:preview-css": "node scripts/generate-preview-css.mjs",
     "warmup": "node scripts/warmup.mjs",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload"
   },

@@ -20,10 +20,10 @@ import remarkRehype from 'remark-rehype'
 import rehypeStringify from 'rehype-stringify'
 import { createHighlighter } from 'shiki'
 
-// 项目 markdown 插件（跨 app 复用博客的插件，保证短代码/图片处理与构建时一致）
-import remarkLegacyShortcodes from '../../../blog/src/lib/remark-legacy-shortcodes.mjs'
-import rehypeLegacyShortcodes from '../../../blog/src/lib/rehype-legacy-shortcodes.mjs'
-import rehypeImgAttrs from '../../../blog/src/lib/rehype-img-attrs.mjs'
+// 项目 markdown 插件（跨 app 复用同一份实现，保证短代码/图片处理与构建时一致）
+import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs'
+import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs'
+import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs'
 
 import {
   type MdEntry,
@@ -31,6 +31,27 @@ import {
   getSyncData,
 } from './blog-sync'
 import { getBlock, setBlock } from './sync-cache'
+// 文章元数据/分类标签/日期处理：与前台博客共用同一份实现（消除两侧重复逻辑）
+import {
+  formatDate,
+  sortPosts,
+  sortPostsByDate,
+  getPostDescription,
+  getPostExcerpt,
+  getPostCategory,
+  getPostTags,
+  getPostCover,
+  getReadingMinutes,
+  getAdjacentPosts,
+  getRelatedPosts,
+  getCategories,
+  getTags,
+  getCategoryPath,
+  getTagPath,
+  getPostsByCategory,
+  getPostsByTag,
+  groupPostsByYear,
+} from 'cloud-blog/shared/post-utils'
 
 // 站点默认值（后台 SiteSettings 缺失时兜底）。原 site.config.json 已移除，统一在此维护。
 const SITE_DEFAULTS = {
@@ -40,7 +61,10 @@ const SITE_DEFAULTS = {
   author: '段枫',
 }
 
-export const site = { ...SITE_DEFAULTS }
+const site = { ...SITE_DEFAULTS }
+
+/** 文章详情页路径（CMS 以 slug 作为 id，因此直接拼 id） */
+const getPostPath = (post: MdEntry) => `/posts/${post.id}/`
 
 // ---------------------------------------------------------------------------
 // 基础工具
@@ -60,120 +84,6 @@ const escapeAttr = escapeHtml
 
 const toDate = (value?: unknown): Date | undefined =>
   value ? new Date(String(value)) : undefined
-
-/** 与前台一致：yyyy-MM-dd（本地时区） */
-export const formatDate = (date?: Date) => {
-  if (!date) return ''
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-// ---------------------------------------------------------------------------
-// 文章工具（与前台 lib/posts.ts 逻辑一致）
-// ---------------------------------------------------------------------------
-
-const getTime = (date?: Date) => date?.getTime() ?? 0
-
-export const sortPosts = (posts: MdEntry[]) =>
-  [...posts].sort((a, b) => {
-    const stickyDiff = (Number(b.data.sticky ?? 0)) - (Number(a.data.sticky ?? 0))
-    if (stickyDiff !== 0) return stickyDiff
-    const dateDiff = getTime(toDate(b.data.date)) - getTime(toDate(a.data.date))
-    if (dateDiff !== 0) return dateDiff
-    return String(a.data.title ?? '').localeCompare(String(b.data.title ?? ''), 'zh-CN')
-  })
-
-export const sortPostsByDate = (posts: MdEntry[]) =>
-  [...posts].sort((a, b) => {
-    const dateDiff = getTime(toDate(b.data.date)) - getTime(toDate(a.data.date))
-    if (dateDiff !== 0) return dateDiff
-    return String(a.data.title ?? '').localeCompare(String(b.data.title ?? ''), 'zh-CN')
-  })
-
-export const getPostDescription = (post: MdEntry) =>
-  (post.data.description ?? post.data.ai?.[0]) || '技术记录与实践笔记。'
-
-export const getPostExcerpt = (post: MdEntry) =>
-  post.data.description ?? post.data.ai?.[0]
-
-export const getPostCategory = (post: MdEntry) => post.data.categories?.[0]
-
-export const getPostTags = (post: MdEntry) => post.data.tags ?? []
-
-export const getPostCover = (post: MdEntry) => post.data.cover
-
-export const getPostPath = (post: MdEntry) => `/posts/${post.id}/`
-
-export const getReadingMinutes = (post: MdEntry) => {
-  const body = post.body ?? ''
-  const cjkChars = body.match(/[\u4e00-\u9fff]/g)?.length ?? 0
-  const words = body.replace(/[\u4e00-\u9fff]/g, ' ').match(/[A-Za-z0-9_]+/g)?.length ?? 0
-  return Math.max(1, Math.ceil((cjkChars + words) / 350))
-}
-
-export const getAdjacentPosts = (posts: MdEntry[], current: MdEntry) => {
-  const ordered = sortPostsByDate(posts)
-  const index = ordered.findIndex((p) => p.id === current.id)
-  return {
-    newer: index > 0 ? ordered[index - 1] : undefined,
-    older: index >= 0 && index < ordered.length - 1 ? ordered[index + 1] : undefined,
-  }
-}
-
-export const getRelatedPosts = (posts: MdEntry[], current: MdEntry, limit = 3) => {
-  const currentCategory = getPostCategory(current)
-  const currentTags = new Set(getPostTags(current))
-  return sortPostsByDate(posts)
-    .filter((post) => post.id !== current.id)
-    .map((post) => {
-      const sharedTags = getPostTags(post).filter((tag: string) => currentTags.has(tag))
-      const sameCategory = currentCategory && getPostCategory(post) === currentCategory ? 1 : 0
-      return { post, score: sameCategory * 3 + sharedTags.length }
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.post)
-}
-
-const countItems = (items: string[]) =>
-  items.reduce<Map<string, number>>((counts, item) => {
-    counts.set(String(item), (counts.get(String(item)) ?? 0) + 1)
-    return counts
-  }, new Map())
-
-const mapToSortedTerms = (counts: Map<string, number>) =>
-  [...counts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'))
-
-export const getCategories = (posts: MdEntry[]) =>
-  mapToSortedTerms(countItems(posts.flatMap((post) => post.data.categories ?? [])))
-
-export const getTags = (posts: MdEntry[]) =>
-  mapToSortedTerms(countItems(posts.flatMap((post) => getPostTags(post))))
-
-export const getCategoryPath = (category: string) =>
-  `/categories/${encodeURIComponent(category)}/`
-
-export const getTagPath = (tag: string) => `/tags/${encodeURIComponent(tag)}/`
-
-export const getPostsByCategory = (posts: MdEntry[], category: string) =>
-  sortPosts(posts).filter((post) => post.data.categories?.includes(category))
-
-export const getPostsByTag = (posts: MdEntry[], tag: string) =>
-  sortPosts(posts).filter((post) => getPostTags(post).includes(tag))
-
-export const groupPostsByYear = (posts: MdEntry[]) => {
-  const groups = new Map<string, MdEntry[]>()
-  for (const post of sortPosts(posts)) {
-    const year = toDate(post.data.date)?.getFullYear().toString() ?? '未注明日期'
-    groups.set(year, [...(groups.get(year) ?? []), post])
-  }
-  return [...groups.entries()].map(([year, yearPosts]) => ({ year, posts: yearPosts }))
-}
 
 // ---------------------------------------------------------------------------
 // 站点设置 / Hero / 社交 / 页脚（与前台 site-settings.ts 逻辑一致）
@@ -436,7 +346,7 @@ interface Heading {
 }
 
 /** 渲染 markdown 为 HTML，返回正文与标题列表（用于目录） */
-export async function renderMarkdown(md: string): Promise<{ html: string; headings: Heading[] }> {
+async function renderMarkdown(md: string): Promise<{ html: string; headings: Heading[] }> {
   const headings: Heading[] = []
   const slugger = createSlugger()
 
@@ -475,7 +385,7 @@ export async function renderMarkdown(md: string): Promise<{ html: string; headin
 // ---------------------------------------------------------------------------
 
 /** PostSummary.astro */
-export function renderPostSummary(
+function renderPostSummary(
   post: MdEntry,
   opts: { hideYear?: boolean; compact?: boolean } = {},
 ): string {
@@ -511,7 +421,7 @@ export function renderPostSummary(
 }
 
 /** 首页 Hero 卡片内容（锚点 index.astro 的 div[data-sync-block="heroCard"]） */
-export function renderHeroCard(
+function renderHeroCard(
   hero: { greeting: string; name: string; subtitle: string; bio: string; buttonLabel: string },
   socials: Array<{ href: string; icon: string; label: string }>,
 ): string {
@@ -537,7 +447,7 @@ export function renderHeroCard(
 }
 
 /** 首页精选内容（锚点 index.astro 的 aside[data-sync-block="heroPicks"]） */
-export function renderHeroPicks(picks: MdEntry[]): string {
+function renderHeroPicks(picks: MdEntry[]): string {
   if (picks.length === 0) return ''
   const first = picks[0]
   const cover = getPostCover(first)
@@ -580,7 +490,7 @@ export function renderHeroPicks(picks: MdEntry[]): string {
 }
 
 /** 导航链接（Nav.astro 中 .site-nav__tags 的动态链接部分） */
-export function renderNavLinks(
+function renderNavLinks(
   navItems: Array<{ href: string; label: string }>,
   pathname: string,
 ): string {
@@ -597,7 +507,7 @@ export function renderNavLinks(
 }
 
 /** 页脚主体内容（锚点 Footer.astro 的 div[data-sync-block="footerInner"]） */
-export function renderFooterInner(
+function renderFooterInner(
   footer: { subtitle: string; channels: Array<{ name: string; icon: string; href: string }>; groups: Array<{ name: string; icon: string; href: string }> },
   author: string,
 ): string {
@@ -624,7 +534,7 @@ export function renderFooterInner(
 }
 
 /** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]） */
-export function renderFooterBar(author: string, year: number): string {
+function renderFooterBar(author: string, year: number): string {
   return `<span>© ${year} ${escapeHtml(author)}</span>
   <span aria-hidden="true">·</span>
   <a href="${escapeAttr(site.url)}">${escapeHtml(site.url.replace('https://', ''))}</a>
@@ -633,7 +543,7 @@ export function renderFooterBar(author: string, year: number): string {
 }
 
 /** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]） */
-export function renderArticleHeader(
+function renderArticleHeader(
   post: MdEntry,
   opts: { hasToc: boolean },
 ): string {
@@ -670,13 +580,13 @@ export function renderArticleHeader(
 }
 
 /** 文章正文内容（锚点 posts/[...slug].astro 的 div[data-sync-block="postContent"]） */
-export async function renderArticleContent(post: MdEntry): Promise<string> {
+async function renderArticleContent(post: MdEntry): Promise<string> {
   const { html } = await renderMarkdown(post.body)
   return html
 }
 
 /** 文章侧栏目录内容（锚点 posts/[...slug].astro 的 aside[data-sync-block="tocSidebar"]） */
-export function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; children: Array<{ slug: string; text: string }> }>): string {
+function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; children: Array<{ slug: string; text: string }> }>): string {
   const items = tocGroups
     .map(
       (group) => `<li class="toc__group toc__item--depth-2">
@@ -701,7 +611,7 @@ export function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; 
 }
 
 /** 文章页脚内容（锚点 posts/[...slug].astro 的 footer[data-sync-block="articleFooter"]） */
-export function renderArticleFooter(
+function renderArticleFooter(
   newer: MdEntry | undefined,
   older: MdEntry | undefined,
   related: MdEntry[],
@@ -745,14 +655,14 @@ export function renderArticleFooter(
 }
 
 /** 归档页头部内容（锚点 archive.astro 的 header[data-sync-block="archiveHeader"]） */
-export function renderArchiveHeader(count: number): string {
+function renderArchiveHeader(count: number): string {
   return `<p class="eyebrow">Archive</p>
   <h1>文章归档</h1>
   <p>目前收录 ${count} 篇文章，可以按时间、分类或标签浏览。</p>`
 }
 
 /** 归档页分类/标签索引面板内容（锚点 archive.astro 的 section[data-sync-block="archiveSummary"]） */
-export function renderArchiveSummary(
+function renderArchiveSummary(
   categories: Array<{ name: string; count: number }>,
   tags: Array<{ name: string; count: number }>,
 ): string {
@@ -799,7 +709,7 @@ export function renderArchiveSummary(
 }
 
 /** 归档页按年份分组列表 */
-export function renderArchiveYears(years: Array<{ year: string; posts: MdEntry[] }>): string {
+function renderArchiveYears(years: Array<{ year: string; posts: MdEntry[] }>): string {
   return years
     .map(
       (group) => `<section class="archive-year">
@@ -816,7 +726,7 @@ export function renderArchiveYears(years: Array<{ year: string; posts: MdEntry[]
 }
 
 /** 分类/标签切换器内容（锚点 categories|tags/*.astro 的 nav[data-sync-block="termSwitcher"]） */
-export function renderTermSwitcher(
+function renderTermSwitcher(
   terms: Array<{ name: string; count: number }>,
   current: string,
   kind: 'categories' | 'tags',
@@ -831,7 +741,7 @@ export function renderTermSwitcher(
 }
 
 /** 文章列表（通用：分类/标签页 post-list） */
-export function renderPostList(posts: MdEntry[], compact = false): string {
+function renderPostList(posts: MdEntry[], compact = false): string {
   return posts.map((p) => renderPostSummary(p, { compact })).join('')
 }
 
@@ -896,7 +806,7 @@ async function renderNote(note: MdEntry, anchor?: string): Promise<string> {
 
 /** 随笔页 feed 内容（锚点 notes.astro 的 div[data-sync-block="notesFeed"]）与
  *  时间索引内容（锚点 aside[data-sync-block="notesAside"]） */
-export async function renderNotesFeed(notes: MdEntry[]): Promise<{
+async function renderNotesFeed(notes: MdEntry[]): Promise<{
   feed: string
   aside: string
 }> {

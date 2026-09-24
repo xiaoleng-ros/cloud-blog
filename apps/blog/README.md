@@ -38,11 +38,11 @@ blog/
 ├── 📦 src/
 │   ├── 🧩 components/        # 组件（导航、音乐播放器、评论、技能环等）
 │   ├── 🖼️ layouts/           # 页面布局（BaseLayout 内含运行时同步脚本）
-│   ├── 🛠️ lib/               # 后台取数（payload-api / payload-loader）、站点默认值、Markdown 插件
+│   ├── 🛠️ lib/               # 后台取数（payload-api / payload-loader）、站点默认值
 │   ├── 📄 pages/             # 路由页面（首页、归档、搜索、RSS、关于等）
 │   ├── 🧬 content.config.ts  # posts / notes / projects 集合定义
 │   └── 🎨 styles/            # 全局样式
-├── 🩹 patches/               # astro 本地开发补丁（中文路径 Location 编码）
+├── 🩹 patches/               # astro 补丁（中文路径 Location 编码，postinstall 自动应用）
 ├── ⚙️ astro.config.mjs       # Astro 配置（含 payload-hot-reload）
 ├── 🔌 proxy.mjs              # 开发期代理（可选）
 └── 📜 package.json

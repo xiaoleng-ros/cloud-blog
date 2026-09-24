@@ -6,16 +6,17 @@
     "dev": "astro dev --port 3000",
     "dev:proxy": "concurrently \"node proxy.mjs\" \"astro dev --port 3000\" --names proxy,astro --prefix-colors cyan,green",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "postinstall": "patch-package"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "^7.2.2",
     "@phosphor-icons/core": "^2.1.1",
     "astro": "^7.2.0",
     "cloud-blog": "file:../..",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
-    "concurrently": "^10.0.5"
+    "concurrently": "^10.0.5",
+    "patch-package": "^8.0.0"
   }
 }

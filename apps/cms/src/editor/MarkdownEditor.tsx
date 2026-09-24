@@ -8,9 +8,10 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypeStringify from 'rehype-stringify'
-import rehypeLegacyShortcodes from '../lib/rehype-legacy-shortcodes.mjs'
-import rehypeImgAttrs from '../lib/rehype-img-attrs.mjs'
-import remarkLegacyShortcodes from '../lib/remark-legacy-shortcodes.mjs'
+// 与 Astro 构建时共用同一份 Markdown 插件（cloud-blog 指向仓库根）
+import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs'
+import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs'
+import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs'
 import { markdownPreviewCss } from './markdown-preview-css'
 
 type Mode = 'split' | 'source' | 'preview'

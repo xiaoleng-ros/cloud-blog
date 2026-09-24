@@ -43,3 +43,14 @@ pnpm-debug.log*
 
 # Temporary debug files
 .d.txt
+
+# 方案/设计稿类文档（个人工作笔记，禁止入库）
+# 命名匹配即视为草稿，正式规范请落到代码内注释或 README 对应章节
+**/*-style-guide.md
+**/*-design.md
+**/*-plan.md
+**/*-spec.md
+**/*-draft.md
+**/*方案*.md
+**/*改造*.md
+**/*规范*.md

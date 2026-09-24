@@ -2,9 +2,10 @@ import { defineConfig } from 'astro/config';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import rehypeImgAttrs from './src/lib/rehype-img-attrs.mjs';
-import rehypeLegacyShortcodes from './src/lib/rehype-legacy-shortcodes.mjs';
-import remarkLegacyShortcodes from './src/lib/remark-legacy-shortcodes.mjs';
+// Markdown 插件经 cloud-blog 包名导入（该包 file: 指向仓库根，与 CMS 共用同一份实现）
+import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs';
+import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs';
+import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs';
 
 /**
  * Payload 后台数据 hot-reload：

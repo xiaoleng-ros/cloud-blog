@@ -165,7 +165,7 @@ npm run dev:cms
 > - **Serverless 无持久磁盘，CMS 的 SQLite 单文件只适合本地开发；线上必须用 `postgres` 托管库**（项目已内置 `@payloadcms/db-postgres`，并带 `projects` 集合的迁移）。
 > - CMS 依赖 Node 运行时与 `sharp`，请在 Makers 中选择支持 Node/Next SSR 的方案（而非纯边缘函数）。
 > - **运行时常量**：SSE 与内存缓存均为单实例级；EdgeOne 多实例时靠 5s TTL 快照 + 前台轮询兜底，最终一致。
-> - `apps/blog/patches/astro+7.2.0.patch` 为本地开发用补丁（修复中文路径 301 跳转的 Location 头编码），静态托管无需生效。
+> - `apps/blog/patches/astro+7.2.0.patch` 由 `patch-package` 在 `npm install` 的 postinstall 阶段自动应用（修复中文路径 301 跳转的 Location 头编码），本地 dev 与构建均生效。
 
 ---
 
