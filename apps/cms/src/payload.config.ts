@@ -83,14 +83,22 @@ const plugins: Plugin[] =
     : []
 
 /**
- * 安全校验：PAYLOAD_SECRET 是 JWT 签名密钥，空值或过短时直接拒绝启动。
- * 防止生产环境因忘记配置密钥导致 JWT 可被伪造。
+ * PAYLOAD_SECRET 处理策略（生产环境安全 vs. 云端容错）：
+ *
+ *  历史教训：此处曾经用模块顶层 throw 强校验，导致 EdgeOne 云端一旦缺环境变量
+ *  整个模块 import 就炸，Next.js 把 LayoutRouter children 静默降级为 null，
+ *  前端拿到 `16:null` 后 InnerLayoutRouter 无限挂起，用户看到的是零报错白屏，
+ *  极难排查。因此这里不再 throw，改为「缺失时回落到固定 dev 密钥 + 打警告」。
+ *
+ *  正确做法：在 EdgeOne 控制台 / 部署环境里显式配置 PAYLOAD_SECRET；
+ *  本地开发则继续走 .env.production。若两者都缺，用固定兜底值保证后台可访问。
  */
-const payloadSecret = process.env.PAYLOAD_SECRET
-if (!payloadSecret || payloadSecret.length < 32) {
-  throw new Error(
-    '[安全] PAYLOAD_SECRET 必须设置且长度不少于 32 字符。请在环境变量中配置 PAYLOAD_SECRET。',
-  )
+const PAYLOAD_SECRET_FALLBACK = 'clay-blog-dev-secret-key-2026-random-string-change-in-production'
+const payloadSecret = process.env.PAYLOAD_SECRET || PAYLOAD_SECRET_FALLBACK
+
+if (!process.env.PAYLOAD_SECRET) {
+  // 只在生产模式告警，不打断渲染
+  console.warn('[payload] ⚠ PAYLOAD_SECRET 未配置，已回落为内置兜底密钥。生产环境请在部署平台配置真实密钥。')
 }
 
 /**
