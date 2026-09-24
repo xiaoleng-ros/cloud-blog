@@ -3,9 +3,11 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { s3Storage } from '@payloadcms/storage-s3'
 import { zh } from '@payloadcms/translations/languages/zh'
 import path from 'path'
 import { buildConfig } from 'payload'
+import type { Plugin } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 
@@ -24,6 +26,47 @@ import { migrations } from './migrations'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+
+/**
+ * 对象存储（图片上传）：
+ *  - 只要配齐 SUPABASE_SERVICE_ROLE_KEY + SUPABASE_BUCKET 就启用 S3 adapter
+ *    走 Supabase Storage（S3 兼容接口），文件不再落容器本地磁盘
+ *  - 未配置时降级为本地磁盘存储（开发环境默认）
+ *
+ * 生产环境（EdgeOne）必须配置以下环境变量：
+ *   SUPABASE_SERVICE_ROLE_KEY  —— Supabase Dashboard → Project Settings → API → service_role key
+ *                                  （注意是 service_role，不是 anon key；service_role 绕过 RLS 直接读写）
+ *   SUPABASE_BUCKET            —— Storage 里创建的 bucket 名（建议 "blog-media"）
+ *   SUPABASE_STORAGE_ENDPOINT  —— 一般不用改，默认从 POSTGRES_URL 里的 project ref 拼
+ *                                  例：https://<ref>.supabase.co/storage/v1
+ */
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET
+const SUPABASE_STORAGE_ENDPOINT =
+  process.env.SUPABASE_STORAGE_ENDPOINT ||
+  (process.env.POSTGRES_URL?.includes('.supabase.com')
+    ? `https://${new URL(process.env.POSTGRES_URL).hostname.split('.')[0]}.supabase.co/storage/v1`
+    : undefined)
+
+/** 组装插件列表：仅当 S3 凭据齐全时注入 s3Storage */
+const plugins: Plugin[] =
+  SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SUPABASE_STORAGE_ENDPOINT
+    ? [
+        s3Storage({
+          collections: { media: true },
+          bucket: SUPABASE_BUCKET,
+          acl: 'public-read', // 图片公开可读，浏览器可直接加载，不走 signed URL
+          config: {
+            endpoint: SUPABASE_STORAGE_ENDPOINT,
+            region: 'auto', // S3 兼容服务（Supabase Storage）不校验 region
+            credentials: {
+              accessKeyId: 'supabase-demo', // Supabase Storage 兼容模式固定占位符
+              secretAccessKey: SUPABASE_SERVICE_ROLE_KEY,
+            },
+          },
+        }),
+      ]
+    : []
 
 /**
  * 安全校验：PAYLOAD_SECRET 是 JWT 签名密钥，空值或过短时直接拒绝启动。
@@ -147,4 +190,6 @@ export default buildConfig({
   // 数据库：由上方环境变量动态选择（默认 SQLite 单文件库）
   db,
   sharp,
+  // 对象存储插件：Supabase Storage 接入（未配置 S3_* 时为空数组，走本地磁盘）
+  plugins,
 })
