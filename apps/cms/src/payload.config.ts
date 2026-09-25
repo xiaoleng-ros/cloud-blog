@@ -51,6 +51,13 @@ const SUPABASE_STORAGE_ENDPOINT =
 /**
  * 组装插件列表：仅当 S3 凭据齐全时注入 s3Storage。
  *
+ * ⚠ 重要：插件开关由环境变量决定，但后台的组件映射表 `src/app/(payload)/admin/importMap.js`
+ * 是构建期静态文件（`next build` 不会重新生成它）。一旦插件被激活却在 importMap 里
+ * 找不到 `@payloadcms/storage-s3/client#S3ClientUploadHandler`，Payload 后台会「静默空白」：
+ * 页面 200、CSS/JS 全部加载成功、控制台零报错，但 body 内没有任何元素和文字。
+ * 因此改动这里的环境变量判断后，必须带同样的环境变量跑一次 `npm run generate:importmap`
+ * 并提交 importMap.js（当前仓库已提交含该条目的版本，激活/未激活都不会再空白）。
+ *
  * 类型断言说明：s3Storage(...) 通过 declare module 'payload' 扩展了 ConfigureAppOptions，
  * 本地 tsc 能识别，但 EdgeOne 编译链可能不加载该 augmentation，会误报
  * "Property 's3Storage' does not exist on type 'ConfigureAppOptions'"。
