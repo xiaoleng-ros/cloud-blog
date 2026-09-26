@@ -95,17 +95,65 @@ const plugins: Plugin[] =
  *  历史教训：此处曾经用模块顶层 throw 强校验，导致 EdgeOne 云端一旦缺环境变量
  *  整个模块 import 就炸，Next.js 把 LayoutRouter children 静默降级为 null，
  *  前端拿到 `16:null` 后 InnerLayoutRouter 无限挂起，用户看到的是零报错白屏，
- *  极难排查。因此这里不再 throw，改为「缺失时回落到固定 dev 密钥 + 打警告」。
+ *  极难排查。因此默认不再 throw，改为「缺失时回落到固定 dev 密钥 + 打警告」。
  *
- *  正确做法：在 EdgeOne 控制台 / 部署环境里显式配置 PAYLOAD_SECRET；
- *  本地开发则继续走 .env.production。若两者都缺，用固定兜底值保证后台可访问。
+ *  安全加固（P0-1）：
+ *   1) 默认行为保留兜底（避免部署失败），但一旦回落，生产环境打 ERROR 级别日志
+ *      并输出明显横幅，让 SRE 第一时间发现配置漏配。
+ *   2) 新增环境变量 `PAYLOAD_REQUIRE_SECRET=1`：部署环境显式开启后，
+ *      缺失/过短/含 change-in-production 都会 throw —— 用于灰度切到强校验。
+ *   3) 即使未启用强校验，也校验长度和占位特征，避免用户误把
+ *      .env.example 里的 "please-change-me" 抄进生产。
+ *
+ *  正确做法：在 EdgeOne 控制台 / 部署环境里显式配置 PAYLOAD_SECRET
+ *  （建议长度 >= 48 的随机字符串）；本地开发则继续走 .env.production。
  */
 const PAYLOAD_SECRET_FALLBACK = 'clay-blog-dev-secret-key-2026-random-string-change-in-production'
-const payloadSecret = process.env.PAYLOAD_SECRET || PAYLOAD_SECRET_FALLBACK
+const MIN_SECRET_LENGTH = 32
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+const REQUIRE_SECRET = process.env.PAYLOAD_REQUIRE_SECRET === '1'
+const providedSecret = process.env.PAYLOAD_SECRET
 
-if (!process.env.PAYLOAD_SECRET) {
-  // 只在生产模式告警，不打断渲染
-  console.warn('[payload] ⚠ PAYLOAD_SECRET 未配置，已回落为内置兜底密钥。生产环境请在部署平台配置真实密钥。')
+/** 判断给定 secret 是否"看起来像默认占位值"（含 change-in-production / please-change-me 等关键词） */
+const isPlaceholderSecret = (value: string) =>
+  /change-in-production|please-change-me|xxxx|test-secret/i.test(value)
+
+/** 校验 secret 是否符合生产要求，返回首个错误原因；null 表示通过 */
+const validateSecret = (value: string): string | null => {
+  if (!value) return '未配置'
+  if (isPlaceholderSecret(value)) return '使用了默认占位值（不能包含 change-in-production / please-change-me）'
+  if (value.length < MIN_SECRET_LENGTH) return `长度不足（当前 ${value.length}，至少 ${MIN_SECRET_LENGTH}）`
+  return null
+}
+
+const strictError = (reason: string) =>
+  new Error(`[payload] PAYLOAD_SECRET ${reason}。请通过环境变量配置有效密钥；若需临时兜底，请移除 PAYLOAD_REQUIRE_SECRET。`)
+
+if (REQUIRE_SECRET) {
+  // 强校验模式：缺失/无效直接抛错，用于生产灰度
+  const err = validateSecret(providedSecret ?? '')
+  if (err) throw strictError(err)
+}
+
+const payloadSecret = providedSecret || PAYLOAD_SECRET_FALLBACK
+const usingFallback = !providedSecret
+const usingWeakSecret = !!providedSecret && validateSecret(providedSecret) !== null
+
+if (usingFallback || usingWeakSecret) {
+  // 生产环境打 ERROR，日志聚合平台（Datadog / Sentry / 云日志）能识别为异常
+  const level = IS_PRODUCTION ? console.error : console.warn
+  const banner = '='.repeat(64)
+  level(`\n${banner}`)
+  level('[payload] ⚠⚠ PAYLOAD_SECRET 不安全配置 ⚠⚠')
+  if (usingFallback) {
+    level('[payload]   原因：未提供 PAYLOAD_SECRET，回落到内置兜底密钥。')
+  } else if (usingWeakSecret) {
+    level(`[payload]   原因：${validateSecret(providedSecret ?? '')}`)
+  }
+  level('[payload]   影响：攻击者可伪造 admin cookie 绕过登录，生产环境不可接受。')
+  level('[payload]   修复：在部署平台配置真实密钥（>= 32 字符随机字符串），')
+  level('[payload]         并设置 PAYLOAD_REQUIRE_SECRET=1 强制校验。')
+  level(`${banner}\n`)
 }
 
 /**
@@ -119,17 +167,50 @@ if (!process.env.PAYLOAD_SECRET) {
  */
 const DATABASE_DRIVER = process.env.DATABASE_DRIVER || 'sqlite'
 
+/**
+ * Postgres SSL 策略（P0-2）：
+ *
+ *   默认（未设置 PG_SSL_STRICT）：使用 sslmode=no-verify，EdgeOne 出口网络
+ *   存在 TLS 中间人拦截（自签证书链），关闭校验才能连通；连接本身仍是 TLS 加密。
+ *
+ *   显式 PG_SSL_STRICT=1：切换为 sslmode=prefer + rejectUnauthorized=true，
+ *   生产环境应开启此项，避免中间人攻击。若严格模式连通失败，说明上游还没
+ *   提供有效 CA 链，应先解决再切严格。
+ */
+const PG_SSL_STRICT = process.env.PG_SSL_STRICT === '1'
+
+/**
+ * 拼接/替换 sslmode 查询参数
+ * 已有 sslmode 时替换为新值（.env.production 常写 sslmode=no-verify，严格模式需覆盖）
+ * 实现：拆分 base?query 两段，重写 sslmode 参数，避免 regex 边界判断出错
+ */
+function withSslMode(connectionString: string, strict: boolean): string {
+  const mode = strict ? 'sslmode=prefer' : 'sslmode=no-verify'
+  const qIndex = connectionString.indexOf('?')
+  const base = qIndex === -1 ? connectionString : connectionString.slice(0, qIndex)
+  const rawQuery = qIndex === -1 ? '' : connectionString.slice(qIndex + 1)
+
+  // 过滤掉已有的 sslmode 参数（忽略大小写）
+  const params = rawQuery
+    .split('&')
+    .filter(Boolean)
+    .filter((p) => !/^sslmode=/i.test(p))
+
+  const nextParams = [...params, mode]
+  return `${base}?${nextParams.join('&')}`
+}
+
 /** 按环境变量选定的数据库适配器（构建时静态选择，两分支均打包） */
 const db =
   DATABASE_DRIVER === 'postgres'
     ? postgresAdapter({
         pool: {
           connectionString: process.env.POSTGRES_URL
-            ? process.env.POSTGRES_URL + (process.env.POSTGRES_URL.includes('?') ? '&' : '?') + 'sslmode=no-verify'
+            ? withSslMode(process.env.POSTGRES_URL, PG_SSL_STRICT)
             : undefined,
-          // EdgeOne 出口网络存在 TLS 拦截（自签证书链），通过连接字符串强制关闭证书校验
-          // 连接本身仍是 TLS 加密的，只是不再校验证书链
-          ssl: { rejectUnauthorized: false },
+          // 生产建议 rejectUnauthorized=true（配合 PG_SSL_STRICT=1）；
+          // 默认保留 false 以兼容 EdgeOne TLS 拦截。
+          ssl: { rejectUnauthorized: PG_SSL_STRICT },
         },
         // 默认关闭 dev 模式的自动 schema push（push: false）。
         // 原因：本地若连的是线上 Supabase，dev push 会直接改动生产库的 schema，并往

@@ -19,6 +19,9 @@
     "build:blog": "npm run build --prefix apps/blog",
     "build:cms": "npm run build --prefix apps/cms",
     "build:all": "npm run build --prefix apps/blog && npm run build --prefix apps/cms && node apps/cms/scripts/copy-blog-to-public.mjs",
-    "preview:blog": "npm run preview --prefix apps/blog"
+    "preview:blog": "npm run preview --prefix apps/blog",
+    "typecheck:blog": "npm run typecheck --prefix apps/blog",
+    "typecheck:cms": "npm run typecheck --prefix apps/cms",
+    "typecheck": "npm run typecheck:blog && npm run typecheck:cms"
   }
 }

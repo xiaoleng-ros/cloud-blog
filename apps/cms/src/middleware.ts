@@ -30,9 +30,63 @@ import type { NextRequest } from 'next/server'
  *   cookie 存在但过期/无效时放行，由 Payload 自身的 RootPage 处理（此时走
  *   RSC redirect，属于边缘场景，不影响主要访问流程）。
  *
- * @param request - Next.js 请求对象（含 cookies、nextUrl）
- * @returns NextResponse.redirect（未登录跳转）或 NextResponse.next（放行）
+ *   额外做一层「JWT 结构校验」（三段 base64url、payload 可解析为 JSON）：
+ *   若 token 明显损坏或不是 JWT，直接视为未登录 307 到登录页，避免下游 RSC
+ *   尝试解析无效 payload 时又走进 EdgeOne 上间歇性 500 的路径。不做签名验证
+ *   （那需要 PAYLOAD_SECRET，也不适合放在 middleware 里），签名校验继续交给
+ *   Payload RootPage。
  */
+
+/**
+ * 判断字符串是否符合 JWT 基础结构：
+ *   - 恰好 3 段（header.payload.signature），用 '.' 分隔
+ *   - header / payload 段是合法 base64url（长度符合、无非法字符）
+ *   - payload 段能 base64 解码并解析为 JSON 对象
+ *
+ * 说明：只做「结构校验」，不做签名验证（签名需要 PAYLOAD_SECRET，不适合放在
+ * middleware 里）。目的是拦「明显不是 JWT 的垃圾 token」，避免下游 RSC 尝试
+ * 解析无效 payload 时又走进 EdgeOne 上 RSC 间歇性 500 的路径。
+ *
+ * @param token - 从 cookie 取出的原始字符串
+ * @returns 结构合法返回 true，否则 false
+ */
+function isValidJwtShape(token: string): boolean {
+  // 三段结构
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+
+  // base64url 合法字符集：字母、数字、-、_
+  const BASE64URL_RE = /^[A-Za-z0-9_-]+$/
+  const toBase64 = (seg: string): string => {
+    // 长度需为 4 的倍数（base64url 允许去掉尾部 =，故补回）
+    const padded = seg.padEnd(seg.length + ((4 - (seg.length % 4)) % 4), '=')
+    return padded.replace(/-/g, '+').replace(/_/g, '/')
+  }
+
+  // header / payload 段必须合法
+  for (let i = 0; i < 2; i++) {
+    if (!parts[i] || !BASE64URL_RE.test(parts[i])) return false
+    try {
+      globalThis.atob(toBase64(parts[i]))
+    } catch {
+      return false
+    }
+  }
+
+  // payload 段解码后必须是 JSON 对象
+  try {
+    // atob 返回的字符串可能是高位字节（UTF-8 编码结果），通过 charCodeAt + TextDecoder
+    // 还原成正确的 UTF-8 文本，避免中文场景下 JSON.parse 失败
+    const decodedChars = globalThis.atob(toBase64(parts[1]))
+    const bytes = new Uint8Array(decodedChars.length)
+    for (let i = 0; i < bytes.length; i++) bytes[i] = decodedChars.charCodeAt(i)
+    const parsed = JSON.parse(new TextDecoder().decode(bytes))
+    return parsed !== null && typeof parsed === 'object'
+  } catch {
+    return false
+  }
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -41,8 +95,8 @@ export function middleware(request: NextRequest) {
     // Payload 3.x 默认 cookie 名为 payload-token（cookiePrefix 默认 'payload'）
     const token = request.cookies.get('payload-token')?.value
 
-    // 未登录（无 payload-token cookie）→ HTTP 307 到登录页
-    if (!token) {
+    // 未登录（无 token）或 token 结构明显损坏 → HTTP 307 到登录页
+    if (!token || !isValidJwtShape(token)) {
       const loginUrl = request.nextUrl.clone()
       loginUrl.pathname = '/admin/login'
       return NextResponse.redirect(loginUrl, 307)

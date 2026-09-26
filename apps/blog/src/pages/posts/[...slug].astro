@@ -78,6 +78,12 @@ const articleSchema = {
   image={cover}
   type="article"
   jsonLd={articleSchema}
+  articleMeta={{
+    ...(post.data.date ? { publishedTime: post.data.date.toISOString() } : {}),
+    ...(updatedDate ? { modifiedTime: updatedDate.toISOString() } : {}),
+    ...(category ? { section: category } : {}),
+    ...(tags.length > 0 ? { tags } : {}),
+  }}
 >
   <article class:list={['article', tableOfContents.length >= 2 && 'article--toc']}>
     <a class="back-link" href="/">

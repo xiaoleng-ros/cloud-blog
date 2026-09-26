@@ -13,7 +13,8 @@
     "import:data": "cross-env NODE_OPTIONS=--no-deprecation npx tsx src/scripts/import-markdown.ts",
     "generate:preview-css": "node scripts/generate-preview-css.mjs",
     "warmup": "node scripts/warmup.mjs",
-    "payload": "cross-env NODE_OPTIONS=--no-deprecation payload"
+    "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
+    "typecheck": "cross-env NODE_OPTIONS=--no-deprecation tsc --noEmit"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "^3.88.0",

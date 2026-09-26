@@ -7,6 +7,7 @@
     "dev:proxy": "concurrently \"node proxy.mjs\" \"astro dev --port 3000\" --names proxy,astro --prefix-colors cyan,green",
     "build": "astro build",
     "preview": "astro preview",
+    "typecheck": "astro check",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -16,7 +17,9 @@
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.4",
     "concurrently": "^10.0.5",
-    "patch-package": "^8.0.0"
+    "patch-package": "^8.0.0",
+    "typescript": "^5.7.2"
   }
 }
