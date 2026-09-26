@@ -13,6 +13,7 @@
     "import:data": "cross-env NODE_OPTIONS=--no-deprecation npx tsx src/scripts/import-markdown.ts",
     "generate:preview-css": "node scripts/generate-preview-css.mjs",
     "warmup": "node scripts/warmup.mjs",
+    "verify:html-inject": "node scripts/verify-html-inject.mjs",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "typecheck": "cross-env NODE_OPTIONS=--no-deprecation tsc --noEmit"
   },
@@ -28,6 +29,7 @@
     "dotenv": "^16.4.7",
     "graphql": "^16.8.1",
     "next": "15.4.11",
+    "parse5": "^7.3.0",
     "payload": "3.88.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
@@ -42,6 +44,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/parse5": "^6.0.3",
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "gray-matter": "^4.0.3",
