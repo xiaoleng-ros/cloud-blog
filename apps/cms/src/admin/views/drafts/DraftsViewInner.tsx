@@ -42,6 +42,32 @@ const fmt = (v?: string) => {
   return `${d.getFullYear()}-${mm}-${dd}`
 }
 
+/**
+ * 归一化 Payload 关系字段为名称数组
+ *
+ * Payload 会根据请求 depth 返回三种形态：
+ *  - 数组 [{id,name}, ...] 或 [1, 2]（hasMany）
+ *  - 单个对象 {id,name}
+ *  - 单个数字 id（关系未展开时）
+ * 此函数统一处理，避免调用方对类型联合做 .map 报错。
+ */
+function extractNames(
+  value: Array<{ id: number; name?: string } | number>
+    | { id: number; name?: string }
+    | number
+    | null
+    | undefined,
+): string[] {
+  if (!value) return []
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => (typeof v === 'object' ? v.name ?? String(v.id) : String(v)))
+      .filter(Boolean)
+  }
+  if (typeof value === 'object') return [value.name ?? String(value.id)]
+  return [String(value)]
+}
+
 /** 小标签渲染（空数组显示占位） */
 const tagPill = (names: string[]) =>
   names.length ? (
@@ -80,8 +106,8 @@ export const DraftsViewInner = () => {
             title: d.title ?? '',
             description: d.description ?? '',
             updatedAt: d.updatedAt,
-            categoryNames: (d.categories ?? []).map((c) => (typeof c === 'object' ? c.name : String(c))),
-            tagNames: (d.tags ?? []).map((t) => (typeof t === 'object' ? t.name : String(t))),
+            categoryNames: extractNames(d.categories),
+            tagNames: extractNames(d.tags),
           })),
         )
       } else {
@@ -92,8 +118,8 @@ export const DraftsViewInner = () => {
             mood: d.mood ?? '',
             date: d.date ? String(d.date).slice(0, 10) : undefined,
             updatedAt: d.updatedAt,
-            categoryNames: [],
-            tagNames: (d.tags ?? []).map((t) => (typeof t === 'object' ? t.name : String(t))),
+            categoryNames: extractNames(d.categories),
+            tagNames: extractNames(d.tags),
           })),
         )
       }
@@ -171,7 +197,7 @@ export const DraftsViewInner = () => {
               <tr>
                 <th>{tab === 'posts' ? '标题' : '日期 / 标题'}</th>
                 {tab === 'posts' && <th>摘要</th>}
-                {tab === 'posts' && <th>分类</th>}
+                <th>分类</th>
                 <th>标签</th>
                 <th>更新时间</th>
                 <th>操作</th>
@@ -191,7 +217,7 @@ export const DraftsViewInner = () => {
                     )}
                   </td>
                   {tab === 'posts' && <td className="drafts__cell-desc">{row.description || '—'}</td>}
-                  {tab === 'posts' && <td>{tagPill(row.categoryNames)}</td>}
+                  <td>{tagPill(row.categoryNames)}</td>
                   <td>{tagPill(row.tagNames)}</td>
                   <td className="drafts__cell-date">{fmt(row.updatedAt)}</td>
                   <td className="drafts__cell-ops">

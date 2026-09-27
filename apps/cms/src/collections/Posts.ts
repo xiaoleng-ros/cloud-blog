@@ -7,7 +7,13 @@ export const Posts: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'status', 'updatedAt'],
-    preview: (doc) => `/posts/${doc.slug}/`,
+    // URL 由「分类 / 文章 ID」拼接：/posts/{categoryName}/{postId}/
+    // categoryName 来自 categories 关系（单选必填，见下方字段）
+    preview: (doc) => {
+      const cat = (doc as unknown as { categories?: { name?: string } | { name?: string }[] }).categories
+      const name = Array.isArray(cat) ? cat[0]?.name : cat?.name
+      return `/posts/${encodeURIComponent(name || '')}/${doc.id}/`
+    },
   },
   labels: {
     singular: '文章',
@@ -22,34 +28,32 @@ export const Posts: CollectionConfig = {
   },
   fields: [
     { name: 'title', type: 'text', required: true, label: '标题' },
-    {
-      name: 'slug',
-      type: 'text',
-      required: true,
-      unique: true,
-      index: true,
-      label: '文章标识（URL 用）',
-      admin: {
-        position: 'sidebar',
-        description: '选择分类 + 填写标识，自动生成文章链接',
-        components: {
-          Field: '/src/admin/components/SlugField.tsx#SlugField',
-        },
-      },
-    },
     { name: 'description', type: 'textarea', label: '摘要' },
     {
       name: 'cover',
       type: 'text',
-      label: '封面图 URL',
-      admin: { description: '支持外链或后台上传图片后的 URL' },
+      label: '封面图',
+      admin: {
+        description: '支持外链 URL 或本地上传图片',
+        components: {
+          Field: '/src/admin/components/CoverField.tsx#CoverField',
+        },
+      },
     },
+    // 文章分类：单选必填。URL 由「分类名 / 文章 ID」拼接，不再手填 slug
     {
       name: 'categories',
       type: 'relationship',
       relationTo: 'categories',
-      hasMany: true,
-      label: '分类',
+      required: true,
+      label: '文章分类',
+      admin: {
+        position: 'sidebar',
+        description: '仅能选择系统里已有的分类，URL 由「分类名 + 文章 ID」自动拼接',
+        components: {
+          Field: '/src/admin/components/PostCategoryField.tsx#PostCategoryField',
+        },
+      },
     },
     {
       name: 'tags',

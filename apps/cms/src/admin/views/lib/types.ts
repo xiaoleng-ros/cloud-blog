@@ -8,14 +8,19 @@ export interface ListResponse<T> {
   totalPages: number
 }
 
-/** Payload posts 文档（depth=1 展开关联对象或原始 id） */
+/**
+ * Payload posts 文档
+ *
+ * 关系字段形态：categories 现在是「单选必填」（无 hasMany），
+ * depth=1 时会展开为单个对象 `{ id, name }`，depth=0 时为裸 id。
+ * 兼容两种形态，避免前端解构报错。
+ */
 export interface AdminPost {
   id: number
   title?: string | null
-  slug?: string | null
   description?: string | null
   cover?: string | null
-  categories?: Array<{ id: number; name: string } | number> | null
+  categories?: Array<{ id: number; name: string } | number> | { id: number; name: string } | number | null
   tags?: Array<{ id: number; name: string } | number> | null
   keywords?: string | null
   ai?: string | null
@@ -26,12 +31,13 @@ export interface AdminPost {
   updatedAt?: string
 }
 
-/** Payload notes 文档（depth=1 展开关联对象或原始 id） */
+/** Payload notes 文档（含新增的单选 categories 关系） */
 export interface AdminNote {
   id: number
   date?: string | null
   title?: string | null
   mood?: string | null
+  categories?: Array<{ id: number; name: string } | number> | { id: number; name: string } | number | null
   tags?: Array<{ id: number; name: string } | number> | null
   status?: 'draft' | 'published' | null
   content?: string | null
@@ -39,7 +45,7 @@ export interface AdminNote {
   updatedAt?: string
 }
 
-/** 分类 / 标签选项（发布弹窗、slug 下拉用） */
+/** 分类 / 标签选项（发布弹窗、下拉用） */
 export interface TermOption {
   id: number
   name: string

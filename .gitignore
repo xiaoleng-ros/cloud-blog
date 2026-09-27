@@ -10,6 +10,8 @@ apps/cms/.next/
 apps/cms/dist/
 apps/cms/node_modules/
 apps/cms/tsconfig.tsbuildinfo
+# 本地 Payload 静态上传目录（媒体文件运行时产物，禁止入库）
+apps/cms/media/
 
 # 前端（apps/blog）独立依赖与构建产物
 apps/blog/node_modules/

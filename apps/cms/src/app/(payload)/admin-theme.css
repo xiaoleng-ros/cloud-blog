@@ -808,7 +808,70 @@ html[data-theme='dark'] .nav__brand-logo {
   }
 }
 
-/* ---------- 12. 账号设置视图：规整的卡片布局 ---------- */
+/* ---------- 12. 文章分类字段：超紧凑的单选下拉 ---------- */
+/* 容器：inline-flex 布局，宽度由内容自适应，不继承 sidebar 全宽 */
+.post-category-field {
+  display: inline-flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  width: auto !important;
+  max-width: 100% !important;
+}
+
+/* 覆盖 Payload FieldLabel 可能带来的额外宽度 */
+.post-category-field > .label,
+.post-category-field > label {
+  width: auto !important;
+  max-width: 10rem !important;
+}
+
+/* 自定义下拉框：小尺寸、圆角、暖色主题一致 */
+.post-category-field__select {
+  appearance: none;
+  display: block;
+  box-sizing: border-box;
+  width: 13rem !important;         /* 关键：直接锁死下拉框宽度，不再依赖父级 max-width */
+  max-width: 100% !important;
+  padding: 0.35rem 1.9rem 0.35rem 0.6rem !important;
+  background: #fffdf4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23574634' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  border: 1.5px solid #b09d7a !important;
+  border-radius: 10px 12px 11px 13px;
+  color: #3d3124;
+  font-size: 0.82rem !important;
+  line-height: 1.25;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.post-category-field__select:focus {
+  border-color: #e85a7a;
+  box-shadow: 0 0 0 3px rgba(232, 90, 122, 0.14);
+  outline: none;
+}
+
+.post-category-field__select:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* URL 预览提示：小字、单行不折行 */
+.post-category-field__preview {
+  margin: 0;
+  padding: 0.15rem 0 0;
+  max-width: 13rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9e8b68;
+  font-size: 0.72rem !important;
+  line-height: 1.3;
+}
+
+/* ---------- 13. 账号设置视图：规整的卡片布局 ---------- */
 .account-view {
   display: flex;
   flex-direction: column;
@@ -1248,54 +1311,6 @@ html[data-theme='dark'] .nav__brand-logo {
   box-shadow: none !important;
 }
 
-/* ---------- SlugField：分类下拉 + 标识输入（手账风格） ---------- */
-.slug-field__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.slug-field__select {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  font-size: 13px;
-  color: var(--theme-elevation-800, #3f3830);
-  background: #fffefb;
-  border: 1px dashed var(--theme-elevation-300, #d8cdbc);
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.slug-field__slash {
-  color: var(--theme-elevation-400, #a89a88);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.slug-field__input {
-  flex: 1.4;
-  min-width: 0;
-  padding: 8px 10px;
-  font-size: 13px;
-  color: var(--theme-elevation-800, #3f3830);
-  background: #fffefb;
-  border: 1px dashed var(--theme-elevation-300, #d8cdbc);
-  border-radius: 10px;
-}
-
-.slug-field__input::placeholder {
-  color: var(--theme-elevation-400, #a89a88);
-}
-
-.slug-field__preview {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--theme-elevation-500, #8a7d6d);
-  word-break: break-all;
-}
-
 /* ================= 创作页（ComposeView） ================= */
 .compose {
   max-width: 960px;
@@ -1399,39 +1414,6 @@ html[data-theme='dark'] .nav__brand-logo {
   color: var(--theme-elevation-400, #a89a88);
 }
 
-/* slug 受控输入（创作页 SlugInput） */
-.slug-input__row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.slug-input__select,
-.slug-input__input {
-  padding: 8px 10px;
-  font-size: 13px;
-  color: var(--theme-elevation-800, #3f3830);
-  background: #fffefb;
-  border: 1px dashed var(--theme-elevation-300, #d8cdbc);
-  border-radius: 10px;
-}
-.slug-input__select {
-  flex: 1;
-  cursor: pointer;
-}
-.slug-input__input {
-  flex: 1.4;
-}
-.slug-input__slash {
-  color: var(--theme-elevation-400, #a89a88);
-  font-weight: 700;
-}
-.slug-input__preview {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--theme-elevation-500, #8a7d6d);
-  word-break: break-all;
-}
-
 /* ================= 发布弹窗（PublishModal） ================= */
 .publish-modal__mask {
   position: fixed;
@@ -1507,6 +1489,94 @@ html[data-theme='dark'] .nav__brand-logo {
   margin: 0;
   color: #b3402e;
   font-size: 12px;
+}
+
+/* === 封面图上传器（CoverUploader） === */
+/* 同时服务两处：Payload 原生 collection 编辑页的 cover 字段、自定义写作页发布弹窗 */
+.cover-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cover-uploader__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--theme-elevation-200, #e3d9c9);
+  border-radius: 8px;
+  background: #fffefb;
+  color: var(--theme-elevation-800, #3f3830);
+  outline: none;
+}
+.cover-uploader__input:focus {
+  border-color: var(--theme-elevation-400, #b9a98e);
+}
+.cover-uploader__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.cover-uploader__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cover-uploader__btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--theme-elevation-200, #e3d9c9);
+  background: #fffefb;
+  color: var(--theme-elevation-800, #3f3830);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cover-uploader__btn:hover:not(:disabled) {
+  background: var(--theme-elevation-100, #f5efdf);
+  border-color: var(--theme-elevation-300, #d4c8b3);
+}
+.cover-uploader__btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cover-uploader__clear {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #b3402e;
+  cursor: pointer;
+}
+.cover-uploader__clear:hover:not(:disabled) {
+  border-color: #e3a49a;
+  background: rgba(230, 126, 34, 0.06);
+}
+.cover-uploader__clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* 封面缩略预览：仅图片加载成功时渲染，限制高度避免撑爆表单 */
+.cover-uploader__preview {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--theme-elevation-200, #e3d9c9);
+  background: var(--theme-elevation-50, #f8f4ea);
+}
+/* 外链加载失败提示：一行灰色小字，不占大块高度 */
+.cover-uploader__hint {
+  margin: 0;
+  font-size: 12px;
+  color: #8a7a5f;
+  line-height: 1.5;
+}
+.cover-uploader__error {
+  margin: 0;
+  font-size: 12px;
+  color: #b3402e;
 }
 .publish-modal__foot {
   display: flex;

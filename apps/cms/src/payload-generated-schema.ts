@@ -14,9 +14,9 @@ import {
   foreignKey,
   serial,
   varchar,
+  integer,
   numeric,
   timestamp,
-  integer,
   jsonb,
   pgEnum,
 } from "@payloadcms/db-postgres/drizzle/pg-core";
@@ -39,9 +39,13 @@ export const posts = pgTable(
   {
     id: serial("id").primaryKey(),
     title: varchar("title").notNull(),
-    slug: varchar("slug").notNull(),
     description: varchar("description"),
     cover: varchar("cover"),
+    categories: integer("categories_id")
+      .notNull()
+      .references(() => categories.id, {
+        onDelete: "set null",
+      }),
     keywords: varchar("keywords"),
     ai: varchar("ai"),
     sticky: numeric("sticky", { mode: "number" }),
@@ -63,7 +67,7 @@ export const posts = pgTable(
       .notNull(),
   },
   (columns) => [
-    uniqueIndex("posts_slug_idx").on(columns.slug),
+    index("posts_categories_idx").on(columns.categories),
     index("posts_updated_at_idx").on(columns.updatedAt),
     index("posts_created_at_idx").on(columns.createdAt),
   ],
@@ -76,24 +80,17 @@ export const posts_rels = pgTable(
     order: integer("order"),
     parent: integer("parent_id").notNull(),
     path: varchar("path").notNull(),
-    categoriesID: integer("categories_id"),
     tagsID: integer("tags_id"),
   },
   (columns) => [
     index("posts_rels_order_idx").on(columns.order),
     index("posts_rels_parent_idx").on(columns.parent),
     index("posts_rels_path_idx").on(columns.path),
-    index("posts_rels_categories_id_idx").on(columns.categoriesID),
     index("posts_rels_tags_id_idx").on(columns.tagsID),
     foreignKey({
       columns: [columns["parent"]],
       foreignColumns: [posts.id],
       name: "posts_rels_parent_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [columns["categoriesID"]],
-      foreignColumns: [categories.id],
-      name: "posts_rels_categories_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [columns["tagsID"]],
@@ -114,6 +111,11 @@ export const notes = pgTable(
     }).notNull(),
     title: varchar("title"),
     mood: varchar("mood"),
+    categories: integer("categories_id")
+      .notNull()
+      .references(() => categories.id, {
+        onDelete: "set null",
+      }),
     status: enum_notes_status("status").notNull().default("draft"),
     content: varchar("content"),
     updatedAt: timestamp("updated_at", {
@@ -132,6 +134,7 @@ export const notes = pgTable(
       .notNull(),
   },
   (columns) => [
+    index("notes_categories_idx").on(columns.categories),
     index("notes_updated_at_idx").on(columns.updatedAt),
     index("notes_created_at_idx").on(columns.createdAt),
   ],
@@ -254,6 +257,43 @@ export const media = pgTable(
   ],
 );
 
+export const projects = pgTable(
+  "projects",
+  {
+    id: serial("id").primaryKey(),
+    group: varchar("group").notNull(),
+    groupDescription: varchar("group_description"),
+    title: varchar("title").notNull(),
+    owner: varchar("owner"),
+    description: varchar("description"),
+    icon: varchar("icon").default("github"),
+    href: varchar("href"),
+    articleHref: varchar("article_href"),
+    stars: numeric("stars", { mode: "number" }),
+    tags: varchar("tags"),
+    sortOrder: numeric("sort_order", { mode: "number" }),
+    status: enum_projects_status("status").notNull().default("draft"),
+    updatedAt: timestamp("updated_at", {
+      mode: "string",
+      withTimezone: true,
+      precision: 3,
+    })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", {
+      mode: "string",
+      withTimezone: true,
+      precision: 3,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (columns) => [
+    index("projects_updated_at_idx").on(columns.updatedAt),
+    index("projects_created_at_idx").on(columns.createdAt),
+  ],
+);
+
 export const users_sessions = pgTable(
   "users_sessions",
   {
@@ -324,44 +364,6 @@ export const users = pgTable(
   ],
 );
 
-export const projects = pgTable(
-  "projects",
-  {
-    id: serial("id").primaryKey(),
-    group: varchar("group").notNull(),
-    groupDescription: varchar("group_description"),
-    title: varchar("title").notNull(),
-    owner: varchar("owner"),
-    description: varchar("description"),
-    icon: varchar("icon"),
-    href: varchar("href"),
-    articleHref: varchar("article_href"),
-    stars: numeric("stars", { mode: "number" }),
-    tags: varchar("tags"),
-    sortOrder: numeric("sort_order", { mode: "number" }),
-    status: enum_projects_status("status").notNull().default("draft"),
-    updatedAt: timestamp("updated_at", {
-      mode: "string",
-      withTimezone: true,
-      precision: 3,
-    })
-      .defaultNow()
-      .notNull(),
-    createdAt: timestamp("created_at", {
-      mode: "string",
-      withTimezone: true,
-      precision: 3,
-    })
-      .defaultNow()
-      .notNull(),
-  },
-  (columns) => [
-    index("projects_group_idx").on(columns.group),
-    index("projects_updated_at_idx").on(columns.updatedAt),
-    index("projects_created_at_idx").on(columns.createdAt),
-  ],
-);
-
 export const payload_kv = pgTable(
   "payload_kv",
   {
@@ -425,7 +427,9 @@ export const payload_locked_documents_rels = pgTable(
     ),
     index("payload_locked_documents_rels_tags_id_idx").on(columns.tagsID),
     index("payload_locked_documents_rels_media_id_idx").on(columns.mediaID),
-    index("payload_locked_documents_rels_projects_id_idx").on(columns.projectsID),
+    index("payload_locked_documents_rels_projects_id_idx").on(
+      columns.projectsID,
+    ),
     index("payload_locked_documents_rels_users_id_idx").on(columns.usersID),
     foreignKey({
       columns: [columns["parent"]],
@@ -607,18 +611,18 @@ export const relations_posts_rels = relations(posts_rels, ({ one }) => ({
     references: [posts.id],
     relationName: "_rels",
   }),
-  categoriesID: one(categories, {
-    fields: [posts_rels.categoriesID],
-    references: [categories.id],
-    relationName: "categories",
-  }),
   tagsID: one(tags, {
     fields: [posts_rels.tagsID],
     references: [tags.id],
     relationName: "tags",
   }),
 }));
-export const relations_posts = relations(posts, ({ many }) => ({
+export const relations_posts = relations(posts, ({ one, many }) => ({
+  categories: one(categories, {
+    fields: [posts.categories],
+    references: [categories.id],
+    relationName: "categories",
+  }),
   _rels: many(posts_rels, {
     relationName: "_rels",
   }),
@@ -635,7 +639,12 @@ export const relations_notes_rels = relations(notes_rels, ({ one }) => ({
     relationName: "tags",
   }),
 }));
-export const relations_notes = relations(notes, ({ many }) => ({
+export const relations_notes = relations(notes, ({ one, many }) => ({
+  categories: one(categories, {
+    fields: [notes.categories],
+    references: [categories.id],
+    relationName: "categories",
+  }),
   _rels: many(notes_rels, {
     relationName: "_rels",
   }),
@@ -754,9 +763,9 @@ type DatabaseSchema = {
   categories: typeof categories;
   tags: typeof tags;
   media: typeof media;
+  projects: typeof projects;
   users_sessions: typeof users_sessions;
   users: typeof users;
-  projects: typeof projects;
   payload_kv: typeof payload_kv;
   payload_locked_documents: typeof payload_locked_documents;
   payload_locked_documents_rels: typeof payload_locked_documents_rels;
@@ -772,9 +781,9 @@ type DatabaseSchema = {
   relations_categories: typeof relations_categories;
   relations_tags: typeof relations_tags;
   relations_media: typeof relations_media;
+  relations_projects: typeof relations_projects;
   relations_users_sessions: typeof relations_users_sessions;
   relations_users: typeof relations_users;
-  relations_projects: typeof relations_projects;
   relations_payload_kv: typeof relations_payload_kv;
   relations_payload_locked_documents_rels: typeof relations_payload_locked_documents_rels;
   relations_payload_locked_documents: typeof relations_payload_locked_documents;

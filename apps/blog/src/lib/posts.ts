@@ -38,9 +38,16 @@ export function absoluteUrl(path: string): string {
   return new URL(path, site.url).toString();
 }
 
-/** 文章链接 */
+/** 从 post 上取分类名（data.categories 已归一为字符串数组，取第一个） */
+function postCategoryName(post: BlogPost): string {
+  const cats = post.data?.categories;
+  if (Array.isArray(cats) && cats.length > 0) return String(cats[0]);
+  return 'uncategorized';
+}
+
+/** 文章链接：/posts/{分类名}/{数字ID}/ */
 export function getPostPath(post: BlogPost) {
-  return `/posts/${post.id}/`;
+  return `/posts/${encodeURIComponent(postCategoryName(post))}/${String(post.id)}/`;
 }
 
 /** 文章绝对 URL */

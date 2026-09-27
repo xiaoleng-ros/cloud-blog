@@ -7,6 +7,11 @@ export const Notes: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['date', 'title', 'status', 'updatedAt'],
+    // URL 由「分类 / 随笔 ID」拼接：/notes/{categoryName}/{noteId}/
+    preview: (doc) => {
+      const cat = (doc as unknown as { categories?: { name?: string } }).categories
+      return `/notes/${encodeURIComponent(cat?.name || '')}/${doc.id}/`
+    },
   },
   labels: {
     singular: '随笔',
@@ -29,6 +34,18 @@ export const Notes: CollectionConfig = {
     },
     { name: 'title', type: 'text', label: '标题（可选）' },
     { name: 'mood', type: 'text', label: '心情（可选）' },
+    // 随笔分类：单选必填。URL 由「分类名 / 随笔 ID」拼接，不再依赖日期
+    {
+      name: 'categories',
+      type: 'relationship',
+      relationTo: 'categories',
+      required: true,
+      label: '文章分类',
+      admin: {
+        position: 'sidebar',
+        description: '仅能选择系统里已有的分类，URL 由「分类名 + 随笔 ID」自动拼接',
+      },
+    },
     {
       name: 'status',
       type: 'select',

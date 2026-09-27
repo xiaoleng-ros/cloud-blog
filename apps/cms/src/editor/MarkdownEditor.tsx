@@ -4,68 +4,55 @@ import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { FieldError, FieldLabel, useField, useFieldPath, useTheme } from '@payloadcms/ui'
 import type { FieldClientComponent, TextFieldClient } from 'payload'
+import { MAX_IMAGE_SIZE_BYTES, uploadMedia } from '../lib/media-upload'
 
 type Mode = 'sv' | 'wysiwyg'
 
 // 编辑器默认高度，和原 Monaco 版本保持一致
 const EDITOR_HEIGHT = 520
 
+// Vditor 分屏预览延迟的分级配置
+// - 短文（≤ 5000 字）：300ms，兼顾响应速度
+// - 长文（> 5000 字）：500ms，减少每次按键触发的全量 markdown 渲染抖动
+const PREVIEW_DELAY_SHORT = 300
+const PREVIEW_DELAY_LONG = 500
+const PREVIEW_DELAY_LONG_THRESHOLD = 5000
+
 /**
- * 调用 Payload Media 上传接口
+ * 根据正文长度计算 Vditor 分屏预览的防抖延迟
  *
- * @param file 用户选择的图片或剪贴板/拖拽产生的图片文件
- * @returns 上传成功后图片的可访问相对 URL
- * @throws 上传失败时抛出 Error，交给 Vditor 内部错误回调展示
- *
- * 说明：走同源相对路径 /api/media，浏览器自动带登录 cookie 完成会话认证；
- *      Payload 的 upload collection 默认把字段名接收为 `file`。
+ * @param length 当前正文字符数
+ * @returns 预览防抖延迟（ms），短文 300 / 长文 500
  */
-async function uploadMedia(file: File): Promise<string> {
-  const fd = new FormData()
-  fd.append('file', file)
-  const res = await fetch('/api/media', {
-    method: 'POST',
-    body: fd,
-    // 同源请求默认带 cookie，显式声明兜底
-    credentials: 'same-origin',
-  })
-  if (!res.ok) {
-    // 尽量从 Payload 的错误响应里取业务错误信息
-    let msg = `上传失败（HTTP ${res.status}）`
-    try {
-      const json = (await res.json()) as { errors?: Array<{ message?: string }> }
-      if (json.errors?.[0]?.message) msg = json.errors[0].message
-    } catch {
-      // 忽略响应体解析失败，保留默认错误信息
-    }
-    throw new Error(msg)
-  }
-  const json = (await res.json()) as { doc?: { url?: string } }
-  const url = json.doc?.url
-  if (!url) throw new Error('上传响应缺少 url 字段')
-  return url
-}
+const resolvePreviewDelay = (length: number): number =>
+  length > PREVIEW_DELAY_LONG_THRESHOLD ? PREVIEW_DELAY_LONG : PREVIEW_DELAY_SHORT
 
 /**
  * Vditor 自定义上传入口（内部实现，async 版本）
  *
+ * ⚠ 关键坑：Vditor 自定义 handler 分支**不会**自动把图片插入编辑器（源码 index.js:6204-6215），
+ *   handler 返回 null 时 Vditor 直接 return，返回字符串才显示为 tip。
+ *   所以这里必须显式调用 instance.insertMD() 才能让用户看到图片。
+ *
  * @param files 待上传文件数组
- * @returns 成功返回 null，失败返回错误信息字符串
+ * @param instance 当前 Vditor 实例，用于成功插入与错误提示
+ * @returns 成功返回 null，失败返回错误信息字符串（会由 Vditor 内部 tip 展示）
  */
-async function handleVditorUpload(files: File[]): Promise<string | null> {
+async function handleVditorUpload(files: File[], instance: Vditor | null): Promise<string | null> {
   if (!files.length) return null
   // 前端二次拦截非图片（保险起见，虽然 Vditor 的 accept 已经过滤）
   const nonImage = files.find((f) => !f.type.startsWith('image/'))
   if (nonImage) return `仅支持图片文件，收到的类型：${nonImage.type}`
   // 前端大小上限 10MB，防止误传大文件导致后台 413
-  const tooLarge = files.find((f) => f.size > 10 * 1024 * 1024)
-  if (tooLarge) return `图片过大（${(tooLarge.size / 1024 / 1024).toFixed(1)}MB），请压缩后重试（≤10MB）`
+  const tooLarge = files.find((f) => f.size > MAX_IMAGE_SIZE_BYTES)
+  if (tooLarge)
+    return `图片过大（${(tooLarge.size / 1024 / 1024).toFixed(1)}MB），请压缩后重试（≤10MB）`
   try {
     const urls = await Promise.all(files.map((f) => uploadMedia(f)))
-    // Vditor 会把每张图按顺序插入到光标位置
-    urls.forEach((url, i) => {
-      console.log(`[MarkdownEditor] 图片 ${i + 1} 上传成功：${url}`)
-    })
+    // 手动插入到光标位置：Vditor 自定义 handler 不会自动插入
+    if (instance) {
+      urls.forEach((url) => instance.insertMD(`![](${url})`))
+    }
     return null
   } catch (e) {
     return (e as Error).message
@@ -103,26 +90,60 @@ export const MarkdownEditor: React.FC<{
   onChangeRef.current = onChange
   // 内部值追踪：区分"用户输入触发的回调"和"外部回填触发的 setValue"
   const internalValueRef = useRef(value ?? '')
+  // 最新外部值：Vditor 构造函数是异步初始化的，初始化完成前外部回填的值会被丢弃，
+  // 所以必须单独记住最新值，等 after 回调（初始化完成）后再补一次同步
+  const latestValueRef = useRef(value ?? '')
+  latestValueRef.current = value ?? ''
+  // Vditor 是否已完成异步初始化（i18n / lute 脚本加载完成）。
+  // 初始化完成前 this.vditor 尚未建立，此时调用 setValue 会抛异常，必须先跳过。
+  const readyRef = useRef(false)
 
-  // 初始化编辑器：仅在 mode 切换时重建（Vditor 不支持运行时切模式）
+  // 初始化编辑器：仅在 mode 或 theme 切换时重建（Vditor 不支持运行时切模式）
   useEffect(() => {
-    if (!hostRef.current) return
-    // 清理旧实例（StrictMode 双挂载 / 切模式时都要 destroy）
-    instanceRef.current?.destroy()
-    instanceRef.current = null
-    hostRef.current.innerHTML = ''
+    const container = hostRef.current
+    if (!container) return
 
+    // 本实例的专属宿主：Vditor 的 init 是异步的（i18n / lute 脚本加载完成后才建立内部对象
+    // 并把编辑器 DOM 插入宿主，见 vditor/dist/index.js:7120）。React StrictMode 会
+    // 「挂载 → 卸载 → 再挂载」，被卸载的旧实例其异步流程仍会往自己的宿主里插 DOM。
+    // 若所有实例共用同一个宿主，页面就会残留一个「排在前面且内容为空」的旧编辑器，
+    // 表现为 querySelector 拿到空 textarea、用户看到空白正文。
+    // 用独立子容器 + 卸载时 remove()，让残留实例的 DOM 落在游离节点上，彻底隔离。
+    const mount = document.createElement('div')
+    container.appendChild(mount)
+
+    // 本实例是否已作废（卸载或即将重建）：作废实例的异步回调必须全部短路
+    let disposed = false
+
+    // 用「最新外部值」初始化：effect 闭包里的 value 可能是过期值
+    const initialValue = latestValueRef.current
     // 记录初始值，便于区分外部回填 vs 用户输入
-    internalValueRef.current = value ?? ''
-
-    const instance = new Vditor(hostRef.current, {
-      value: value ?? '',
+    internalValueRef.current = initialValue
+    readyRef.current = false
+    const instance = new Vditor(mount, {
+      value: initialValue,
       mode,
       height: EDITOR_HEIGHT,
       theme: theme === 'dark' ? 'dark' : 'classic',
       placeholder: '开始写你的文章... 支持拖拽 / 粘贴图片',
       lang: 'zh_CN',
       cache: { enable: false }, // ComposeView 自己管 localStorage，这里关闭
+      /**
+       * Vditor 初始化完成回调（官方 after 选项，见 vditor/dist/index.js:16296）
+       *
+       * 场景：编辑草稿时正文由接口异步回填。Vditor 初始化时会用「构造那一刻的 value 快照」
+       * 覆盖编辑区（见 vditor/dist/index.js:7213、9496），而接口数据往往晚于该快照，
+       * 于是回填内容被冲掉、正文空白，用户会误以为内容丢了。
+       * 这里在初始化完成后，以最新的外部值无条件再写一次。
+       */
+      after: () => {
+        // 已作废实例（StrictMode 卸载、切换模式重建）的异步回调直接短路
+        if (disposed) return
+        readyRef.current = true
+        const latest = latestValueRef.current
+        internalValueRef.current = latest
+        instance.setValue(latest, true)
+      },
       toolbar: [
         'emoji', 'headings', 'bold', 'italic', 'strike', 'code', 'inline-code',
         '|',
@@ -138,7 +159,8 @@ export const MarkdownEditor: React.FC<{
         'preview', 'content-theme', 'code-theme', 'counter', 'fullscreen', 'info',
       ],
       preview: {
-        delay: 300, // 从 250ms 上调到 300ms，减少长文渲染抖动
+        // 分屏预览延迟按正文长度分级，减少长文的渲染抖动（>5000 字 → 500ms）
+        delay: resolvePreviewDelay(initialValue.length),
         markdown: {
           // 关闭 XSS 过滤（信任作者内容，同时保留前台 remark 的处理链）
           sanitize: false,
@@ -157,19 +179,65 @@ export const MarkdownEditor: React.FC<{
         multiple: true,
         // 类型断言：Vditor 声明的 handler 返回类型是联合 (string | Promise<string> | Promise<null> | null)
         // 我们统一用 Promise<string | null>，运行时行为完全等价，仅需 TS 层面断言
-        handler: ((files: File[]) => handleVditorUpload(files)) as (
+        // 注意：闭包捕获当前 instance，避免切换模式时 instanceRef.current 变 null 影响插入
+        handler: ((files: File[]) => handleVditorUpload(files, instance)) as (
           files: File[]
         ) => string | Promise<string> | Promise<null> | null,
+        // 自定义 handler 模式下 success / error 回调不会被触发（源码 index.js:6288 只在 XHR 分支调用），
+        // 实际错误通过 handler 返回字符串让 Vditor.tip 展示；此处仅为兼容 Vditor 内部兜底
         success: () => undefined,
         error: (msg) => console.error('[MarkdownEditor] 上传错误：', msg),
       },
       input: (v) => {
         // 用户输入触发的值变化：更新内部记录 + 回调外部
         internalValueRef.current = v
+
+        /**
+         * ⚠ 关键坑：Vditor 在异步初始化（processAfterRender → textarea input 事件）
+         *   阶段也会主动调用一次本回调，此时 this.options 尚未建立，直接读
+         *   instance.options.preview.delay 会抛
+         *   "Cannot read properties of undefined (reading 'preview')"。
+         * 处理策略：
+         *   1) disposed：StrictMode 卸载 / 切模式重建后到达的回调直接短路，避免污染已销毁实例；
+         *   2) options 判空：初始化时序内 options 可能未就位，跳过动态延迟写入，
+         *      此时 Vditor 会沿用 preview.delay 的构造期默认值，行为等价、无副作用；
+         *   3) 跨过长度阈值才写回，避免每次按键都触发对象赋值。
+         */
+        if (!disposed) {
+          const nextDelay = resolvePreviewDelay(v.length)
+          const vditorOpts = (
+            instance as unknown as { options?: { preview: { delay: number } } }
+          ).options
+          if (vditorOpts && vditorOpts.preview.delay !== nextDelay) {
+            vditorOpts.preview.delay = nextDelay
+          }
+        }
+
         onChangeRef.current(v)
       },
     })
     instanceRef.current = instance
+
+    // 卸载/重跑时统一在这里销毁，避免 effect 体 + cleanup 双 destroy
+    // 用 try/catch 兜底：Vditor 内部 destroy() 未判空 wysiwyg.element，
+    // Strict Mode 双挂载或初始化中被打断时会抛 Cannot read properties of undefined
+    return () => {
+      // 先标记作废：之后到达的异步初始化回调（initUI / after）必须短路
+      disposed = true
+      readyRef.current = false
+      if (instanceRef.current) {
+        try {
+          instanceRef.current.destroy()
+        } catch (err) {
+          console.warn('[MarkdownEditor] Vditor 销毁时内部异常（可忽略）：', err)
+        } finally {
+          instanceRef.current = null
+        }
+      }
+      // 移除本实例的专属宿主：即使已被 destroy 的实例稍后仍往 mount 里插 DOM，
+      // 也只是插在游离节点上，不会污染页面
+      mount.remove()
+    }
   }, [mode, theme])
 
   // 外部 value 变化时同步到编辑器（编辑旧文章回填、自动保存恢复）
@@ -178,6 +246,9 @@ export const MarkdownEditor: React.FC<{
     const external = value ?? ''
     if (external === internalValueRef.current) return
     internalValueRef.current = external
+    // Vditor 异步初始化未完成时内部 vditor 尚未建立，此时 setValue 会抛异常；
+    // 直接跳过即可 —— 初始化完成后的 after 回调会按最新外部值补一次同步
+    if (!readyRef.current) return
     instanceRef.current?.setValue(external, true)
   }, [value])
 

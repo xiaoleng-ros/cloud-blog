@@ -59,7 +59,9 @@ async function main() {
   console.log(`  文章 ${postFiles.length} 篇，随笔 ${noteFiles.length} 篇`)
 
   // ---------- 1. 同步分类与标签 ----------
-  const categoryNames = new Set<string>()
+  // 随笔默认分类（frontmatter 未指定时兜底使用，保证 required 校验通过）
+  const NOTES_DEFAULT_CATEGORY = '随笔'
+  const categoryNames = new Set<string>([NOTES_DEFAULT_CATEGORY])
   const tagNames = new Set<string>()
 
   for (const [, file] of [...postFiles, ...noteFiles]) {
@@ -99,19 +101,26 @@ async function main() {
   // ---------- 2. 同步文章 ----------
   for (const [id, file] of postFiles) {
     const { data, content } = matter(readFileSync(file, 'utf-8'))
-    const categories = (Array.isArray(data.categories) ? data.categories : data.categories ? [data.categories] : [])
-      .map((c: unknown) => categoryIds.get(String(c)))
-      .filter(Boolean)
+    // 文章 categories 已改为「单选必填」：取 frontmatter 首个分类
+    const firstCategory =
+      (Array.isArray(data.categories) ? data.categories[0] : data.categories) !== undefined
+        ? categoryIds.get(String(Array.isArray(data.categories) ? data.categories[0] : data.categories))
+        : undefined
     const tags = (Array.isArray(data.tags) ? data.tags : data.tags ? [data.tags] : [])
       .map((t: unknown) => tagIds.get(String(t)))
       .filter(Boolean)
 
+    // 无分类的文章无法通过 required 校验，跳过并告警
+    if (!firstCategory) {
+      console.warn(`⚠️  跳过文章（缺少分类）：${id}`)
+      continue
+    }
+
     const docData = {
       title: String(data.title ?? id),
-      slug: id,
       description: data.description ? String(data.description) : undefined,
       cover: data.cover ? String(data.cover) : undefined,
-      categories: categories as number[],
+      categories: firstCategory,
       tags: tags as number[],
       keywords: toLines(data.keywords),
       ai: toLines(data.ai),
@@ -122,9 +131,10 @@ async function main() {
       content: content,
     }
 
+    // 幂等：以标题匹配（slug 字段已删除）
     const existing = await payload.find({
       collection: 'posts',
-      where: { slug: { equals: id } },
+      where: { title: { equals: docData.title } },
       limit: 1,
     })
 
@@ -170,6 +180,12 @@ async function main() {
 
   for (const [id, file] of noteFiles) {
     const { data, content } = matter(readFileSync(file, 'utf-8'))
+    // 随笔 categories 已改为「单选必填」：优先取 frontmatter 首个分类，
+    // 否则回退到「随笔」默认分类，保证 required 校验通过
+    const firstCategory =
+      (Array.isArray(data.categories) ? data.categories[0] : data.categories) !== undefined
+        ? categoryIds.get(String(Array.isArray(data.categories) ? data.categories[0] : data.categories))
+        : categoryIds.get('随笔') ?? categoryIds.values().next().value
     const tags = (Array.isArray(data.tags) ? data.tags : data.tags ? [data.tags] : [])
       .map((t: unknown) => tagIds.get(String(t)))
       .filter(Boolean)
@@ -183,6 +199,7 @@ async function main() {
       date: noteDate,
       title: data.title ? String(data.title) : undefined,
       mood: data.mood ? String(data.mood) : undefined,
+      categories: firstCategory as number,
       tags: tags as number[],
       // 随笔也支持草稿：从本地 md 导入的内容视为已发布
       status: 'published' as const,

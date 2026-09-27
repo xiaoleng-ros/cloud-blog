@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { CoverUploader } from '../../components/CoverUploader'
 import { fetchTerms, type TermOption } from '../lib/api'
 
 /** 发布前的元信息（文章与随笔共用结构，字段按集合取用） */
@@ -60,6 +61,11 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
       setError('请填写标题')
       return
     }
+    // 分类必填（文章 / 随笔都需要，用于生成 URL）
+    if (categoryIds.length === 0) {
+      setError('请选择分类（必填，决定文章链接）')
+      return
+    }
     setError('')
     await onConfirm({
       title: title.trim(),
@@ -73,7 +79,7 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
     })
   }
 
-  /** 多选下拉组件（分类/标签共用） */
+  /** 多选下拉组件（仅用于标签） */
   const multiSelect = (
     options: TermOption[],
     selected: number[],
@@ -88,6 +94,33 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
       onChange={(e) => onChange([...e.target.selectedOptions].map((o) => Number(o.value)))}
     >
       {options.length === 0 && <option value="" disabled>{placeholder}</option>}
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>{o.name}</option>
+      ))}
+    </select>
+  )
+
+  /**
+   * 单选下拉组件（用于分类：文章与随笔都只能选一个分类，因为分类决定 URL）
+   *
+   * 与 multiSelect 的差异：单选后把 ids 数组只保留一个元素，保持 PublishMeta.categoryIds
+   * 结构不变，避免影响 buildPayload 的下游取值逻辑。
+   */
+  const singleSelect = (
+    options: TermOption[],
+    selected: number[],
+    onChange: (ids: number[]) => void,
+    placeholder: string,
+  ) => (
+    <select
+      className="publish-modal__select publish-modal__select--single"
+      value={String(selected[0] ?? '')}
+      onChange={(e) => {
+        const v = e.target.value
+        onChange(v ? [Number(v)] : [])
+      }}
+    >
+      <option value="">{placeholder}</option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>{o.name}</option>
       ))}
@@ -120,15 +153,11 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="文章摘要（可选）"
               />
-              <label className="publish-modal__label">封面 URL</label>
-              <input
-                className="publish-modal__input"
-                value={cover}
-                onChange={(e) => setCover(e.target.value)}
-                placeholder="https://…（可选）"
-              />
-              <label className="publish-modal__label">分类（可多选）</label>
-              {multiSelect(categories, categoryIds, setCategoryIds, '暂无分类')}
+              <label className="publish-modal__label">封面图</label>
+              {/* 复用 CoverUploader：与 Payload 原生编辑页的 cover 字段共用同一套 UI */}
+              <CoverUploader value={cover} onChange={setCover} disabled={saving} />
+              <label className="publish-modal__label">文章分类（必填）</label>
+              {singleSelect(categories, categoryIds, setCategoryIds, '请选择分类（必填）')}
               <label className="publish-modal__label">置顶权重</label>
               <input
                 type="number"
@@ -142,6 +171,8 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
 
           {collection === 'notes' && (
             <>
+              <label className="publish-modal__label">文章分类（必填）</label>
+              {singleSelect(categories, categoryIds, setCategoryIds, '请选择分类（必填）')}
               <label className="publish-modal__label">心情</label>
               <input
                 className="publish-modal__input"

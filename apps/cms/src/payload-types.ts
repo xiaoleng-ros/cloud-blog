@@ -140,16 +140,15 @@ export interface UserAuthOperations {
 export interface Post {
   id: number;
   title: string;
-  /**
-   * 选择分类 + 填写标识，自动生成文章链接
-   */
-  slug: string;
   description?: string | null;
   /**
-   * 支持外链或后台上传图片后的 URL
+   * 支持外链 URL 或本地上传图片
    */
   cover?: string | null;
-  categories?: (number | Category)[] | null;
+  /**
+   * 仅能选择系统里已有的分类，URL 由「分类名 + 文章 ID」自动拼接
+   */
+  categories: number | Category;
   tags?: (number | Tag)[] | null;
   /**
    * 每行一个
@@ -205,6 +204,10 @@ export interface Note {
   date: string;
   title?: string | null;
   mood?: string | null;
+  /**
+   * 仅能选择系统里已有的分类，URL 由「分类名 + 随笔 ID」自动拼接
+   */
+  categories: number | Category;
   status: 'draft' | 'published';
   tags?: (number | Tag)[] | null;
   content?: string | null;
@@ -392,7 +395,6 @@ export interface PayloadMigration {
  */
 export interface PostsSelect<T extends boolean = true> {
   title?: T;
-  slug?: T;
   description?: T;
   cover?: T;
   categories?: T;
@@ -413,6 +415,7 @@ export interface NotesSelect<T extends boolean = true> {
   date?: T;
   title?: T;
   mood?: T;
+  categories?: T;
   status?: T;
   tags?: T;
   content?: T;
