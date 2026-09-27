@@ -187,6 +187,23 @@ interface ApiMedia {
 }
 
 /**
+ * 取 URL 的路径部分作为归一化 key：去掉协议+域名、去掉 hash 后缀
+ * @param url 原始 URL 字符串（可能是绝对 http(s) 或相对路径）
+ * @returns 归一化后的路径部分，供 altMap 二次命中
+ */
+function basenameOfUrl(url: string): string {
+  let path = url;
+  try {
+    if (/^https?:\/\//.test(path)) {
+      path = new URL(path).pathname;
+    }
+  } catch {
+    // 非法 URL 时按原样处理
+  }
+  return path.split('#')[0];
+}
+
+/**
  * 拉取 Media 集合的 url → alt 映射，供前台 Markdown 正文图片补 alt。
  *
  * 说明：Astro 构建期把 altMap 注入 rehype-img-attrs.mjs 的全局变量，
@@ -201,7 +218,10 @@ export async function fetchMediaAltMap(): Promise<Map<string, string>> {
     for (const doc of docs) {
       const url = doc?.url;
       const alt = typeof doc?.alt === 'string' ? doc.alt.trim() : undefined;
-      if (url && alt) map.set(url, alt);
+      if (!url || !alt) continue;
+      map.set(url, alt);
+      // 兜底：按 basename 再存一份，让 markdown 里的相对路径也能命中
+      map.set(basenameOfUrl(url), alt);
     }
   } catch (error) {
     // 拉取失败不影响前台构建，回退为「无 alt」渲染

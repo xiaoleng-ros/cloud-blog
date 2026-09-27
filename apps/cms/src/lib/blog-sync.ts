@@ -87,6 +87,25 @@ function linesOf(text?: string | null): string[] | undefined {
 }
 
 /**
+ * 取 URL 的路径部分作为归一化 key：去掉协议+域名、去掉 hash 后缀
+ *
+ * @param url 原始 URL 字符串（可能是绝对 http(s) 或相对路径）
+ * @returns 归一化后的路径部分（不含协议、域名、hash），供 altMap 二次命中
+ */
+function basenameOfUrl(url: string): string {
+  let path = url
+  try {
+    // 支持 http(s) 与协议相对 URL
+    if (/^https?:\/\//.test(path)) {
+      path = new URL(path).pathname
+    }
+  } catch {
+    // 非法 URL 时按原样处理，只保留相对路径部分
+  }
+  return path.split('#')[0]
+}
+
+/**
  * 拉取 Media 集合中所有图片，构建 url → alt 映射。
  *
  * 用途：Markdown 正文里 `![](url)` 的图片，Payload 的 MarkdownEditor 上传时
@@ -115,6 +134,9 @@ export async function fetchMediaAltMap(): Promise<Map<string, string>> {
         // 归一化 key：Payload 存的是绝对/相对 URL，前台可能拼接域名；
         // 这里同时按原样和"去掉域名前缀"两种形态存一份，命中率更高
         map.set(url, alt)
+        // 兜底：按路径 basename（去掉域名前缀、去掉 hash 后缀）再存一份，
+        // 让 markdown 里的相对路径、Payload 里的绝对路径能互相命中
+        map.set(basenameOfUrl(url), alt)
       }
     }
   } catch (err) {

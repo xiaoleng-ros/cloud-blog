@@ -13,7 +13,10 @@ import {
 // Sitemap 允许的值集合（Google 官方要求小写、无空格、无引号）
 // 用联合类型约束调用方，避免拼写错误进入 sitemap
 const CHANGE_FREQS = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'] as const;
-const CHANGE_FREQ_TYPE = typeof CHANGE_FREQS[number];
+// 类型别名：避免 typeof X[number] 在编译后残留为运行时表达式（会报 ReferenceError: number is not defined）
+type Changefreq = (typeof CHANGE_FREQS)[number];
+// 运行时校验集合（避免 as unknown as readonly string[] 二次断言）
+const CHANGE_FREQ_SET: ReadonlySet<string> = new Set(CHANGE_FREQS);
 const PRIORITY_MIN = 0;
 const PRIORITY_MAX = 1;
 
@@ -28,7 +31,7 @@ const escapeXml = (value: string) =>
 // urlEntry 参数：除 url 外还支持 lastmod / changefreq / priority
 interface UrlEntryOptions {
   lastmod?: Date;
-  changefreq?: CHANGE_FREQ_TYPE;
+  changefreq?: Changefreq;
   priority?: number;
 }
 
@@ -39,9 +42,7 @@ const urlEntry = (path: string, options: UrlEntryOptions = {}) => {
     typeof priority === 'number'
       ? Math.max(PRIORITY_MIN, Math.min(PRIORITY_MAX, priority))
       : null;
-  const validChangefreq = changefreq && (CHANGE_FREQS as readonly string[]).includes(changefreq)
-    ? changefreq
-    : null;
+  const validChangefreq = changefreq && CHANGE_FREQ_SET.has(changefreq) ? changefreq : null;
 
   return `
   <url>
