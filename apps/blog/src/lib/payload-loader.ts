@@ -18,7 +18,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import matter from 'gray-matter';
 import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
-import { PAYLOAD_URL, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, type MdEntry, type ProjectEntry } from './payload-api';
+import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, type MdEntry, type ProjectEntry } from './payload-api';
+import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs';
 
 /** dev 自动同步轮询间隔（毫秒）：3s，接近实时 */
 const AUTO_REFRESH_MS = 3_000
@@ -31,7 +32,34 @@ const DIGEST_KEYS = {
   settings: 'digest-settings',
   nav: 'digest-nav',
   projects: 'digest-projects',
+  mediaAlt: 'digest-media-alt',
 } as const
+
+/**
+ * Media alt 映射的模块级缓存：posts / notes / projects 三个 loader 共享同一份 Promise，
+ * 只发起一次 /api/media 请求。轮询时会重新拉取并 setAltMap，供下一次 markdown 渲染使用。
+ */
+let mediaAltPromise: Promise<Map<string, string>> | null = null
+function loadMediaAltMap(): Promise<Map<string, string>> {
+  if (!mediaAltPromise) {
+    mediaAltPromise = fetchMediaAltMap().then((m) => {
+      setAltMap(m)
+      return m
+    })
+  }
+  return mediaAltPromise
+}
+
+/** 刷新 Media alt 缓存（用于轮询）：拉取最新数据并注入 rehype 插件 */
+async function refreshMediaAltMap(): Promise<boolean> {
+  const before = mediaAltPromise ? await mediaAltPromise : new Map<string, string>()
+  mediaAltPromise = null
+  const after = await loadMediaAltMap()
+  const changed =
+    before.size !== after.size ||
+    [...before.entries()].some(([k, v]) => after.get(k) !== v)
+  return changed
+}
 
 /** 递归收集目录下所有 .md 文件，返回 [id(相对路径去扩展名), 绝对路径] */
 function collectLocalMarkdown(dir: string): Array<{ id: string; file: string }> {
@@ -101,7 +129,10 @@ export const payloadPostsLoader: Loader = {
     const urlsOf = new Map<string, string>();
 
     try {
-      const entries = await fetchPosts();
+      // 先注入 Media alt 映射，确保 renderMarkdown 时 rehypeImgAttrs 能查到 alt；
+      // 同时把 map 传给 fetchPosts，让它给每篇文章的封面写入 data.coverAlt
+      const altMap = await loadMediaAltMap();
+      const entries = await fetchPosts(altMap);
       ctx.logger.info(`[payload-loader] 文章：从后台 API 载入 ${entries.length} 条`);
       await storeEntries(ctx, ctx.store, entries);
       ctx.meta.set(DIGEST_KEYS.posts, ctx.generateDigest(JSON.stringify(entries)));
@@ -137,7 +168,16 @@ export const payloadNotesLoader: Loader = {
     const urlsOf = new Map<string, string>();
 
     try {
+      const altMap = await loadMediaAltMap();
       const entries = await fetchNotes();
+      // 用 altMap 回填随笔封面 alt（如随笔封面也在 Media 表里配置了 alt）
+      for (const e of entries) {
+        const cover = e.data?.cover;
+        if (typeof cover === 'string' && cover) {
+          const alt = altMap.get(cover);
+          if (alt) e.data.coverAlt = alt;
+        }
+      }
       ctx.logger.info(`[payload-loader] 随笔：从后台 API 载入 ${entries.length} 条`);
       await storeEntries(ctx, ctx.store, entries);
       ctx.meta.set(DIGEST_KEYS.notes, ctx.generateDigest(JSON.stringify(entries)));
@@ -231,9 +271,15 @@ function schedulePolling(
 async function pollPostsAndSettings(ctx: LoaderContext): Promise<boolean> {
   let changed = false;
 
-  const entries = await fetchPosts();
+  // Media alt 变更会直接影响前台图片 alt 展示；altMap 更新后，已存储的 markdown HTML
+  // 里 <img alt=""> 是旧值，需重新 renderMarkdown 让 rehypeImgAttrs 用新 map 补齐
+  const mediaAltChanged = await refreshMediaAltMap();
+  const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>();
+
+  const entries = await fetchPosts(altMap);
   const postsDigest = ctx.generateDigest(JSON.stringify(entries));
-  if (ctx.meta.get(DIGEST_KEYS.posts) !== postsDigest) {
+  const postsDigestChanged = ctx.meta.get(DIGEST_KEYS.posts) !== postsDigest;
+  if (postsDigestChanged || mediaAltChanged) {
     ctx.meta.set(DIGEST_KEYS.posts, postsDigest);
     await storeEntries(ctx, ctx.store, entries);
     changed = true;
@@ -258,9 +304,19 @@ async function pollPostsAndSettings(ctx: LoaderContext): Promise<boolean> {
 
 /** 轮询随笔：有变化时更新 store，返回是否变化 */
 async function pollNotes(ctx: LoaderContext): Promise<boolean> {
+  const mediaAltChanged = await refreshMediaAltMap();
+  const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>();
   const entries = await fetchNotes();
+  for (const e of entries) {
+    const cover = e.data?.cover;
+    if (typeof cover === 'string' && cover) {
+      const alt = altMap.get(cover);
+      if (alt) e.data.coverAlt = alt;
+    }
+  }
   const digest = ctx.generateDigest(JSON.stringify(entries));
-  if (ctx.meta.get(DIGEST_KEYS.notes) === digest) return false;
+  const digestChanged = ctx.meta.get(DIGEST_KEYS.notes) !== digest;
+  if (!digestChanged && !mediaAltChanged) return false;
   ctx.meta.set(DIGEST_KEYS.notes, digest);
   await storeEntries(ctx, ctx.store, entries);
   return true;

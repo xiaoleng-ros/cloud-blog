@@ -22,6 +22,7 @@ const posts = defineCollection({
       date: z.coerce.date().optional(),
       updated: z.coerce.date().optional(),
       cover: z.string().optional(),
+      coverAlt: z.string().optional(),
       categories: stringList,
       tags: stringList,
       keywords: stringList,

@@ -36,6 +36,7 @@ const category = getPostCategory(post);
 const tags = getPostTags(post);
 const description = getPostDescription(post);
 const cover = getPostCover(post);
+const coverAlt = (post.data.coverAlt as string | undefined) ?? '';
 const readingMinutes = getReadingMinutes(post);
 const { newer, older } = getAdjacentPosts(posts, post);
 const relatedPosts = getRelatedPosts(posts, post);
@@ -114,7 +115,7 @@ const articleSchema = {
         <img
           class="article__cover"
           src={cover}
-          alt=""
+          alt={coverAlt}
           loading="eager"
           fetchpriority="high"
           referrerpolicy="no-referrer"
@@ -130,7 +131,7 @@ const articleSchema = {
           <img
             class="article__cover"
             src={cover}
-            alt=""
+            alt={coverAlt}
             loading="eager"
             fetchpriority="high"
             referrerpolicy="no-referrer"

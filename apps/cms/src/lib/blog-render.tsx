@@ -23,7 +23,7 @@ import { createHighlighter } from 'shiki'
 // 项目 markdown 插件（跨 app 复用同一份实现，保证短代码/图片处理与构建时一致）
 import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs'
 import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs'
-import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs'
+import { createRehypeImgAttrs } from 'cloud-blog/shared/rehype-img-attrs.mjs'
 
 import {
   type MdEntry,
@@ -63,8 +63,16 @@ const SITE_DEFAULTS = {
 
 const site = { ...SITE_DEFAULTS }
 
-/** 文章详情页路径（CMS 以 slug 作为 id，因此直接拼 id） */
-const getPostPath = (post: MdEntry) => `/posts/${post.id}/`
+/** 从 post 上取分类名（data.categories 已归一为字符串数组，取第一个） */
+const postCategoryName = (post: MdEntry): string => {
+  const cats = post.data?.categories
+  if (Array.isArray(cats) && cats.length > 0) return String(cats[0])
+  return 'uncategorized'
+}
+
+/** 文章详情页路径：/posts/{分类名}/{数字ID}/ */
+const getPostPath = (post: MdEntry) =>
+  `/posts/${encodeURIComponent(postCategoryName(post))}/${String(post.id)}/`
 
 // ---------------------------------------------------------------------------
 // 基础工具
@@ -345,8 +353,12 @@ interface Heading {
   slug: string
 }
 
-/** 渲染 markdown 为 HTML，返回正文与标题列表（用于目录） */
-async function renderMarkdown(md: string): Promise<{ html: string; headings: Heading[] }> {
+/**
+ * 渲染 markdown 为 HTML，返回正文与标题列表（用于目录）。
+ * @param md 原始 markdown 文本
+ * @param altMap 图片 url → alt 文本映射，用于给正文里的 `![](url)` 补齐 alt（SEO/无障碍）
+ */
+async function renderMarkdown(md: string, altMap: Map<string, string>): Promise<{ html: string; headings: Heading[] }> {
   const headings: Heading[] = []
   const slugger = createSlugger()
 
@@ -371,7 +383,7 @@ async function renderMarkdown(md: string): Promise<{ html: string; headings: Hea
     .use(remarkLegacyShortcodes)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeLegacyShortcodes)
-    .use(rehypeImgAttrs)
+    .use(createRehypeImgAttrs(altMap))
     .use(() => collectHeadings)
     .use(rehypeStringify, { allowDangerousHtml: true })
     .process(md)
@@ -454,14 +466,14 @@ function renderHeroPicks(picks: MdEntry[]): string {
   const category = getPostCategory(first)
   const date = toDate(first.data.date)
   const thumb = cover
-    ? `<span class="pick-hero__thumb"><img src="${escapeAttr(cover)}" alt="" loading="eager" fetchpriority="high" referrerpolicy="no-referrer" /></span>`
+    ? `<span class="pick-hero__thumb"><img src="${escapeAttr(cover)}" alt="${escapeAttr(first.data.coverAlt ?? '')}" loading="eager" fetchpriority="high" referrerpolicy="no-referrer" /></span>`
     : `<span class="pick-hero__thumb pick__thumb--fallback" style="--h:${coverHue(String(first.data.title))}"></span>`
 
   const side = picks.slice(1, 5).map((post) => {
     const c = getPostCover(post)
     const d = toDate(post.data.date)
     const t = c
-      ? `<span class="pick-side__thumb"><img src="${escapeAttr(c)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></span>`
+      ? `<span class="pick-side__thumb"><img src="${escapeAttr(c)}" alt="${escapeAttr(post.data.coverAlt ?? '')}" loading="lazy" referrerpolicy="no-referrer" /></span>`
       : `<span class="pick-side__thumb pick__thumb--fallback" style="--h:${coverHue(String(post.data.title))}"></span>`
     return `<li>
   <a class="pick-side__item" href="${escapeAttr(getPostPath(post))}">
@@ -557,7 +569,7 @@ function renderArticleHeader(
 
   const coverHtml =
     cover && !opts.hasToc
-      ? `<img class="article__cover" src="${escapeAttr(cover)}" alt="" loading="eager" fetchpriority="high" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/covers/default-cover.svg'" />`
+      ? `<img class="article__cover" src="${escapeAttr(cover)}" alt="${escapeAttr(post.data.coverAlt ?? '')}" loading="eager" fetchpriority="high" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/covers/default-cover.svg'" />`
       : ''
 
   const meta = [
@@ -580,8 +592,8 @@ function renderArticleHeader(
 }
 
 /** 文章正文内容（锚点 posts/[...slug].astro 的 div[data-sync-block="postContent"]） */
-async function renderArticleContent(post: MdEntry): Promise<string> {
-  const { html } = await renderMarkdown(post.body)
+async function renderArticleContent(post: MdEntry, altMap: Map<string, string>): Promise<string> {
+  const { html } = await renderMarkdown(post.body, altMap)
   return html
 }
 
@@ -775,9 +787,9 @@ function moodIcon(mood?: string): string | undefined {
 }
 
 /** 渲染单条随笔（note__meta + note__main + markdown 正文） */
-async function renderNote(note: MdEntry, anchor?: string): Promise<string> {
+async function renderNote(note: MdEntry, altMap: Map<string, string>, anchor?: string): Promise<string> {
   const date = toDate(note.data.date)
-  const { html } = await renderMarkdown(note.body)
+  const { html } = await renderMarkdown(note.body, altMap)
   const mood = moodIcon(note.data.mood)
 
   const moodHtml = note.data.mood
@@ -806,7 +818,7 @@ async function renderNote(note: MdEntry, anchor?: string): Promise<string> {
 
 /** 随笔页 feed 内容（锚点 notes.astro 的 div[data-sync-block="notesFeed"]）与
  *  时间索引内容（锚点 aside[data-sync-block="notesAside"]） */
-async function renderNotesFeed(notes: MdEntry[]): Promise<{
+async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): Promise<{
   feed: string
   aside: string
 }> {
@@ -848,7 +860,7 @@ async function renderNotesFeed(notes: MdEntry[]): Promise<{
   for (const group of byYear) {
     const items: string[] = []
     for (const note of group.notes) {
-      items.push(await renderNote(note, monthAnchor.get(note.id)))
+      items.push(await renderNote(note, altMap, monthAnchor.get(note.id)))
     }
     feedParts.push(
       `<section class="notes-year" id="y-${group.year}"><h2 class="notes-year__label"><span>${group.year}</span></h2>${items.join('')}</section>`,
@@ -1125,6 +1137,8 @@ interface SyncData {
   projects: ProjectEntry[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string }>
+  /** Media 集合 url → alt 映射，用于正文图片 alt 补齐 */
+  mediaAltMap: Map<string, string>
   version: string
 }
 
@@ -1156,14 +1170,16 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
   }
 }
 
-/** 文章详情页 */
+/** 文章详情页：URL 形如 /posts/{分类名}/{数字ID}/，按数字 ID 精确匹配 */
 async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<string, string | null>> {
-  const slug = decodeURIComponent(pathname.split('/')[2] ?? '')
+  const segs = pathname.split('/')
+  // 例：/posts/技术/42/ → ['','posts','技术','42','']
+  const postId = decodeURIComponent(segs[3] ?? '')
   const posts = sortPosts(ctx.posts)
-  const post = posts.find((p) => p.id === slug)
+  const post = posts.find((p) => String(p.id) === postId)
   if (!post) return { postContent: null }
 
-  const { html, headings } = await renderMarkdown(post.body)
+  const { html, headings } = await renderMarkdown(post.body, ctx.mediaAltMap)
   const tocList = headings.filter((h) => h.depth >= 2 && h.depth <= 3)
   const tocGroups: Array<{ slug: string; text: string; children: Array<{ slug: string; text: string }> }> = []
   for (const heading of tocList) {
@@ -1215,7 +1231,7 @@ async function archiveBlocks(ctx: SyncData): Promise<Record<string, string | nul
 
 /** 随笔页 */
 async function notesBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
-  const { feed, aside } = await renderNotesFeed(ctx.notes)
+  const { feed, aside } = await renderNotesFeed(ctx.notes, ctx.mediaAltMap)
   const settings = ctx.settings
   const siteName = settings?.siteName ?? site.name
 
@@ -1312,6 +1328,7 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
     projects: snapshot.projects,
     settings: snapshot.settings,
     nav: snapshot.nav,
+    mediaAltMap: snapshot.mediaAltMap,
     version,
   }
   const siteName = snapshot.settings?.siteName ?? site.name

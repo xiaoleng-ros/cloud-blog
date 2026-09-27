@@ -82,15 +82,14 @@ interface RefDoc {
   slug?: string;
 }
 
-/** Payload posts 集合的 API 形状 */
+/** Payload posts 集合的 API 形状（categories 为单选关系） */
 interface ApiPost {
   id: number;
   title: string;
-  slug: string;
   createdAt: string;
   description?: string | null;
   cover?: string | null;
-  categories?: (RefDoc | number)[];
+  categories?: RefDoc | number;
   tags?: (RefDoc | number)[];
   keywords?: string | null;
   ai?: string | null;
@@ -99,12 +98,13 @@ interface ApiPost {
   content?: string | null;
 }
 
-/** Payload notes 集合的 API 形状 */
+/** Payload notes 集合的 API 形状（categories 为单选关系） */
 interface ApiNote {
   id: number;
   date: string;
   title?: string | null;
   mood?: string | null;
+  categories?: RefDoc | number;
   status?: string | null;
   tags?: (RefDoc | number)[];
   content?: string | null;
@@ -150,10 +150,26 @@ export interface ProjectEntry {
   sortOrder: number;
 }
 
-/** 把浅关系字段归一为字符串名列表 */
-function namesOf(refs?: (RefDoc | number)[]): string[] | undefined {
-  if (!refs?.length) return undefined;
-  return refs.map((r) => (typeof r === 'object' ? r.name : String(r)));
+/** 把浅关系字段（单选或多选）归一为字符串名列表 */
+function namesOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] | undefined {
+  if (!refs) return undefined;
+  const arr = Array.isArray(refs) ? refs : [refs];
+  if (arr.length === 0) return undefined;
+  const names = arr.map((r) => (typeof r === 'object' && r !== null ? r.name : String(r))).filter(Boolean);
+  return names.length > 0 ? names : undefined;
+}
+
+/** 从单选/多选关系里取首个名称（用于拼接 URL） */
+function firstCategoryName(ref?: RefDoc | number | (RefDoc | number)[] | null): string {
+  if (!ref) return 'uncategorized';
+  const first = Array.isArray(ref) ? ref[0] : ref;
+  if (!first) return 'uncategorized';
+  return typeof first === 'object' ? first.name || 'uncategorized' : String(first);
+}
+
+/** 生成文章前台路径：/posts/{分类名}/{数字ID}/ */
+function postPathOf(doc: { id: number; categories?: RefDoc | number | null }): string {
+  return `/posts/${encodeURIComponent(firstCategoryName(doc.categories))}/${String(doc.id)}/`;
 }
 
 /** 把「每行一个」的文本拆为数组 */
@@ -163,30 +179,73 @@ function linesOf(text?: string | null): string[] | undefined {
   return list.length > 0 ? list : undefined;
 }
 
-/** 拉取文章列表并转为 markdown 条目（按 slug 作为 id，与前台路径一致） */
-export async function fetchPosts(): Promise<MdEntry[]> {
+/** Payload media 集合的 API 形状（只关心 url 与 alt） */
+interface ApiMedia {
+  id: number;
+  url?: string | null;
+  alt?: string | null;
+}
+
+/**
+ * 拉取 Media 集合的 url → alt 映射，供前台 Markdown 正文图片补 alt。
+ *
+ * 说明：Astro 构建期把 altMap 注入 rehype-img-attrs.mjs 的全局变量，
+ * 与前台 CMS SSR 链路（blog-sync.fetchMediaAltMap）保持同一套策略。
+ */
+export async function fetchMediaAltMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const { docs } = await fetchJson<PayloadListResponse<ApiMedia>>(
+      '/api/media?limit=0&select[url]=url&select[alt]=alt',
+    );
+    for (const doc of docs) {
+      const url = doc?.url;
+      const alt = typeof doc?.alt === 'string' ? doc.alt.trim() : undefined;
+      if (url && alt) map.set(url, alt);
+    }
+  } catch (error) {
+    // 拉取失败不影响前台构建，回退为「无 alt」渲染
+    console.warn(
+      `[payload-api] Media alt 拉取失败: ${(error as Error).message}`,
+    );
+  }
+  return map;
+}
+
+/** 拉取文章列表并转为 markdown 条目（按数字主键作为 id，与前台路径 /posts/{分类}/{数字ID}/ 一致）
+ * @param altMap Media 集合 url → alt 映射；若文章封面在 Media 表里配了 alt，一并写入 data.coverAlt
+ */
+export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[]> {
   const { docs } = await fetchJson<PayloadListResponse<ApiPost>>(
     '/api/posts?depth=1&limit=0&sort=-sticky,-createdAt',
   );
 
   return docs
     .filter((doc) => doc.status === 'published')
-    .map((doc) => ({
-      id: doc.slug,
-      data: {
-        title: doc.title,
-        description: doc.description ?? undefined,
-        // 后台不再维护「发布时间」，前台用创建时间（createdAt）兜底，保证排序与展示正常
-        date: String(doc.createdAt),
-        cover: doc.cover ?? undefined,
-        categories: namesOf(doc.categories),
-        tags: namesOf(doc.tags),
-        keywords: linesOf(doc.keywords),
-        ai: linesOf(doc.ai),
-        sticky: doc.sticky ?? undefined,
-      },
-      body: doc.content ?? '',
-    }));
+    .map((doc) => {
+      const cover = doc.cover ?? undefined;
+      const coverAlt = cover && altMap ? altMap.get(cover) ?? undefined : undefined;
+      return {
+        // id 使用数字主键：前台路径 /posts/{分类}/{数字ID}/
+        id: String(doc.id),
+        data: {
+          // 数字 ID 挂在 data.id 上，前台解析路径时用
+          id: String(doc.id),
+          title: doc.title,
+          description: doc.description ?? undefined,
+          // 后台不再维护「发布时间」，前台用创建时间（createdAt）兜底，保证排序与展示正常
+          date: String(doc.createdAt),
+          cover,
+          coverAlt,
+          categories: namesOf(doc.categories),
+          tags: namesOf(doc.tags),
+          keywords: linesOf(doc.keywords),
+          ai: linesOf(doc.ai),
+          sticky: doc.sticky ?? undefined,
+        },
+        body: doc.content ?? '',
+      };
+    });
 }
 
 /** 拉取随笔列表并转为 markdown 条目（以 date 作为 id） */

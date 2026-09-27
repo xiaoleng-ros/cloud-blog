@@ -28,6 +28,8 @@ export interface SyncSnapshot {
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string }>
   navUpdatedAt?: string
+  /** Media 集合 url → alt 映射，Markdown 正文图片补 alt 用 */
+  mediaAltMap: Map<string, string>
   version: string
   ts: number
 }

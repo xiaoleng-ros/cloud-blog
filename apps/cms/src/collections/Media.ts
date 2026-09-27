@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { syncInvalidateHook } from '../lib/sync-cache'
 
 /**
  * 图片 / 多媒体集合：文章封面、正文图片、头像等上传文件都会存到这里。
@@ -31,4 +32,9 @@ export const Media: CollectionConfig = {
       label: '替代文本（SEO 用）',
     },
   ],
+  // alt 修改会直接影响前台图片渲染，需清除同步快照 + 广播 SSE
+  hooks: {
+    afterChange: [syncInvalidateHook],
+    afterDelete: [syncInvalidateHook],
+  },
 }

@@ -113,7 +113,7 @@ const coverHue = (value: string) => {
               <span class="pick-hero__thumb">
                 <img
                   src={getPostCover(heroPicks[0])}
-                  alt=""
+                  alt={heroPicks[0].data.coverAlt ?? ''}
                   loading="eager"
                   fetchpriority="high"
                   referrerpolicy="no-referrer"
@@ -144,7 +144,7 @@ const coverHue = (value: string) => {
                   <a class="pick-side__item" href={`/posts/${post.id}/`}>
                     {getPostCover(post) ? (
                       <span class="pick-side__thumb">
-                        <img src={getPostCover(post)} alt="" loading="lazy" referrerpolicy="no-referrer" />
+                        <img src={getPostCover(post)} alt={post.data.coverAlt ?? ''} loading="lazy" referrerpolicy="no-referrer" />
                       </span>
                     ) : (
                       <span
