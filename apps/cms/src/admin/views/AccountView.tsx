@@ -4,12 +4,13 @@
  * 自定义账号设置视图（替换 Payload 默认 /account 页）
  *
  * 功能说明：
- * - 用「块状卡片」的规整布局替代默认分散的表单，风格与仪表盘一致
- * - 卡片一「基本资料」：昵称 + 邮箱，PATCH /api/users/{id} 保存
- * - 卡片二「修改密码」：新密码 + 确认新密码，PATCH /api/users/{id}（携带 password）保存
+ * - 顶部 Tab 分栏：账号信息 / 基本资料 / 修改密码，一次只看一个面板
+ * - Tab 状态同步到 URL（?tab=info|profile|password），刷新/前进后退都能停在本面板
+ * - 骨架常驻：Tab 与面板框架立即渲染，/api/users/me 数据到达前用占位符
  * - 操作结果使用居中弹层提示
  */
 import React, { useEffect, useRef, useState } from 'react'
+import { PASSWORD_RULE_TEXT, validatePasswordStrength } from '../../lib/password'
 
 /** 当前登录用户（仅取用到的字段） */
 type MeUser = {
@@ -24,11 +25,27 @@ type MeUser = {
 /** 居中提示条的类型 */
 type Notice = { type: 'success' | 'error'; text: string } | null
 
+/** 面板标识（与 URL ?tab= 参数一一对应） */
+type Tab = 'info' | 'profile' | 'password'
+
+const TABS: Array<{ key: Tab; label: string; tag: string }> = [
+  { key: 'info', label: '账号信息', tag: '登录标识' },
+  { key: 'profile', label: '基本资料', tag: '昵称 · 邮箱' },
+  { key: 'password', label: '修改密码', tag: '6-18 位 · 至少两种字符组合' },
+]
+
+/** 解析 URL 中的 tab 参数，非法值回落到「账号信息」 */
+const parseTab = (value: string | null): Tab =>
+  value === 'profile' || value === 'password' ? value : 'info'
+
 /** 账号设置视图组件（挂在 admin.components.views.account.Component） */
 export const AccountView = () => {
   // —— 当前用户与加载状态 ——
   const [user, setUser] = useState<MeUser | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // —— 当前面板：SSR 首帧固定「账号信息」，挂载后再从 URL 恢复，避免水合不一致 ——
+  const [tab, setTab] = useState<Tab>('info')
 
   // —— 基本资料表单状态 ——
   const [name, setName] = useState('')
@@ -80,6 +97,23 @@ export const AccountView = () => {
     void load()
   }, [])
 
+  // —— 挂载时从 URL 恢复面板；前进/后退切换面板 ——
+  useEffect(() => {
+    const readTab = () => setTab(parseTab(new URLSearchParams(window.location.search).get('tab')))
+    readTab()
+    window.addEventListener('popstate', readTab)
+    return () => window.removeEventListener('popstate', readTab)
+  }, [])
+
+  /** 切换面板并写入 URL 历史（浏览器前进/后退可回到上一个面板） */
+  const switchTab = (next: Tab) => {
+    if (next === tab) return
+    setTab(next)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', next)
+    window.history.pushState({ tab: next }, '', url.toString())
+  }
+
   /** 提取后端返回的错误文案，便于直接展示给用户 */
   const errorMessage = (json: { errors?: Array<{ message?: string }> }, fallback: string) =>
     json?.errors?.[0]?.message || fallback
@@ -114,12 +148,13 @@ export const AccountView = () => {
   }
 
   /**
-   * 修改密码（新密码 + 确认，两者需一致）
+   * 修改密码（新密码 + 确认，两者需一致；强度规则见 lib/password）
    */
   const savePassword = async () => {
     if (!user) return
-    if (newPassword.length < 6) {
-      showNotice('error', '新密码至少 6 位')
+    const strengthError = validatePasswordStrength(newPassword)
+    if (strengthError) {
+      showNotice('error', strengthError)
       return
     }
     if (newPassword !== confirm) {
@@ -147,13 +182,7 @@ export const AccountView = () => {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="account-view">
-        <p className="account-view__loading">正在加载账户信息…</p>
-      </div>
-    )
-  }
+  const activeTab = TABS.find((t) => t.key === tab) ?? TABS[0]
 
   return (
     <div className="account-view">
@@ -167,86 +196,115 @@ export const AccountView = () => {
         <p className="account-view__desc">管理登录账号的昵称、邮箱与密码。</p>
       </header>
 
-      {/* 当前登录标识 */}
-      <div className="account-view__identity">
-        <span className="account-view__avatar">{user?.name?.slice(0, 1) || user?.email.slice(0, 1).toUpperCase()}</span>
-        <div className="account-view__identity-text">
-          <span className="account-view__identity-name">{user?.name || '未设置昵称'}</span>
-          <span className="account-view__identity-email">{user?.email}</span>
-        </div>
-      </div>
-
-      {/* 卡片一：基本资料 */}
-      <section className="account-view__card">
-        <div className="account-view__card-head">
-          <h2 className="account-view__card-title">基本资料</h2>
-          <span className="account-view__card-tag">昵称 · 邮箱</span>
-        </div>
-        <div className="account-view__field">
-          <label className="account-view__label" htmlFor="account-name">昵称</label>
-          <input
-            id="account-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="给自己起个好听的名字"
-            className="account-view__input"
-          />
-        </div>
-        <div className="account-view__field">
-          <label className="account-view__label" htmlFor="account-email">邮箱（登录账号）</label>
-          <input
-            id="account-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="account-view__input"
-          />
-        </div>
-        <div className="account-view__actions">
-          <button type="button" className="account-view__btn account-view__btn--primary" onClick={saveProfile} disabled={savingProfile}>
-            {savingProfile ? '保存中…' : '保存资料'}
+      {/* 顶部分栏导航 */}
+      <nav className="account-view__tabs" role="tablist" aria-label="账号设置分栏">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={t.key === tab}
+            className={`account-view__tab${t.key === tab ? ' account-view__tab--active' : ''}`}
+            onClick={() => switchTab(t.key)}
+          >
+            {t.label}
           </button>
-        </div>
-      </section>
+        ))}
+      </nav>
 
-      {/* 卡片二：修改密码 */}
-      <section className="account-view__card">
-        <div className="account-view__card-head">
-          <h2 className="account-view__card-title">修改密码</h2>
-          <span className="account-view__card-tag">至少 6 位</span>
-        </div>
-        <div className="account-view__field">
-          <label className="account-view__label" htmlFor="account-new-password">新密码</label>
-          <input
-            id="account-new-password"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="输入新密码"
-            className="account-view__input"
-            autoComplete="new-password"
-          />
-        </div>
-        <div className="account-view__field">
-          <label className="account-view__label" htmlFor="account-confirm-password">确认新密码</label>
-          <input
-            id="account-confirm-password"
-            type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder="再次输入新密码"
-            className="account-view__input"
-            autoComplete="new-password"
-          />
-        </div>
-        <div className="account-view__actions">
-          <button type="button" className="account-view__btn account-view__btn--primary" onClick={savePassword} disabled={savingPassword}>
-            {savingPassword ? '更新中…' : '更新密码'}
-          </button>
-        </div>
-      </section>
+      {/* 面板一：账号信息（只读标识，未来在此扩展修改头像） */}
+      {tab === 'info' && (
+        <section className="account-view__card">
+          <div className="account-view__card-head">
+            <h2 className="account-view__card-title">账号信息</h2>
+            <span className="account-view__card-tag">{activeTab.tag}</span>
+          </div>
+          <div className="account-view__identity">
+            <span className="account-view__avatar">{user ? user.name?.slice(0, 1) || user.email.slice(0, 1).toUpperCase() : '…'}</span>
+            <div className="account-view__identity-text">
+              <span className="account-view__identity-name">{user ? user.name || '未设置昵称' : '加载中…'}</span>
+              <span className="account-view__identity-email">{user ? user.email : '—'}</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 面板二：基本资料 */}
+      {tab === 'profile' && (
+        <section className="account-view__card">
+          <div className="account-view__card-head">
+            <h2 className="account-view__card-title">基本资料</h2>
+            <span className="account-view__card-tag">{activeTab.tag}</span>
+          </div>
+          <div className="account-view__field">
+            <label className="account-view__label" htmlFor="account-name">昵称</label>
+            <input
+              id="account-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="给自己起个好听的名字"
+              className="account-view__input"
+            />
+          </div>
+          <div className="account-view__field">
+            <label className="account-view__label" htmlFor="account-email">邮箱（登录账号）</label>
+            <input
+              id="account-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="account-view__input"
+            />
+          </div>
+          <div className="account-view__actions">
+            <button type="button" className="account-view__btn account-view__btn--primary" onClick={saveProfile} disabled={savingProfile || loading}>
+              {savingProfile ? '保存中…' : '保存资料'}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* 面板三：修改密码 */}
+      {tab === 'password' && (
+        <section className="account-view__card">
+          <div className="account-view__card-head">
+            <h2 className="account-view__card-title">修改密码</h2>
+            <span className="account-view__card-tag">{activeTab.tag}</span>
+          </div>
+          <p className="account-view__hint">密码要求：{PASSWORD_RULE_TEXT}。</p>
+          <div className="account-view__field">
+            <label className="account-view__label" htmlFor="account-new-password">新密码</label>
+            <input
+              id="account-new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="输入新密码"
+              className="account-view__input"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="account-view__field">
+            <label className="account-view__label" htmlFor="account-confirm-password">确认新密码</label>
+            <input
+              id="account-confirm-password"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder="再次输入新密码"
+              className="account-view__input"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="account-view__actions">
+            <button type="button" className="account-view__btn account-view__btn--primary" onClick={savePassword} disabled={savingPassword || loading}>
+              {savingPassword ? '更新中…' : '更新密码'}
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* 退出登录（侧边导航底部已提供，这里不再重复） */}
     </div>

@@ -1,4 +1,6 @@
 import type { CollectionConfig } from 'payload'
+import { APIError } from 'payload'
+import { validatePasswordStrength } from '../lib/password'
 
 /**
  * 后台管理员邮箱白名单（逗号分隔）。
@@ -42,14 +44,18 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
   },
   hooks: {
-    // 服务端密码强度校验：账号页原先只在前端判「≥6 位」，绕过前端即可写入弱密码。
+    // 服务端密码强度校验（规则与前端共用 src/lib/password.ts，防止绕过前端写入弱密码）。
+    // 必须抛 APIError 而非裸 Error：Payload 会把非 APIError 脱敏成「Something went wrong.」，
+    // 用户看不到真实原因（这正是之前改密码报 500 时提示无法直达的根源）。
     beforeValidate: [
       ({ data }) => {
         const password = (data as { password?: unknown } | undefined)?.password
         if (password === undefined || password === null || password === '') return data
-        if (typeof password !== 'string' || password.length < 8) {
-          throw new Error('密码至少 8 位')
+        if (typeof password !== 'string') {
+          throw new APIError('密码格式不正确', 400)
         }
+        const error = validatePasswordStrength(password)
+        if (error) throw new APIError(error, 400)
         return data
       },
     ],
