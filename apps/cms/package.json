@@ -6,6 +6,12 @@
   "type": "module",
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev -p 9527",
+    "pg:start": "node scripts/pg.mjs start",
+    "pg:stop": "node scripts/pg.mjs stop",
+    "pg:status": "node scripts/pg.mjs status",
+    "dev:local": "node scripts/pg.mjs start && npm run dev",
+    "dev:supabase": "node scripts/with-env.mjs .env.supabase npm run dev",
+    "payload:supabase": "node scripts/with-env.mjs .env.supabase npx payload",
     "build": "cross-env NODE_OPTIONS=--no-deprecation next build",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",

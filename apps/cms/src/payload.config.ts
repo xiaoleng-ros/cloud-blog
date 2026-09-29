@@ -197,6 +197,22 @@ const PG_SSL_INSECURE = process.env.PG_SSL_INSECURE === '1'
 const PG_SSL_STRICT = !PG_SSL_INSECURE
 
 /**
+ * 本地绿色版 PG（127.0.0.1 / localhost / ::1）默认没开 SSL。
+ * 只要 ssl 配置对象非 undefined，pg 就会坚持完成 TLS 协商（即使 URL 写 sslmode=prefer
+ * 也会直接报 "The server does not support SSL connections"），所以本机连接要把 ssl 置为 false。
+ * 若要给本地 PG 开 SSL，设 PG_LOCAL_SSL=1 走原来的严格校验分支。
+ */
+function isLocalPg(connectionString?: string): boolean {
+  if (!connectionString) return false
+  try {
+    const host = new URL(connectionString).hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  } catch {
+    return false
+  }
+}
+
+/**
  * 拼接/替换 sslmode 查询参数
  * 已有 sslmode 时替换为新值（.env.production 常写 sslmode=no-verify，严格模式需覆盖）
  * 实现：拆分 base?query 两段，重写 sslmode 参数，避免 regex 边界判断出错
@@ -218,38 +234,44 @@ function withSslMode(connectionString: string, strict: boolean): string {
 }
 
 /** 按环境变量选定的数据库适配器（构建时静态选择，两分支均打包） */
-// 连接池上限。本地 dev 直连线上 Supabase 时用的是会话池（5432），每个池连接都对应
-// 服务端的真实进程；线上 EdgeOne 与本地共用同一个库，若 dev 也开满 10 条常驻连接，
-// 很容易把库的连接预算吃掉、导致线上请求拿不到连接。因此 dev 默认压到 3，
-// 需要本地压测/并发时再显式设 PG_POOL_MAX 覆盖。
+// 连接池上限。历史原因：本地曾直连线上 Supabase 会话池（5432），每条池连接都对应
+// 服务端真实进程，dev 开满会和线上抢连接预算，所以 dev 压到 3。
+// 现在本地默认连 D:\pglocal 的绿色版 PG，不再有这个约束；上限沿用 dev 3 足够，
+// 需要本地并发压测时显式设 PG_POOL_MAX。
 const PG_POOL_MAX = (() => {
   const raw = Number(process.env.PG_POOL_MAX)
   if (Number.isFinite(raw) && raw > 0) return raw
   return IS_PRODUCTION ? 10 : 3
 })()
 
+const PG_URL = process.env.POSTGRES_URL
+const PG_IS_LOCAL = isLocalPg(PG_URL) && process.env.PG_LOCAL_SSL !== '1'
+// 本机连接不带 ssl 参数，也不强制 sslmode；远程才按严格/降级策略重写 sslmode。
+const pgConnectionString = PG_URL && !PG_IS_LOCAL ? withSslMode(PG_URL, PG_SSL_STRICT) : PG_URL
+const pgSsl: false | { rejectUnauthorized: boolean } | undefined = PG_IS_LOCAL
+  ? false
+  : PG_URL
+    ? { rejectUnauthorized: PG_SSL_STRICT }
+    : undefined
+
 const db =
   DATABASE_DRIVER === 'postgres'
     ? postgresAdapter({
         pool: {
-          connectionString: process.env.POSTGRES_URL
-            ? withSslMode(process.env.POSTGRES_URL, PG_SSL_STRICT)
-            : undefined,
-          // 默认 rejectUnauthorized=true；仅在显式 PG_SSL_INSECURE=1 时关闭校验。
-          ssl: { rejectUnauthorized: PG_SSL_STRICT },
-          // ── 连接池常驻配置（本地 dev 直连东京 Supabase 的性能关键项）──
-          // 实测：每次新建连接要跨公网完成 TCP+TLS+认证，约 1s；
-          // 而 pg 默认 10s 空闲就断开连接 → 后台停顿 10s 后的每次点击
-          // 都要重新付 ~1s 握手费，且每条查询再付 ~130ms RTT。
+          connectionString: pgConnectionString,
+          // 默认 rejectUnauthorized=true；仅在显式 PG_SSL_INSECURE=1 时关闭校验；本机连接不启用 SSL。
+          ssl: pgSsl,
+          // ── 连接池常驻配置（连远程库时是性能关键项，本机连接无所谓）──
+          // 实测跨公网连东京 Supabase：新建连接要 TCP+TLS+认证约 1s，每条查询再付 ~130ms RTT；
+          // 而 pg 默认 10s 空闲就断连 → 停顿后的每次点击都要重付握手费。
           // 关闭空闲回收 + 开启 TCP 保活，让连接建立后长期复用。
           idleTimeoutMillis: 0, // 0 = 永不因空闲回收连接（常驻连接池）
           keepAlive: true, // TCP 保活，及时探测被服务端断开的死连接
-          max: PG_POOL_MAX, // 连接池上限（见上方 PG_POOL_MAX：dev 压低以免挤占线上共用库）
+          max: PG_POOL_MAX,
         },
-        // 默认关闭 dev 模式的自动 schema push（push: false）。
-        // 原因：本地若连的是线上 Supabase，dev push 会直接改动生产库的 schema，并往
-        // payload_migrations 写入 batch=-1 的 dev 标记（会让后续 migrate 弹交互确认卡死）。
-        // 只有当本地明确要「改 schema 并同步到当前连接的库」时，才设 PAYLOAD_FORCE_PUSH=1 临时开启。
+        // 默认 push:false。本地现默认连绿色版 PG（.env 里设了 PAYLOAD_FORCE_PUSH=1，可自动同步 schema）；
+        // 连线上 Supabase 时（.env.supabase / dev:supabase）必须保持关闭 —— dev push 会直接改生产库
+        // schema，并往 payload_migrations 写 batch=-1 的 dev 标记，后续 migrate 会弹交互确认卡死。
         push: process.env.PAYLOAD_FORCE_PUSH === '1',
         // 生产环境（NODE_ENV=production）启动时自动执行未跑的迁移（按 payload_migrations 记录跳过已跑的）。
         // 背景：生产环境 Payload 永远不做 schema push（db-postgres 的 connect 只在非 production 才 push），
