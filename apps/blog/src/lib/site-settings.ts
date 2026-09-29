@@ -177,13 +177,8 @@ export async function getFooter(): Promise<FooterData> {
             { name: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg' },
             { name: 'RSS', icon: 'rss', href: '/rss.xml' },
           ],
-    groups:
-      groups.length > 0
-        ? groups
-        : [
-            { name: 'QQ 交流群', icon: 'qq', href: '' },
-            { name: '微信交流群', icon: 'wechat', href: '' },
-          ],
+    // 群组完全以后台为准：不再硬编码 QQ/微信兜底，后台清空即前台消失
+    groups,
   };
 }
 

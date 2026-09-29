@@ -42,24 +42,28 @@ const groups = footer.groups;
           {name}
         </a>
       ))}
-      <span class="site-footer__sep" aria-hidden="true"></span>
-      {groups.map(({ name, icon, href }) => (
-        href ? (
-          <a
-            href={href}
-            target={href.startsWith('http') ? '_blank' : undefined}
-            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
-          >
-            <Icon name={icon} size={15} />
-            {name}
-          </a>
-        ) : (
-          <span class="site-footer__item">
-            <Icon name={icon} size={15} />
-            {name}
-          </span>
-        )
-      ))}
+      {groups.length > 0 && (
+        <>
+          <span class="site-footer__sep" aria-hidden="true"></span>
+          {groups.map(({ name, icon, href }) => (
+            href ? (
+              <a
+                href={href}
+                target={href.startsWith('http') ? '_blank' : undefined}
+                rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+              >
+                <Icon name={icon} size={15} />
+                {name}
+              </a>
+            ) : (
+              <span class="site-footer__item">
+                <Icon name={icon} size={15} />
+                {name}
+              </span>
+            )
+          ))}
+        </>
+      )}
     </nav>
   </div>
 
