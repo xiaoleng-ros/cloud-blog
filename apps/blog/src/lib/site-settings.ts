@@ -6,6 +6,7 @@
  * 模块级缓存：整个构建/开发过程只请求一次后台。
  */
 import { fetchNavItems, fetchSiteSettings } from './payload-api';
+import { safeHref, sanitizeInlineHtml } from 'cloud-blog/shared/html-safety';
 
 /** 后台站点设置数据的结构（对应 SiteSettings Global，扁平字段） */
 export interface SiteSettingsData {
@@ -81,7 +82,8 @@ export function parseSocials(raw?: string): Array<{ platform: string; href: stri
     if (sp === -1) continue;
     const platform = trimmed.slice(0, sp).trim();
     const href = trimmed.slice(sp + 1).trim();
-    if (platform && href) out.push({ platform, href });
+    // 协议白名单：javascript:/data: 等一律变成惰性链接，不进 href
+    if (platform && href) out.push({ platform, href: safeHref(href, '#') });
   }
   return out;
 }
@@ -154,7 +156,8 @@ function parseFooterLines(raw?: string | null): FooterItem[] {
     }
     const name = trimmed.slice(0, sp).trim();
     const href = trimmed.slice(sp + 1).trim();
-    if (name) out.push({ name, icon: footerIconFor(name), href });
+    // 协议不合法时归为空串：前台本来就按「无链接 → 纯文字标签」渲染
+    if (name) out.push({ name, icon: footerIconFor(name), href: safeHref(href, '') });
   }
   return out;
 }
@@ -264,7 +267,10 @@ export async function getAboutContent(): Promise<AboutData> {
   const paragraphs = (settings?.aboutParagraphs ?? '')
     .split('\n')
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    // 这段文本在前台是 set:html（后台默认值里就有 <span class="marker-highlight">），
+    // 所以必须过一次排版白名单，把 script/事件属性这类执行载体挡掉
+    .map((s) => sanitizeInlineHtml(s));
 
   return {
     lead: settings?.aboutLead ?? '关于我',

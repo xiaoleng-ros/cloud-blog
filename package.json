@@ -15,7 +15,7 @@
     "setup": "npm install --prefix apps/blog && npm install --prefix apps/cms",
     "dev:blog": "npm run dev --prefix apps/blog",
     "dev:cms": "npm run dev --prefix apps/cms",
-    "dev:proxy": "npm run dev --prefix apps/blog -- dev:proxy",
+    "dev:proxy": "npm run dev:proxy --prefix apps/blog",
     "build:blog": "npm run build --prefix apps/blog",
     "build:cms": "npm run build --prefix apps/cms",
     "build:all": "npm run build --prefix apps/blog && npm run build --prefix apps/cms && node apps/cms/scripts/copy-blog-to-public.mjs",

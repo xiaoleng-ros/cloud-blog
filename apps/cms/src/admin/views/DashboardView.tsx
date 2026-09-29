@@ -38,7 +38,8 @@ type StatCard = {
 type RecentPost = {
   id: number
   title?: string
-  date?: string
+  /** posts 集合没有 date 字段（见 collections/Posts.ts），排序与展示只能用 createdAt */
+  createdAt?: string
   status?: string
 }
 
@@ -105,7 +106,7 @@ export const DashboardView = () => {
           fetch('/api/categories?limit=0&depth=0'),
           fetch('/api/tags?limit=0&depth=0'),
           fetch('/api/media?limit=0&depth=0'),
-          fetch('/api/posts?sort=-date&limit=5&depth=0'),
+          fetch('/api/posts?sort=-createdAt&limit=5&depth=0'),
           fetch('/api/notes?sort=-date&limit=5&depth=0'),
         ])
 
@@ -195,7 +196,7 @@ export const DashboardView = () => {
                 <li key={post.id}>
                   <Link href={`${adminRoute}/collections/posts/${post.id}`} prefetch={false} className="dashboard__list-row">
                     <span className="dashboard__list-title">{post.title || '（无标题）'}</span>
-                    <span className="dashboard__list-date">{formatDate(post.date)}</span>
+                    <span className="dashboard__list-date">{formatDate(post.createdAt)}</span>
                   </Link>
                 </li>
               ))}

@@ -24,6 +24,8 @@ import { createHighlighter } from 'shiki'
 import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs'
 import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs'
 import { createRehypeImgAttrs } from 'cloud-blog/shared/rehype-img-attrs.mjs'
+// href 协议白名单 + 关于页正文净化：与前台共用同一份实现（escapeAttr 只挡引号，挡不住 javascript:）
+import { safeHref, sanitizeInlineHtml } from 'cloud-blog/shared/html-safety'
 
 import {
   type MdEntry,
@@ -438,12 +440,12 @@ function renderHeroCard(
   socials: Array<{ href: string; icon: string; label: string }>,
 ): string {
   const socialHtml = socials
-    .map(
-      (item) =>
-        `<a class="icon-button" href="${escapeAttr(item.href)}" ${
-          item.href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''
-        } aria-label="${escapeAttr(item.label)}">${iconSvg(item.icon)}</a>`,
-    )
+    .map((item) => {
+      const link = safeHref(item.href, '#')
+      return `<a class="icon-button" href="${escapeAttr(link)}" ${
+        link.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''
+      } aria-label="${escapeAttr(item.label)}">${iconSvg(item.icon)}</a>`
+    })
     .join('')
 
   return `<span class="hero__arrow" aria-hidden="true"></span>
@@ -511,10 +513,10 @@ function renderNavLinks(
     href === '/' ? path === '/' : path.startsWith(href)
 
   return navItems
-    .map(
-      (item) =>
-        `<a href="${escapeAttr(item.href)}" class="site-nav__tag${isCurrent(item.href) ? ' is-current' : ''}" data-nav-route>${escapeHtml(item.label)}</a>`,
-    )
+    .map((item) => {
+      const href = safeHref(item.href, '#')
+      return `<a href="${escapeAttr(href)}" class="site-nav__tag${isCurrent(href) ? ' is-current' : ''}" data-nav-route>${escapeHtml(item.label)}</a>`
+    })
     .join('')
 }
 
@@ -523,13 +525,16 @@ function renderFooterInner(
   footer: { subtitle: string; channels: Array<{ name: string; icon: string; href: string }>; groups: Array<{ name: string; icon: string; href: string }> },
   author: string,
 ): string {
-  const link = (item: { name: string; icon: string; href: string }, plain = false) =>
-    plain
+  const link = (item: { name: string; icon: string; href: string }, plain = false) => {
+    // 与前台 site-settings.ts 一致：协议不合法的链接退化成空串（群组据此渲染成纯文字标签）
+    const href = safeHref(item.href, '')
+    return plain
       ? `<span class="site-footer__item">${iconSvg(item.icon, 15)}${escapeHtml(item.name)}</span>`
-      : `<a href="${escapeAttr(item.href)}" ${item.href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''}>${iconSvg(item.icon, 15)}${escapeHtml(item.name)}</a>`
+      : `<a href="${escapeAttr(href)}" ${href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''}>${iconSvg(item.icon, 15)}${escapeHtml(item.name)}</a>`
+  }
 
   const channelsHtml = footer.channels.map((c) => link(c)).join('')
-  const groupsHtml = footer.groups.map((g) => (g.href ? link(g) : link(g, true))).join('')
+  const groupsHtml = footer.groups.map((g) => (safeHref(g.href, '') ? link(g) : link(g, true))).join('')
 
   return `<div class="site-footer__id">
     <img src="/avatars/avatar.png" alt="${escapeAttr(author)}" class="site-footer__avatar" width="40" height="40" />
@@ -960,6 +965,9 @@ function getAboutData(settings: Record<string, any> | null): AboutData {
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
+    // 关于页正文在两条链路里都是「原样 HTML」（前台 set:html / 这里拼字符串），
+    // 过一次排版白名单，保证 script / on* 属性这类执行载体两边都存活不了
+    .map((s) => sanitizeInlineHtml(s))
   return {
     lead: settings?.aboutLead ?? '关于我',
     paragraphs:
@@ -1085,16 +1093,19 @@ function renderProject(item: ProjectEntry): string {
   const tagsHtml = (item.tags ?? [])
     .map((t) => `<small>${escapeHtml(t)}</small>`)
     .join('')
-  const noteHtml = item.articleHref
-    ? `<a class="proj__note" href="${escapeAttr(item.articleHref)}">笔记${iconSvg('arrow-right', 13)}</a>`
+  // 项目链接同样是后台自由填写：与前台 fetchProjects 用同一套协议白名单
+  const articleHref = safeHref(item.articleHref, '')
+  const noteHtml = articleHref
+    ? `<a class="proj__note" href="${escapeAttr(articleHref)}">笔记${iconSvg('arrow-right', 13)}</a>`
     : ''
+  const projectHref = safeHref(item.href, '#')
   return `<article class="proj">
   <span class="proj__icon">${iconSvg(item.icon, 18)}</span>
   <div class="proj__body">
     <span class="proj__owner">${escapeHtml(item.owner ?? '')}${starsHtml}</span>
     <h3 class="proj__title">
-      <a href="${escapeAttr(item.href ?? '#')}"${
-        item.href && item.href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : ''
+      <a href="${escapeAttr(projectHref)}"${
+        projectHref.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : ''
       }>
         ${escapeHtml(item.title)}${iconSvg('arrow-up-right', 16, 'proj__go')}
       </a>
@@ -1305,6 +1316,24 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
  * 与当前一致，直接返回缓存（零渲染）。否则渲染一次并写回区块缓存。afterChange 钩子
  * 会清除缓存，使下一次请求重新渲染最新数据。
  */
+/**
+ * 历史链接 /posts/{id}/ → 现行规范路径 /posts/{分类名}/{id}/。
+ *
+ * Astro 静态输出（无 adapter）不会执行 getStaticPaths 里的 redirect，所以旧链接在
+ * 构建产物中是一份完整页面；真正的 301 只能由「实际负责返回 HTML 的这一层」来做。
+ * @returns 命中旧链接形态时返回规范路径，其余情况返回 null
+ */
+export async function resolveLegacyPostPath(pathname: string): Promise<string | null> {
+  const matched = /^\/posts\/([^/]+)\/?$/.exec(pathname)
+  if (!matched) return null
+  const id = decodeURIComponent(matched[1])
+  // 现行形态是两段（分类名 + ID），单段且全是数字的才可能是旧链接
+  if (!/^\d+$/.test(id)) return null
+  const snapshot = await getSyncData()
+  const post = snapshot.posts.find((entry) => String(entry.id) === id)
+  return post ? getPostPath(post) : null
+}
+
 export async function renderBlocksForPathname(pathname: string): Promise<{
   version: string
   title: string | null

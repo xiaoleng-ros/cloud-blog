@@ -13,6 +13,7 @@
  */
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
+import { safeHref } from 'cloud-blog/shared/html-safety';
 
 /**
  * 后台地址解析优先级：
@@ -204,6 +205,28 @@ function basenameOfUrl(url: string): string {
 }
 
 /**
+ * 各数据源的「变更指纹」（来自后台 /api/blog-sync?digest=1），值形如 "12:1758000000000"
+ * （条数 : 该源最大 updatedAt）。loader 每轮先比这个，再决定要不要重拉全量正文。
+ */
+export interface SyncDigests {
+  version: string
+  digests?: Record<string, string>
+}
+
+/**
+ * 轻量探测各数据源指纹（<1KB，命中后台快照缓存时零查库、不渲染区块）。
+ * 失败时返回 null，由调用方退回「无条件重拉全量」的旧行为。
+ */
+export async function fetchSyncDigest(timeoutMs = 8000): Promise<SyncDigests | null> {
+  try {
+    return await fetchJson<SyncDigests>('/api/blog-sync?digest=1', timeoutMs);
+  } catch (error) {
+    console.warn(`[payload-api] 指纹探测失败: ${(error as Error).message}`);
+    return null;
+  }
+}
+
+/**
  * 拉取 Media 集合的 url → alt 映射，供前台 Markdown 正文图片补 alt。
  *
  * 说明：Astro 构建期把 altMap 注入 rehype-img-attrs.mjs 的全局变量，
@@ -278,16 +301,17 @@ export async function fetchNotes(): Promise<MdEntry[]> {
     // 随笔同样区分草稿/已发布，前台只展示已发布
     .filter((doc) => doc.status === 'published')
     .map((doc) => ({
-      // 与本地文件命名一致：日期作为唯一 id
-      id: String(doc.date).slice(0, 10),
-    data: {
-      date: doc.date,
-      title: doc.title ?? undefined,
-      mood: doc.mood ?? undefined,
-      tags: namesOf(doc.tags),
-    },
-    body: doc.content ?? '',
-  }));
+      // 日期前 10 位保持与本地 markdown 文件命名一致，再拼接后台文档 id：
+      // 只用日期时同一天的多条随笔会共用同一个 id，后进 store 的会静默覆盖前一条
+      id: `${String(doc.date).slice(0, 10)}-${doc.id}`,
+      data: {
+        date: doc.date,
+        title: doc.title ?? undefined,
+        mood: doc.mood ?? undefined,
+        tags: namesOf(doc.tags),
+      },
+      body: doc.content ?? '',
+    }));
 }
 
 /** 站点设置（来自后台 Global 单例）；不可用时返回 null */
@@ -312,7 +336,8 @@ function parseNavLines(text?: string | null): Array<{ href: string; label: strin
     if (sp === -1) continue
     const label = trimmed.slice(0, sp).trim()
     const href = trimmed.slice(sp + 1).trim()
-    if (label && href) out.push({ href, label })
+    // 协议白名单：javascript: 之类的导航项退化成惰性链接，不进 href
+    if (label && href) out.push({ href: safeHref(href, '#'), label })
   }
   return out
 }
@@ -343,8 +368,10 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
       owner: doc.owner ?? undefined,
       description: doc.description ?? undefined,
       icon: doc.icon ?? 'github',
-      href: doc.href ?? undefined,
-      articleHref: doc.articleHref ?? undefined,
+      // 两个链接字段都是后台自由填写，过一次协议白名单：
+      // href 不合法退化成惰性 '#'，articleHref 不合法退化成 ''（前台据此整条「笔记」链接不渲染）
+      href: safeHref(doc.href, '#'),
+      articleHref: safeHref(doc.articleHref, ''),
       stars: Number(doc.stars ?? 0),
       tags: linesOf(doc.tags),
       sortOrder: Number(doc.sortOrder ?? 0),

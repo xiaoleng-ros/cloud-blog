@@ -327,6 +327,10 @@ export const users = pgTable(
   {
     id: serial("id").primaryKey(),
     name: varchar("name"),
+    feishu_openId: varchar("feishu_open_id"),
+    feishu_unionId: varchar("feishu_union_id"),
+    feishu_name: varchar("feishu_name"),
+    feishu_avatar: varchar("feishu_avatar"),
     updatedAt: timestamp("updated_at", {
       mode: "string",
       withTimezone: true,

@@ -12,6 +12,7 @@ import {
   getPostCover,
   getPostDescription,
   getPostPath,
+  getPostPathParams,
   getPostTags,
   getPostUpdatedDate,
   getReadingMinutes,
@@ -23,13 +24,25 @@ import {
 export async function getStaticPaths() {
   const posts = sortPosts(await getCollection('posts'));
 
-  return posts.map((post) => ({
-    params: { slug: post.id },
-    props: { post },
-  }));
+  // 规范 URL 是 getPostPath() 产出的 /posts/{分类名}/{id}/ —— sitemap、RSS、canonical、
+  // CMS 侧渲染全部按这个形态引用；这里额外保留历史 /posts/{id}/ 入口并 301 过去，
+  // 否则旧链接（以及已被搜索引擎收录的地址）会全部 404。
+  return [
+    ...posts.map((post) => ({
+      params: { slug: getPostPathParams(post) },
+      props: { post },
+    })),
+    ...posts.map((post) => ({
+      params: { slug: String(post.id) },
+      // 静态产物里旧地址仍然是一份完整页面（redirect 只在有 adapter 时生效），
+      // 所以同时把 canonical 指向新形态；真 301 由 CMS 的 catch-all 路由负责。
+      props: { post, canonicalPath: getPostPath(post) },
+      redirect: { to: getPostPath(post), status: 301 as const },
+    })),
+  ];
 }
 
-const { post } = Astro.props;
+const { post, canonicalPath } = Astro.props;
 const posts = sortPosts(await getCollection('posts'));
 const { Content, headings } = await render(post);
 const category = getPostCategory(post);
@@ -79,6 +92,7 @@ const articleSchema = {
   image={cover}
   type="article"
   jsonLd={articleSchema}
+  canonicalPath={canonicalPath}
   articleMeta={{
     ...(post.data.date ? { publishedTime: post.data.date.toISOString() } : {}),
     ...(updatedDate ? { modifiedTime: updatedDate.toISOString() } : {}),

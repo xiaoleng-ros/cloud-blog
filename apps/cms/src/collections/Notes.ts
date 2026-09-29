@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { publishedOnlyForAnonymous } from '../lib/access'
 import { syncInvalidateHook } from '../lib/sync-cache'
 
 /** 随笔集合：对齐前台 src/content/notes/*.md */
@@ -18,7 +19,8 @@ export const Notes: CollectionConfig = {
     plural: '随笔',
   },
   access: {
-    read: () => true,
+    // 草稿不可匿名读取（见 lib/access）
+    read: publishedOnlyForAnonymous,
   },
   hooks: {
     afterChange: [syncInvalidateHook],

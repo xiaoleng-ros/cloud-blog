@@ -80,7 +80,8 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   const [content, setContent] = useState('')
   const [meta, setMeta] = useState<Partial<PublishMeta>>({})
   const [loading, setLoading] = useState(false)
-  const [publishOpen, setPublishOpen] = useState(false)
+  // 元信息弹窗：null=关闭，'publish'=发布弹窗，'draft'=仅为存草稿补选分类/元信息
+  const [modal, setModal] = useState<null | 'publish' | 'draft'>(null)
   const [publishSaving, setPublishSaving] = useState(false)
   // 操作提示（存草稿结果 / 自动保存状态）
   const [saveTip, setSaveTip] = useState('')
@@ -223,25 +224,37 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   }, [])
 
   // 存草稿：POST（新建）/ PATCH（更新），status=draft
-  const saveDraft = useCallback(async () => {
+  // overrides：来自元信息弹窗的字段（首次存草稿时必须先选分类，见下），合并进 meta 再提交
+  const saveDraft = useCallback(async (overrides?: Partial<PublishMeta>) => {
     if (!content.trim()) {
       setSaveTip('请输入内容')
       setTimeout(() => setSaveTip(''), 2000)
       return
     }
+    const m: Partial<PublishMeta> = { ...meta, ...overrides }
+    // 分类字段在数据库里是 NOT NULL（同时决定文章 URL 的「分类名/ID」），
+    // 没选过分类的新文档直接提交必然 400，所以这里先弹出元信息弹窗补选一次
+    if (!m.categoryIds?.length) {
+      setModal('draft')
+      setSaveTip('请先选择文章分类（决定文章链接）')
+      setTimeout(() => setSaveTip(''), 2500)
+      return
+    }
+    setModal(null)
+    setMeta(m)
     setLoading(true)
     try {
       // 标题为空时自动命名（新建草稿才生成，编辑保留原标题为空则自动生成一次）
-      const titleValue = meta.title?.trim() || defaultDraftTitle()
+      const titleValue = m.title?.trim() || defaultDraftTitle()
       const payload = buildPayload(collection, {
         title: titleValue,
-        description: meta.description ?? '',
-        cover: meta.cover ?? '',
-        sticky: meta.sticky ?? 0,
-        mood: meta.mood ?? '',
-        date: meta.date ?? new Date().toISOString().slice(0, 10),
-        categoryIds: meta.categoryIds ?? [],
-        tagIds: meta.tagIds ?? [],
+        description: m.description ?? '',
+        cover: m.cover ?? '',
+        sticky: m.sticky ?? 0,
+        mood: m.mood ?? '',
+        date: m.date ?? new Date().toISOString().slice(0, 10),
+        categoryIds: m.categoryIds ?? [],
+        tagIds: m.tagIds ?? [],
         content,
         status: 'draft',
       })
@@ -284,6 +297,9 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   // 发布：提交 status=published，成功后跳转对应管理列表
   const publish = async (m: PublishMeta) => {
     setPublishSaving(true)
+    // 先把弹窗里的元信息并回 meta：发布失败时（例如后台校验不过）用户接着「存草稿」
+    // 不应该因为 categoryIds 仍为空又被要求重选一次
+    setMeta((prev) => ({ ...prev, ...m }))
     try {
       const payload = buildPayload(collection, {
         title: m.title || meta.title || '',
@@ -304,7 +320,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
       }
       clearLocal()
       dirtyRef.current = false
-      setPublishOpen(false)
+      setModal(null)
       // 整页跳转到管理列表，保证列表数据刷新
       window.location.assign(`${adminRoute}/collections/${collection}`)
     } catch (error) {
@@ -329,7 +345,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
           <button
             type="button"
             className="compose__btn compose__btn--primary"
-            onClick={() => setPublishOpen(true)}
+            onClick={() => setModal('publish')}
             disabled={loading}
           >
             🚀 发布
@@ -363,14 +379,20 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
         <MarkdownEditor value={content} onChange={setContent} label="正文内容（Markdown）" />
       </div>
 
-      {publishOpen && (
+      {modal && (
         <PublishModal
           collection={collection}
+          mode={modal}
           initial={meta}
-          saving={publishSaving}
-          onCancel={() => setPublishOpen(false)}
+          saving={modal === 'draft' ? loading : publishSaving}
+          onCancel={() => setModal(null)}
           onConfirm={async (m) => {
-            await publish(m)
+            // 'draft' 模式只为补元信息（尤其是必填的分类），确认后直接落草稿
+            if (modal === 'draft') {
+              await saveDraft(m)
+            } else {
+              await publish(m)
+            }
           }}
         />
       )}

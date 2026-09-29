@@ -177,6 +177,9 @@ export interface Post {
 export interface Category {
   id: number;
   name: string;
+  /**
+   * 仅用于导入脚本等内部标识；前台文章 URL 用的是「分类名称」，不是这一项。
+   */
   slug?: string | null;
   updatedAt: string;
   createdAt: string;
@@ -188,6 +191,9 @@ export interface Category {
 export interface Tag {
   id: number;
   name: string;
+  /**
+   * 仅用于导入脚本等内部标识；前台标签页 URL 用的是「标签名称」，不是这一项。
+   */
   slug?: string | null;
   updatedAt: string;
   createdAt: string;
@@ -276,6 +282,18 @@ export interface Project {
 export interface User {
   id: number;
   name?: string | null;
+  /**
+   * 飞书扫码登录时使用的账号绑定。填入你自己的飞书 open_id 后，即可通过飞书扫码登入本账号；忘记密码时用它兜底。
+   */
+  feishu?: {
+    /**
+     * 飞书租户内的用户 ID（形如 ou_xxxxxxxxxx）
+     */
+    openId?: string | null;
+    unionId?: string | null;
+    name?: string | null;
+    avatar?: string | null;
+  };
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -486,6 +504,14 @@ export interface ProjectsSelect<T extends boolean = true> {
  */
 export interface UsersSelect<T extends boolean = true> {
   name?: T;
+  feishu?:
+    | T
+    | {
+        openId?: T;
+        unionId?: T;
+        name?: T;
+        avatar?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   email?: T;

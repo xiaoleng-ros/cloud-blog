@@ -9,6 +9,7 @@ import path from 'path'
 import { buildConfig } from 'payload'
 import type { Plugin } from 'payload'
 import { fileURLToPath } from 'url'
+import { randomBytes } from 'crypto'
 import sharp from 'sharp'
 
 import { Categories } from './collections/Categories'
@@ -90,69 +91,83 @@ const plugins: Plugin[] =
     : []
 
 /**
- * PAYLOAD_SECRET 处理策略（生产环境安全 vs. 云端容错）：
+ * PAYLOAD_SECRET 处理策略（生产 fail-fast vs. 本地零配置）：
  *
- *  历史教训：此处曾经用模块顶层 throw 强校验，导致 EdgeOne 云端一旦缺环境变量
- *  整个模块 import 就炸，Next.js 把 LayoutRouter children 静默降级为 null，
- *  前端拿到 `16:null` 后 InnerLayoutRouter 无限挂起，用户看到的是零报错白屏，
- *  极难排查。因此默认不再 throw，改为「缺失时回落到固定 dev 密钥 + 打警告」。
+ *  历史教训：此处用模块顶层 throw 强校验时，EdgeOne 云端缺变量会让整个模块
+ *  import 就炸，Next.js 把 LayoutRouter children 静默降级为 null，
+ *  前端拿到 `16:null` 后 InnerLayoutRouter 无限挂起，用户看到的是零报错白屏。
+ *  所以生产 throw 之外**额外**显式 process.exit(1)：让进程以非零码退出、
+ *  由平台记录崩溃原因（ fail-fast 且可见），而不是留一个静默白屏。
  *
- *  安全加固（P0-1）：
- *   1) 默认行为保留兜底（避免部署失败），但一旦回落，生产环境打 ERROR 级别日志
- *      并输出明显横幅，让 SRE 第一时间发现配置漏配。
- *   2) 新增环境变量 `PAYLOAD_REQUIRE_SECRET=1`：部署环境显式开启后，
- *      缺失/过短/含 change-in-production 都会 throw —— 用于灰度切到强校验。
- *   3) 即使未启用强校验，也校验长度和占位特征，避免用户误把
- *      .env.example 里的 "please-change-me" 抄进生产。
+ *  策略（P0-1 收紧）：
+ *   1) 生产（NODE_ENV=production）：PAYLOAD_SECRET 必填且需通过强度校验，否则退出。
+ *      不再存在「静默回落」路径 —— 之前的固定兜底串已入仓泄露，等同于公开密钥。
+ *   2) 本地/测试：缺失时回落到**运行时随机**密钥（仓库里不留任何固定串），
+ *      并打出横幅提示「重启即失效，登录态会丢」。
+ *   3) PAYLOAD_REQUIRE_SECRET=1：让本地也走生产级硬校验（用于 CI 演练）。
+ *   4) 无论是否回落，都会校验长度与占位特征（change-in-production / please-change-me），
+ *      避免把 .env.example 的占位值抄进生产。
  *
  *  正确做法：在 EdgeOne 控制台 / 部署环境里显式配置 PAYLOAD_SECRET
- *  （建议长度 >= 48 的随机字符串）；本地开发则继续走 .env.production。
+ *  （建议长度 >= 48 的随机字符串）；本地开发可留空。
  */
-const PAYLOAD_SECRET_FALLBACK = 'clay-blog-dev-secret-key-2026-random-string-change-in-production'
 const MIN_SECRET_LENGTH = 32
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const REQUIRE_SECRET = process.env.PAYLOAD_REQUIRE_SECRET === '1'
 const providedSecret = process.env.PAYLOAD_SECRET
 
+/** 历史上曾硬编码进仓库的兜底密钥，等同公开值，任何环境都不得再使用 */
+const LEGACY_LEAKED_SECRET = 'clay-blog-dev-secret-key-2026-random-string-change-in-production'
+
 /** 判断给定 secret 是否"看起来像默认占位值"（含 change-in-production / please-change-me 等关键词） */
 const isPlaceholderSecret = (value: string) =>
+  value === LEGACY_LEAKED_SECRET ||
   /change-in-production|please-change-me|xxxx|test-secret/i.test(value)
 
 /** 校验 secret 是否符合生产要求，返回首个错误原因；null 表示通过 */
 const validateSecret = (value: string): string | null => {
   if (!value) return '未配置'
+  if (value === LEGACY_LEAKED_SECRET) return '仍在使用已泄露入仓的旧兜底密钥，请在部署平台轮换 PAYLOAD_SECRET'
   if (isPlaceholderSecret(value)) return '使用了默认占位值（不能包含 change-in-production / please-change-me）'
   if (value.length < MIN_SECRET_LENGTH) return `长度不足（当前 ${value.length}，至少 ${MIN_SECRET_LENGTH}）`
   return null
 }
 
-const strictError = (reason: string) =>
-  new Error(`[payload] PAYLOAD_SECRET ${reason}。请通过环境变量配置有效密钥；若需临时兜底，请移除 PAYLOAD_REQUIRE_SECRET。`)
+const secretProblem = validateSecret(providedSecret ?? '')
+const mustHardFail = IS_PRODUCTION || REQUIRE_SECRET
 
-if (REQUIRE_SECRET) {
-  // 强校验模式：缺失/无效直接抛错，用于生产灰度
-  const err = validateSecret(providedSecret ?? '')
-  if (err) throw strictError(err)
+if (secretProblem && mustHardFail) {
+  const banner = '='.repeat(64)
+  console.error(`\n${banner}`)
+  console.error('[payload] PAYLOAD_SECRET 不可用，拒绝启动')
+  console.error(`[payload]   原因：${secretProblem}`)
+  console.error('[payload]   修复：在部署平台配置 PAYLOAD_SECRET（>= 32 字符随机字符串）。')
+  console.error(`${banner}\n`)
+  // 顶层 throw 在 RSC import 上下文里可能被 Next 吞成静默白屏，
+  // 因此下一拍强制退出，让平台侧能看到明确的崩溃原因。
+  setTimeout(() => process.exit(1), 0)
+  throw new Error(`[payload] PAYLOAD_SECRET ${secretProblem}`)
 }
 
-const payloadSecret = providedSecret || PAYLOAD_SECRET_FALLBACK
+/** 非生产环境的兜底：每次进程启动随机生成，仓库内不保留任何固定密钥串 */
+const ephemeralSecret = randomBytes(32).toString('hex')
+const payloadSecret = providedSecret || ephemeralSecret
 const usingFallback = !providedSecret
-const usingWeakSecret = !!providedSecret && validateSecret(providedSecret) !== null
+const usingWeakSecret = !!providedSecret && secretProblem !== null
 
 if (usingFallback || usingWeakSecret) {
-  // 生产环境打 ERROR，日志聚合平台（Datadog / Sentry / 云日志）能识别为异常
-  const level = IS_PRODUCTION ? console.error : console.warn
   const banner = '='.repeat(64)
+  const level = console.warn
   level(`\n${banner}`)
   level('[payload] ⚠⚠ PAYLOAD_SECRET 不安全配置 ⚠⚠')
   if (usingFallback) {
-    level('[payload]   原因：未提供 PAYLOAD_SECRET，回落到内置兜底密钥。')
+    level('[payload]   原因：未提供 PAYLOAD_SECRET，已回落到运行时随机密钥。')
+    level('[payload]   影响：密钥仅在内存中，进程重启即更换 —— 已签发的登录态全部失效。')
   } else if (usingWeakSecret) {
-    level(`[payload]   原因：${validateSecret(providedSecret ?? '')}`)
+    level(`[payload]   原因：${secretProblem}`)
   }
-  level('[payload]   影响：攻击者可伪造 admin cookie 绕过登录，生产环境不可接受。')
-  level('[payload]   修复：在部署平台配置真实密钥（>= 32 字符随机字符串），')
-  level('[payload]         并设置 PAYLOAD_REQUIRE_SECRET=1 强制校验。')
+  level('[payload]   注意：生产环境（NODE_ENV=production）不再允许上述回落，会直接退出。')
+  level('[payload]   本地演练生产校验：设置 PAYLOAD_REQUIRE_SECRET=1。')
   level(`${banner}\n`)
 }
 
@@ -168,16 +183,18 @@ if (usingFallback || usingWeakSecret) {
 const DATABASE_DRIVER = process.env.DATABASE_DRIVER || 'sqlite'
 
 /**
- * Postgres SSL 策略（P0-2）：
+ * Postgres SSL 策略（P0-2，默认改为严格）：
  *
- *   默认（未设置 PG_SSL_STRICT）：使用 sslmode=no-verify，EdgeOne 出口网络
- *   存在 TLS 中间人拦截（自签证书链），关闭校验才能连通；连接本身仍是 TLS 加密。
+ *   默认（未设置任何开关）：sslmode=prefer + rejectUnauthorized=true。
+ *   安全默认值不能选宽松的一侧 —— 不校验证书时，EdgeOne↔Supabase 之间的
+ *   数据库凭据与文章正文可被 TLS 中间人截获。
  *
- *   显式 PG_SSL_STRICT=1：切换为 sslmode=prefer + rejectUnauthorized=true，
- *   生产环境应开启此项，避免中间人攻击。若严格模式连通失败，说明上游还没
- *   提供有效 CA 链，应先解决再切严格。
+ *   显式 PG_SSL_INSECURE=1：降级为 sslmode=no-verify + rejectUnauthorized=false。
+ *   仅用于已知存在自签证书链拦截、且暂时无法拿到有效 CA 的连通性兜底；
+ *   上游提供有效 CA 链后应立刻移除该变量回到默认。
  */
-const PG_SSL_STRICT = process.env.PG_SSL_STRICT === '1'
+const PG_SSL_INSECURE = process.env.PG_SSL_INSECURE === '1'
+const PG_SSL_STRICT = !PG_SSL_INSECURE
 
 /**
  * 拼接/替换 sslmode 查询参数
@@ -201,6 +218,16 @@ function withSslMode(connectionString: string, strict: boolean): string {
 }
 
 /** 按环境变量选定的数据库适配器（构建时静态选择，两分支均打包） */
+// 连接池上限。本地 dev 直连线上 Supabase 时用的是会话池（5432），每个池连接都对应
+// 服务端的真实进程；线上 EdgeOne 与本地共用同一个库，若 dev 也开满 10 条常驻连接，
+// 很容易把库的连接预算吃掉、导致线上请求拿不到连接。因此 dev 默认压到 3，
+// 需要本地压测/并发时再显式设 PG_POOL_MAX 覆盖。
+const PG_POOL_MAX = (() => {
+  const raw = Number(process.env.PG_POOL_MAX)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return IS_PRODUCTION ? 10 : 3
+})()
+
 const db =
   DATABASE_DRIVER === 'postgres'
     ? postgresAdapter({
@@ -208,9 +235,16 @@ const db =
           connectionString: process.env.POSTGRES_URL
             ? withSslMode(process.env.POSTGRES_URL, PG_SSL_STRICT)
             : undefined,
-          // 生产建议 rejectUnauthorized=true（配合 PG_SSL_STRICT=1）；
-          // 默认保留 false 以兼容 EdgeOne TLS 拦截。
+          // 默认 rejectUnauthorized=true；仅在显式 PG_SSL_INSECURE=1 时关闭校验。
           ssl: { rejectUnauthorized: PG_SSL_STRICT },
+          // ── 连接池常驻配置（本地 dev 直连东京 Supabase 的性能关键项）──
+          // 实测：每次新建连接要跨公网完成 TCP+TLS+认证，约 1s；
+          // 而 pg 默认 10s 空闲就断开连接 → 后台停顿 10s 后的每次点击
+          // 都要重新付 ~1s 握手费，且每条查询再付 ~130ms RTT。
+          // 关闭空闲回收 + 开启 TCP 保活，让连接建立后长期复用。
+          idleTimeoutMillis: 0, // 0 = 永不因空闲回收连接（常驻连接池）
+          keepAlive: true, // TCP 保活，及时探测被服务端断开的死连接
+          max: PG_POOL_MAX, // 连接池上限（见上方 PG_POOL_MAX：dev 压低以免挤占线上共用库）
         },
         // 默认关闭 dev 模式的自动 schema push（push: false）。
         // 原因：本地若连的是线上 Supabase，dev push 会直接改动生产库的 schema，并往
@@ -243,10 +277,15 @@ export default buildConfig({
     components: {
       // 自定义侧边栏导航：一级分组（总览/创作/管理/系统）+ 二级菜单
       Nav: '/src/admin/components/CustomNav.tsx#CustomNav',
+      // 登录页插槽：在账号密码表单上方插入「飞书扫码登录」入口
+      // 用于忘记密码兜底场景，也可作为日常登录备选
+      beforeLogin: ['/src/admin/components/FeishuLoginLink.tsx#FeishuLoginLink'],
       // 替换 Payload 默认 Logo / Icon 为云字图
       graphics: {
         Logo: '/src/admin/components/CloudGraphics.tsx#CloudLogo',
       },
+      // 东方云主题登录页注入器（品牌文案 / 视差 / 按钮改写）
+      providers: ['/src/admin/components/LoginBrand.tsx#LoginBrand'],
       views: {
         // 自定义仪表盘：统计卡片 + 最近内容（数据来自 Payload REST API）
         dashboard: {

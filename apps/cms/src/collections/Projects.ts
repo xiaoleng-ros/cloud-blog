@@ -1,5 +1,13 @@
 import type { CollectionConfig } from 'payload'
+import { publishedOnlyForAnonymous } from '../lib/access'
 import { syncInvalidateHook } from '../lib/sync-cache'
+import { isSafeHref } from 'cloud-blog/shared/html-safety'
+
+/** 链接字段入库校验：把 javascript:/data: 这类协议挡在数据库外（前台两条渲染链路另有白名单兜底） */
+const validateHref = (value?: string | null) => {
+  if (!value || isSafeHref(value)) return true
+  return '链接协议不被允许，请填写 http(s)/mailto/tel 链接或站内相对路径'
+}
 
 /**
  * 关于页项目集合
@@ -21,7 +29,8 @@ export const Projects: CollectionConfig = {
     plural: '项目',
   },
   access: {
-    read: () => true,
+    // 草稿不可匿名读取（见 lib/access）
+    read: publishedOnlyForAnonymous,
   },
   hooks: {
     afterChange: [syncInvalidateHook],
@@ -55,8 +64,14 @@ export const Projects: CollectionConfig = {
         description: '与前台 Icon 组件一致的图标名，如 github / download / globe / wechat。',
       },
     },
-    { name: 'href', type: 'text', label: '链接 URL' },
-    { name: 'articleHref', type: 'text', label: '相关文章链接', admin: { position: 'sidebar' } },
+    { name: 'href', type: 'text', label: '链接 URL', validate: validateHref },
+    {
+      name: 'articleHref',
+      type: 'text',
+      label: '相关文章链接',
+      admin: { position: 'sidebar' },
+      validate: validateHref,
+    },
     { name: 'stars', type: 'number', label: 'Star 数', admin: { position: 'sidebar' } },
     {
       name: 'tags',

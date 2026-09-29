@@ -1,3 +1,6 @@
+/* @import 必须位于所有规则之前，加载仙气感中文字体（失败时使用本地楷体兜底） */
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=LXGW+WenKai&display=swap');
+
 /* ====================================================================================
    Payload 后台主题：手账涂鸦风（Doodle Journal）
    配色与 cloud-blog/src/styles/global.css 保持一致：
@@ -1780,3 +1783,2169 @@ html[data-theme='dark'] .nav__brand-logo {
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* ====================================================================
+   登录页：手账涂鸦风装饰 + 入场动画 + 聚焦微交互
+   纯 CSS，不改动 Payload 内部组件；作用域限定在 section.template-minimal.login
+   下，不影响其他后台页面。
+   DOM 结构（Payload 3.88）：
+     section.template-minimal.login
+       div.template-minimal__wrap
+         div.login__brand > svg.graphic-logo
+         (beforeLogin 插槽)
+         form.form.login__form
+           div.login__form__inputWrap
+             div.field-type.email > label.field-label + div.field-type__wrap > input
+             div.field-type.password > label.field-label + div.field-type__wrap > div > input
+           a[href="/admin/auth/forgot-password"]
+           div.form-submit > button.btn.btn--style-primary[type=submit]
+         (afterLogin 插槽)
+   ==================================================================== */
+
+/* ---------- 关键帧动画 ---------- */
+@keyframes cloud-login-bg-drift {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  50%  { transform: translate(6px, -10px) rotate(2deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes cloud-login-bg-drift-reverse {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  50%  { transform: translate(-8px, 8px) rotate(-3deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes cloud-login-twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(1) rotate(0deg); }
+  50%      { opacity: 0.95; transform: scale(1.25) rotate(20deg); }
+}
+
+@keyframes cloud-login-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cloud-login-slide-up {
+  from { opacity: 0; transform: translateY(24px) rotate(-0.6deg); }
+  to   { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+@keyframes cloud-login-input-enter {
+  from { opacity: 0; transform: translateX(-16px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes cloud-login-btn-glow {
+  0%, 100% { box-shadow: 3px 4px 0 rgba(168, 50, 79, 0.28), 0 0 0 rgba(232, 90, 122, 0.20); }
+  50%      { box-shadow: 3px 4px 0 rgba(168, 50, 79, 0.28), 0 0 22px rgba(232, 90, 122, 0.55); }
+}
+
+@keyframes cloud-login-logo-float {
+  0%, 100% { transform: translateY(0); filter: drop-shadow(0 4px 0 rgba(61, 49, 36, 0.14)); }
+  50%      { transform: translateY(-6px); filter: drop-shadow(0 10px 0 rgba(232, 90, 122, 0.35)); }
+}
+
+@keyframes cloud-login-wiggle {
+  0%, 100% { transform: rotate(-1deg); }
+  50%      { transform: rotate(1deg); }
+}
+
+/* ---------- 页面背景层：section.template-minimal.login 就是登录页根 ---------- */
+section.template-minimal.login {
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 18% 12%, rgba(255, 223, 176, 0.35), transparent 45%),
+    radial-gradient(ellipse at 82% 84%, rgba(201, 240, 242, 0.42), transparent 50%),
+    radial-gradient(ellipse at 78% 22%, rgba(255, 217, 226, 0.35), transparent 45%),
+    radial-gradient(ellipse at 15% 88%, rgba(230, 220, 255, 0.40), transparent 50%),
+    var(--theme-elevation-0, #fffdf4);
+}
+
+/* 顶/底装饰虚线（锚在页面根上） */
+section.template-minimal.login::before,
+section.template-minimal.login::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+
+section.template-minimal.login::before {
+  left: 5%;
+  right: 5%;
+  top: 3.6rem;
+  height: 0;
+  border-top: 2px dashed rgba(120, 98, 56, 0.22);
+  animation: cloud-login-fade-in 900ms ease-out both;
+}
+
+section.template-minimal.login::after {
+  left: 5%;
+  right: 5%;
+  bottom: 3.2rem;
+  height: 0;
+  border-bottom: 2px dashed rgba(120, 98, 56, 0.22);
+  animation: cloud-login-fade-in 900ms ease-out 200ms both;
+}
+
+/* wrap 让内容居上，装饰层浮在两侧 */
+section.template-minimal.login .template-minimal__wrap {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4.5rem 1.2rem 3.5rem;
+}
+
+/* ---------- 装饰：四角涂鸦元素挂在品牌容器与表单容器上 ----------
+   .login__brand 与 .login__form 都没有 position，其伪元素的绝对定位会
+   向上冒泡到 section.template-minimal.login（最近的 positioned 祖先），
+   因此 top/left/bottom/right 都以整个登录页为基准。 */
+
+/* 左上角漂浮云朵 */
+section.template-minimal.login .login__brand::before {
+  content: '';
+  position: absolute;
+  top: 6%;
+  left: 6%;
+  width: 10rem;
+  height: 4.8rem;
+  background:
+    radial-gradient(circle at 28% 55%, #fffdf4 42%, transparent 44%),
+    radial-gradient(circle at 55% 44%, #fffdf4 50%, transparent 52%),
+    radial-gradient(circle at 78% 58%, #fffdf4 40%, transparent 42%);
+  filter: drop-shadow(2px 3px 0 rgba(120, 98, 56, 0.16));
+  animation: cloud-login-bg-drift 9s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.75;
+}
+
+/* 右上角多色小星星（一个 4px 圆点 + 一串 box-shadow 复刻多枚星星） */
+section.template-minimal.login .login__brand::after {
+  content: '';
+  position: absolute;
+  top: 10%;
+  right: 10%;
+  width: 5px;
+  height: 5px;
+  background: #e85a7a;
+  border-radius: 50%;
+  box-shadow:
+    16px -8px 0 0 #7eb77f,
+    26px 12px 0 1px #f3c978,
+    -10px 20px 0 0 #e85a7a,
+    40px 24px 0 0 rgba(126, 183, 127, 0.85),
+    52px -16px 0 0 rgba(243, 201, 120, 0.9),
+    -22px 32px 0 0 rgba(232, 90, 122, 0.7);
+  animation: cloud-login-twinkle 3.5s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 右下角黄色便签 */
+section.template-minimal.login .login__form::before {
+  content: '';
+  position: absolute;
+  bottom: 7%;
+  right: 7%;
+  width: 5.8rem;
+  height: 5.8rem;
+  background: linear-gradient(135deg, #ffefb0 0%, #ffe28a 100%);
+  border: 1.5px solid #3a3226;
+  border-radius: 6px 10px 8px 12px;
+  transform: rotate(-8deg);
+  box-shadow: 3px 4px 0 rgba(120, 98, 56, 0.18);
+  animation: cloud-login-bg-drift-reverse 11s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+/* 左下角紫色便签 */
+section.template-minimal.login .login__form::after {
+  content: '';
+  position: absolute;
+  bottom: 9%;
+  left: 8%;
+  width: 4.2rem;
+  height: 4.2rem;
+  background: linear-gradient(135deg, #e6dcff 0%, #c9b8ff 100%);
+  border: 1.5px solid #3a3226;
+  border-radius: 8px 12px 6px 10px;
+  transform: rotate(6deg);
+  box-shadow: 3px 4px 0 rgba(120, 98, 56, 0.16);
+  animation: cloud-login-bg-drift 10s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+/* ---------- Logo（.login__brand）：入场淡入 + 内部呼吸浮动 ---------- */
+section.template-minimal.login .login__brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 7rem;
+  padding: 0.5rem 0 1rem;
+  animation: cloud-login-fade-in 700ms ease-out both;
+}
+
+section.template-minimal.login .login__brand .graphic-logo,
+section.template-minimal.login .login__brand .cloud-logo,
+section.template-minimal.login .login__brand img,
+section.template-minimal.login .login__brand svg {
+  max-height: 5rem;
+  animation: cloud-login-logo-float 4.5s ease-in-out infinite;
+  will-change: transform, filter;
+}
+
+/* ---------- 表单卡片：入场滑入 ----------
+   注：不设置 position:relative，让伪元素定位向上冒泡到 section.login 容器，
+   装饰不会跟随 slide-up 动画位移 */
+section.template-minimal.login .login__form {
+  background: #fffdf4;
+  border: 1.5px solid #3a3226;
+  border-radius: 22px 16px 20px 18px;
+  padding: 1.8rem 2rem 1.6rem;
+  box-shadow:
+    4px 5px 0 rgba(61, 49, 36, 0.16),
+    0 0 0 6px rgba(255, 253, 244, 0.5),
+    0 0 40px rgba(232, 90, 122, 0.18);
+  max-width: 26rem;
+  width: 100%;
+  margin: 1rem auto 0;
+  transform-origin: center bottom;
+  animation: cloud-login-slide-up 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 250ms both;
+}
+
+/* Payload 默认会渲染一个空 label，把它隐藏 */
+section.template-minimal.login .login__form > .label,
+section.template-minimal.login .login__form > .field-label {
+  display: none;
+}
+
+/* ---------- 输入框组：垂直堆叠 ---------- */
+section.template-minimal.login .login__form__inputWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* 单字段：手写风标签 */
+section.template-minimal.login .login__form .field-type {
+  transition: transform 200ms ease;
+}
+
+section.template-minimal.login .login__form .field-label {
+  display: block;
+  color: #574834;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  transition: color 160ms ease;
+}
+
+/* 输入框本体：便利贴 */
+section.template-minimal.login .login__form input,
+section.template-minimal.login .login__form textarea,
+section.template-minimal.login .login__form select {
+  background: #fffefb;
+  border: 1.5px solid #b09d7a;
+  border-bottom-width: 2px;
+  border-radius: 12px 14px 11px 13px;
+  padding: 0.7rem 0.95rem;
+  font-size: 1rem;
+  color: #3d3124;
+  width: 100%;
+  box-sizing: border-box;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    background 200ms ease;
+}
+
+/* 入场动画：施加到 .login__form__inputWrap 内的每个 .field-type 上，
+   用动画延迟做出错落感。动画结束态是 transform:none，不会与 :focus-within 冲突 */
+section.template-minimal.login .login__form__inputWrap > .field-type {
+  animation: cloud-login-input-enter 550ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+section.template-minimal.login .login__form__inputWrap > .field-type:nth-child(1) {
+  animation-delay: 450ms;
+}
+
+section.template-minimal.login .login__form__inputWrap > .field-type:nth-child(2) {
+  animation-delay: 570ms;
+}
+
+section.template-minimal.login .login__form input::placeholder,
+section.template-minimal.login .login__form textarea::placeholder {
+  color: #b09d7a;
+}
+
+/* 聚焦：整块字段上浮 + 粉色外发光 + 标签变粉 */
+section.template-minimal.login .login__form .field-type:focus-within {
+  transform: translateY(-2px);
+}
+
+section.template-minimal.login .login__form .field-type:focus-within .field-label {
+  color: #e85a7a;
+}
+
+section.template-minimal.login .login__form .field-type:focus-within input,
+section.template-minimal.login .login__form .field-type:focus-within textarea,
+section.template-minimal.login .login__form .field-type:focus-within select {
+  background: #fffefb;
+  border-color: #e85a7a;
+  box-shadow:
+    0 0 0 4px rgba(232, 90, 122, 0.14),
+    0 8px 20px rgba(232, 90, 122, 0.18);
+  outline: none;
+}
+
+/* ---------- 忘记密码链接：隐藏（改为通过飞书扫码登入后在账号页改密码） ---------- */
+section.template-minimal.login .login__form > a[href*='forgot'] {
+  display: none !important;
+}
+
+/* ---------- 飞书登录入口（beforeLogin 插槽，位于表单上方） ---------- */
+section.template-minimal.login .feishu-login-wrap {
+  margin: 1.4rem 0 0.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  animation: cloud-login-fade-in 500ms ease-out 700ms both;
+}
+
+/* 分隔线：两侧虚线 + 中间"或"字，跟手账涂鸦风对齐 */
+section.template-minimal.login .feishu-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #77664a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+section.template-minimal.login .feishu-login-divider::before,
+section.template-minimal.login .feishu-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 2px dotted #c9b48a;
+  opacity: 0.7;
+}
+
+/* 飞书登录按钮：绿松石色系，跟默认主色错开 */
+section.template-minimal.login .feishu-login-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  max-width: 22rem;
+  padding: 0.7rem 1.4rem;
+  color: #fff;
+  background: linear-gradient(135deg, #00e0be 0%, #00bfa4 50%, #009e89 100%);
+  border: 1.5px solid #3a3226;
+  border-radius: 999px 12px 999px 12px;
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  box-shadow: 3px 4px 0 rgba(0, 158, 137, 0.28);
+  transition: transform 160ms ease, box-shadow 200ms ease, filter 200ms ease;
+}
+
+section.template-minimal.login .feishu-login-link:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.06);
+  box-shadow: 4px 6px 0 rgba(0, 158, 137, 0.28), 0 0 30px rgba(0, 208, 190, 0.6);
+  color: #fff;
+  text-decoration: none;
+}
+
+section.template-minimal.login .feishu-login-link:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}
+
+section.template-minimal.login .feishu-login-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.15));
+}
+
+/* 入口从 <a> 改为 <button> 后补齐样式：字体继承页面、鼠标手型、去掉浏览器默认外观 */
+section.template-minimal.login button.feishu-login-link {
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* ---------- 飞书扫码弹窗（复用 .publish-modal 系列样式，仅补充二维码区域） ---------- */
+.feishu-qr-modal {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.feishu-qr-modal__body {
+  align-items: center;
+  text-align: center;
+}
+
+.feishu-qr-modal__hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-elevation-600, #6b6153);
+}
+
+/* 二维码容器：尺寸与 SDK 渲染的 iframe 一致（SDK style 参数里同步设置） */
+.feishu-qr-modal__qr {
+  width: 266px;
+  height: 266px;
+}
+
+.feishu-qr-modal__qr iframe {
+  border: none;
+  background: transparent;
+}
+
+.feishu-qr-modal__tip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-elevation-500, #8a7d6d);
+}
+
+.feishu-qr-modal__error {
+  margin: 0;
+  font-size: 13px;
+  color: #b3402e;
+}
+
+/* ---------- 登录按钮：呼吸辉光 ---------- */
+section.template-minimal.login .login__form .form-submit {
+  margin-top: 0.6rem;
+  display: flex;
+  justify-content: center;
+  animation: cloud-login-fade-in 500ms ease-out 900ms both;
+}
+
+section.template-minimal.login .login__form .form-submit button[type='submit'] {
+  background: linear-gradient(135deg, #f0768c 0%, #e85a7a 50%, #d04364 100%);
+  color: #fffdf4;
+  border: 1.5px solid #3a3226;
+  border-radius: 999px 12px 999px 12px;
+  padding: 0.8rem 2.2rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 3px 4px 0 rgba(168, 50, 79, 0.28);
+  animation: cloud-login-btn-glow 3.2s ease-in-out infinite;
+  transition: transform 160ms ease, box-shadow 200ms ease, filter 200ms ease;
+}
+
+section.template-minimal.login .login__form .form-submit button[type='submit']:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.06);
+  box-shadow: 4px 6px 0 rgba(168, 50, 79, 0.28), 0 0 30px rgba(232, 90, 122, 0.6);
+}
+
+section.template-minimal.login .login__form .form-submit button[type='submit']:active {
+  transform: translateY(0);
+  filter: brightness(0.95);
+}
+
+/* ---------- 小屏幕适配：装饰元素适当缩小，避免遮挡表单 ---------- */
+@media (max-width: 640px) {
+  section.template-minimal.login .login__form {
+    padding: 1.4rem 1.2rem;
+    max-width: calc(100% - 1rem);
+  }
+
+  /* 缩小四角装饰：云朵 / 星星 / 便签 */
+  section.template-minimal.login .login__brand::before {
+    width: 6.5rem;
+    height: 3.2rem;
+    top: 5%;
+    left: 5%;
+  }
+
+  section.template-minimal.login .login__brand::after {
+    top: 8%;
+    right: 8%;
+  }
+
+  section.template-minimal.login .login__form::before {
+    width: 3.8rem;
+    height: 3.8rem;
+    bottom: 6%;
+    right: 5%;
+  }
+
+  section.template-minimal.login .login__form::after {
+    width: 3rem;
+    height: 3rem;
+    bottom: 8%;
+    left: 6%;
+  }
+
+  section.template-minimal.login .login__form .form-submit button[type='submit'] {
+    padding: 0.7rem 1.5rem;
+    font-size: 0.98rem;
+  }
+}
+
+/* ---------- 尊重系统"减少动效"偏好：停用所有登录页动画 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  section.template-minimal.login,
+  section.template-minimal.login::before,
+  section.template-minimal.login::after,
+  section.template-minimal.login .login__brand,
+  section.template-minimal.login .login__brand::before,
+  section.template-minimal.login .login__brand::after,
+  section.template-minimal.login .login__brand .graphic-logo,
+  section.template-minimal.login .login__brand .cloud-logo,
+  section.template-minimal.login .login__brand img,
+  section.template-minimal.login .login__brand svg,
+  section.template-minimal.login .login__form,
+  section.template-minimal.login .login__form::before,
+  section.template-minimal.login .login__form::after,
+  section.template-minimal.login .login__form__inputWrap > .field-type,
+  section.template-minimal.login .login__form .field-type,
+  section.template-minimal.login .login__form > a,
+  section.template-minimal.login .login__form .form-submit,
+  section.template-minimal.login .login__form .form-submit button[type='submit'] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ====================================================================
+   登录页 · 云端极光（Aurora Glass）重构 —— 在旧样式之后追加
+   --------------------------------------------------------------------
+   设计方向：深空极光背景 + 漂浮光球 + 闪烁星点 + 毛玻璃卡片 + 流光彩虹
+   边框 + 辉光输入框 + 渐变流光按钮 + 入场动画。作用域限定在登录页，
+   用 .login.login 双类提升优先级，覆盖上方手账涂鸦风旧样式（旧代码保留
+   但不再生效），不影响其它后台页面。
+   旧样式作用域为 section.template-minimal.login（单类，特异性 0,2,1）；
+   本块统一使用 section.template-minimal.login.login（0,3,1）+ 源顺序在后，
+   双重保证覆盖生效。
+   ==================================================================== */
+
+/* 流光边框角度（用 @property 声明，才可用 animation 动画角度，避免旋转矩形） */
+@property --aurora-beam-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* ---------- 关键帧 ---------- */
+/* 极光光球 A：粉/紫，左上漂移 */
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate3d(-8%, -6%, 0) scale(1); }
+  50%      { transform: translate3d(10%, 6%, 0) scale(1.18); }
+}
+/* 极光光球 B：青/金，右下漂移 */
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate3d(10%, 8%, 0) scale(1.12); }
+  50%      { transform: translate3d(-10%, -6%, 0) scale(0.94); }
+}
+/* 星点整体闪烁 */
+@keyframes aurora-star-twinkle {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.85; }
+}
+/* Logo 光晕呼吸 */
+@keyframes aurora-halo-pulse {
+  0%, 100% { transform: translateX(-50%) scale(1);    opacity: 0.55; }
+  50%      { transform: translateX(-50%) scale(1.2);  opacity: 0.9; }
+}
+/* Logo 上下浮动 */
+@keyframes aurora-logo-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+/* 流光边框角度自转（颜色沿边框流动） */
+@keyframes aurora-beam-spin {
+  to { --aurora-beam-angle: 360deg; }
+}
+/* 卡片外发光色彩流转 */
+@keyframes aurora-card-glow {
+  0%, 100% { box-shadow: 0 30px 70px -18px rgba(232, 90, 122, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.5) inset, 0 1px 0 rgba(255, 255, 255, 0.9) inset; }
+  33%      { box-shadow: 0 30px 70px -18px rgba(168, 85, 247, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.5) inset, 0 1px 0 rgba(255, 255, 255, 0.9) inset; }
+  66%      { box-shadow: 0 30px 70px -18px rgba(6, 182, 212, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.5) inset, 0 1px 0 rgba(255, 255, 255, 0.9) inset; }
+}
+/* 主按钮渐变流光（背景位置滚动） */
+@keyframes aurora-btn-flow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 220% 50%; }
+}
+/* 主按钮辉光脉冲 */
+@keyframes aurora-btn-pulse {
+  0%, 100% { box-shadow: 0 10px 26px -8px rgba(232, 90, 122, 0.55); }
+  50%      { box-shadow: 0 14px 34px -6px rgba(168, 85, 247, 0.72); }
+}
+/* 入场：从上 */
+@keyframes aurora-enter-down {
+  from { opacity: 0; transform: translateY(-18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 入场：从下 */
+@keyframes aurora-enter-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 入场：表单项 */
+@keyframes aurora-field-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 页面根：深空极光底 ---------- */
+section.template-minimal.login.login {
+  /* 极光调色板常量（避免魔法值散落） */
+  --aurora-bg: #070a18;
+  --aurora-pink: #e85a7a;      /* 品牌色，作为极光一色，保持延续 */
+  --aurora-magenta: #ec4899;
+  --aurora-violet: #a855f7;
+  --aurora-teal: #06b6d4;
+  --aurora-cyan: #22d3ee;
+  --aurora-gold: #f3c978;
+  --aurora-ink: #2a2440;        /* 卡片内正文深色 */
+  --aurora-ink-soft: #5a5470;   /* 卡片内次要文字 */
+  --aurora-glass: rgba(255, 255, 255, 0.72);
+
+  position: relative;
+  isolation: isolate;          /* 建立层叠上下文，限制光球混合范围 */
+  overflow: hidden;
+  min-height: 100vh;
+  color: #eef1ff;              /* 页面层文字（卡片外）用浅色 */
+  background-color: var(--aurora-bg);
+  background-image:
+    radial-gradient(120% 80% at 18% 12%, rgba(232, 90, 122, 0.30) 0%, transparent 55%),
+    radial-gradient(120% 80% at 85% 18%, rgba(168, 85, 247, 0.28) 0%, transparent 55%),
+    radial-gradient(120% 90% at 75% 88%, rgba(6, 182, 212, 0.26) 0%, transparent 55%),
+    radial-gradient(120% 90% at 12% 92%, rgba(243, 201, 120, 0.18) 0%, transparent 55%),
+    linear-gradient(160deg, #070a18 0%, #0c1030 38%, #0a0f24 72%, #05060f 100%);
+}
+
+/* 光球 A：粉/紫，左上，缓慢漂移（混合 screen 在深空上发光） */
+section.template-minimal.login.login::before {
+  content: '';
+  position: absolute;
+  top: -15%;
+  left: -8%;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(232, 90, 122, 0.85) 0%, rgba(168, 85, 247, 0.45) 38%, transparent 68%);
+  filter: blur(60px);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  animation: aurora-drift-a 18s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* 光球 B：青/金，右下，反向漂移 */
+section.template-minimal.login.login::after {
+  content: '';
+  position: absolute;
+  bottom: -18%;
+  right: -10%;
+  width: 52vmax;
+  height: 52vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(6, 182, 212, 0.8) 0%, rgba(34, 211, 238, 0.4) 36%, rgba(243, 201, 120, 0.22) 60%, transparent 70%);
+  filter: blur(64px);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  animation: aurora-drift-b 22s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ---------- 内容居中容器 ---------- */
+section.template-minimal.login.login .template-minimal__wrap {
+  position: relative;
+  z-index: 3;                   /* 置于光球与星点之上 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 3rem 1rem;
+  background: transparent;
+}
+
+/* 闪烁星点层（铺满视口，置于光球之上、卡片之下） */
+section.template-minimal.login.login .template-minimal__wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;                   /* 容器内最底层，低于 brand/form */
+  background-image:
+    radial-gradient(1.6px 1.6px at 24px 38px,  #ffffff, transparent),
+    radial-gradient(1.2px 1.2px at 90px 120px, #d7e6ff, transparent),
+    radial-gradient(1.6px 1.6px at 160px 60px, #ffffff, transparent),
+    radial-gradient(1px 1px at 210px 180px,    #cfe4ff, transparent),
+    radial-gradient(1.4px 1.4px at 50px 220px, #ffffff, transparent),
+    radial-gradient(1px 1px at 120px 260px,    #e6d7ff, transparent),
+    radial-gradient(1.6px 1.6px at 200px 300px,#ffffff, transparent),
+    radial-gradient(1.2px 1.2px at 240px 100px,#ffffff, transparent),
+    radial-gradient(1px 1px at 30px 300px,     #ffe9c9, transparent);
+  background-size: 280px 320px;
+  background-repeat: repeat;
+  opacity: 0.7;
+  animation: aurora-star-twinkle 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* 顶部柔光（增加纵深感） */
+section.template-minimal.login.login .template-minimal__wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(120% 70% at 50% -10%, rgba(255, 255, 255, 0.10) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* ---------- 品牌 Logo：发光月盘 + 光晕 + 浮动 ---------- */
+section.template-minimal.login.login .login__brand {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  margin: 0 auto 1.4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,
+    rgba(255, 255, 255, 0.95) 0%, rgba(255, 245, 250, 0.85) 45%, rgba(232, 90, 122, 0.18) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.5),
+    0 18px 40px -12px rgba(232, 90, 122, 0.5),
+    0 0 60px -6px rgba(168, 85, 247, 0.45),
+    inset 0 2px 6px rgba(255, 255, 255, 0.9);
+  animation: aurora-enter-down 0.7s cubic-bezier(0.22, 1, 0.36, 1) both,
+             aurora-logo-float 6s ease-in-out 0.7s infinite;
+}
+
+/* Logo 后光晕（呼吸） */
+section.template-minimal.login.login .login__brand::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 9rem;
+  height: 9rem;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 90, 122, 0.5) 0%, rgba(168, 85, 247, 0.3) 40%, transparent 70%);
+  filter: blur(18px);
+  z-index: -1;                  /* 在月盘之后 */
+  animation: aurora-halo-pulse 5s ease-in-out infinite;
+}
+
+/* 月盘右上小星光（闪烁） */
+section.template-minimal.login.login .login__brand::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 8px 2px rgba(255, 255, 255, 0.9),
+    14px 16px 0 -3px rgba(255, 255, 255, 0.85),
+    14px 16px 12px -4px rgba(255, 255, 255, 0.6);
+  animation: aurora-star-twinkle 3.2s ease-in-out infinite;
+}
+
+/* Logo 图标本身（深色云图标在浅月盘上自然可见，加投影增强） */
+section.template-minimal.login.login .login__brand img,
+section.template-minimal.login.login .login__brand svg,
+section.template-minimal.login.login .login__brand .cloud-logo,
+section.template-minimal.login.login .login__brand .graphic-logo {
+  position: relative;
+  z-index: 1;
+  height: 3rem !important;
+  width: auto;
+  filter: drop-shadow(0 2px 4px rgba(60, 30, 50, 0.25));
+}
+
+/* ---------- 飞书登录入口（卡片上方，玻璃药丸 + 分隔线） ---------- */
+section.template-minimal.login.login .feishu-login-wrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.9rem;
+  width: min(92vw, 30rem);
+  margin: 0 auto 0.4rem;
+  animation: aurora-enter-down 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
+}
+/* SSO 优先阅读顺序：按钮在上、分隔在下 */
+section.template-minimal.login.login .feishu-login-link    { order: 1; }
+section.template-minimal.login.login .feishu-login-divider { order: 2; }
+
+/* 飞书按钮：青绿玻璃药丸 */
+section.template-minimal.login.login .feishu-login-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #0f3d2e;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.7) 0%, rgba(45, 212, 191, 0.28) 100%);
+  border: 1px solid rgba(45, 212, 191, 0.5);
+  border-radius: 14px;
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  box-shadow: 0 10px 26px -12px rgba(13, 148, 136, 0.5), 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+section.template-minimal.login.login .feishu-login-link:hover {
+  transform: translateY(-2px);
+  border-color: rgba(45, 212, 191, 0.9);
+  box-shadow: 0 16px 34px -10px rgba(13, 148, 136, 0.65),
+              0 0 22px rgba(45, 212, 191, 0.4),
+              0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+section.template-minimal.login.login .feishu-login-link:active { transform: translateY(0) scale(0.99); }
+section.template-minimal.login.login .feishu-login-link .feishu-login-icon { width: 1.15rem; height: 1.15rem; }
+
+/* 分隔线「或」 */
+section.template-minimal.login.login .feishu-login-divider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  color: #c7cee0;
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+}
+section.template-minimal.login.login .feishu-login-divider::before,
+section.template-minimal.login.login .feishu-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(199, 206, 224, 0.55), transparent);
+}
+
+/* ---------- 登录卡片：毛玻璃 + 流光边框 + 色彩流转外发光 ---------- */
+section.template-minimal.login.login .login__form {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 30rem);
+  margin: 0 auto;
+  padding: 2.4rem 2.2rem 2.2rem;
+  color: var(--aurora-ink);
+  background: var(--aurora-glass);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: none;
+  border-radius: 28px;
+  animation: aurora-enter-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both,
+             aurora-card-glow 9s ease-in-out 0.9s infinite;
+}
+/* 不支持毛玻璃时退化为不透明浅底，保证可读 */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  section.template-minimal.login.login .login__form { background: rgba(245, 247, 255, 0.94); }
+}
+
+/* 流光彩虹边框：conic 渐变 + mask 仅留 2px 边环，角度自转使颜色沿边流动 */
+section.template-minimal.login.login .login__form::before {
+  content: '';
+  position: absolute;
+  inset: -2px;                  /* 略大于卡片，形成 2px 边框 */
+  padding: 2px;
+  border-radius: 30px;
+  --aurora-beam-angle: 0deg;
+  background: conic-gradient(from var(--aurora-beam-angle),
+    rgba(232, 90, 122, 0) 0deg,
+    rgba(232, 90, 122, 0.9) 40deg,
+    rgba(168, 85, 247, 0.9) 90deg,
+    rgba(6, 182, 212, 0.9) 160deg,
+    rgba(243, 201, 120, 0.9) 220deg,
+    rgba(232, 90, 122, 0.9) 300deg,
+    rgba(232, 90, 122, 0) 360deg);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+          mask-composite: exclude;
+  filter: drop-shadow(0 0 6px rgba(232, 90, 122, 0.5));
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: -1;                  /* 玻璃之后、内容之前，边环在卡片边缘发光 */
+  animation: aurora-beam-spin 8s linear infinite;
+}
+
+/* 悬停掠光：斜向白光横扫玻璃（位于内容之下，不遮文字） */
+section.template-minimal.login.login .login__form::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%);
+  transform: translateX(-130%) skewX(-16deg);
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: -1;
+}
+section.template-minimal.login.login .login__form:hover::after {
+  transform: translateX(130%) skewX(-16deg);
+}
+
+/* ---------- 表单项：输入框辉光聚焦 ---------- */
+section.template-minimal.login.login .login__form .login__form__inputWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+section.template-minimal.login.login .login__form .field-type,
+section.template-minimal.login.login .login__form .login__form__inputWrap > .field-type {
+  animation: aurora-field-enter 0.6s ease both;
+}
+section.template-minimal.login.login .login__form .login__form__inputWrap > .field-type:nth-of-type(1) { animation-delay: 0.32s; }
+section.template-minimal.login.login .login__form .login__form__inputWrap > .field-type:nth-of-type(2) { animation-delay: 0.42s; }
+
+section.template-minimal.login.login .login__form .field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aurora-ink-soft);
+}
+
+section.template-minimal.login.login .login__form input[type='email'],
+section.template-minimal.login.login .login__form input[type='password'],
+section.template-minimal.login.login .login__form input[type='text'] {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  color: var(--aurora-ink);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(40, 36, 64, 0.14);
+  border-radius: 14px;
+  outline: none;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+}
+section.template-minimal.login.login .login__form input[type='email']::placeholder,
+section.template-minimal.login.login .login__form input[type='password']::placeholder,
+section.template-minimal.login.login .login__form input[type='text']::placeholder {
+  color: #9a94aa;
+}
+section.template-minimal.login.login .login__form input[type='email']:focus,
+section.template-minimal.login.login .login__form input[type='password']:focus,
+section.template-minimal.login.login .login__form input[type='text']:focus {
+  border-color: var(--aurora-pink);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 4px rgba(232, 90, 122, 0.18), 0 0 22px rgba(232, 90, 122, 0.28);
+}
+
+/* 忘记密码链接：暂不提供，保持隐藏 */
+section.template-minimal.login.login .login__form > a[href='/admin/auth/forgot-password'] {
+  display: none;
+}
+
+/* ---------- 主按钮：多色渐变 + 流光 + 脉冲 ---------- */
+section.template-minimal.login.login .login__form .form-submit {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.2rem;
+}
+section.template-minimal.login.login .login__form .form-submit button[type='submit'],
+section.template-minimal.login.login .login__form .form-submit .btn.btn--style-primary {
+  position: relative;
+  width: 100%;
+  padding: 0.9rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  background: linear-gradient(120deg,
+    #e85a7a 0%, #ec4899 25%, #a855f7 55%, #6d8bd0 80%, #06b6d4 100%);
+  background-size: 220% 200%;
+  background-position: 0% 50%;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  overflow: hidden;
+  animation: aurora-btn-flow 6s linear 0.6s infinite,
+             aurora-btn-pulse 3.5s ease-in-out 0.6s infinite;
+  transition: transform 0.25s ease, filter 0.25s ease;
+}
+section.template-minimal.login.login .login__form .form-submit button[type='submit']:hover,
+section.template-minimal.login.login .login__form .form-submit .btn.btn--style-primary:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08) saturate(1.12);
+}
+section.template-minimal.login.login .login__form .form-submit button[type='submit']:active,
+section.template-minimal.login.login .login__form .form-submit .btn.btn--style-primary:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* ---------- 飞书扫码弹窗：深空玻璃蒙层 + 亮玻璃面板 ---------- */
+section.template-minimal.login.login .publish-modal__mask {
+  background: rgba(7, 10, 24, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+section.template-minimal.login.login .feishu-qr-modal {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 24px;
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  color: var(--aurora-ink);
+}
+section.template-minimal.login.login .feishu-qr-modal__qr {
+  display: flex;
+  justify-content: center;
+  padding: 0.6rem;
+  background: #fffefb;
+  border-radius: 16px;
+  box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.35);
+}
+section.template-minimal.login.login .feishu-qr-modal__hint,
+section.template-minimal.login.login .feishu-qr-modal__tip {
+  color: var(--aurora-ink-soft);
+}
+section.template-minimal.login.login .feishu-qr-modal__error {
+  color: #d6336c;
+}
+section.template-minimal.login.login .feishu-qr-modal .publish-modal__btn--primary {
+  background: linear-gradient(120deg, #e85a7a, #a855f7 55%, #06b6d4);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 560px) {
+  section.template-minimal.login.login .login__brand { width: 4.6rem; height: 4.6rem; margin-bottom: 1rem; }
+  section.template-minimal.login.login .login__brand img,
+  section.template-minimal.login.login .login__brand svg,
+  section.template-minimal.login.login .login__brand .cloud-logo,
+  section.template-minimal.login.login .login__brand .graphic-logo { height: 2.5rem !important; }
+  section.template-minimal.login.login .feishu-login-wrap,
+  section.template-minimal.login.login .login__form { width: 94vw; }
+  section.template-minimal.login.login .login__form { padding: 2rem 1.4rem 1.8rem; border-radius: 24px; }
+  section.template-minimal.login.login .login__form .form-submit button[type='submit'] { padding: 0.85rem 1.2rem; }
+}
+@media (max-width: 380px) {
+  section.template-minimal.login.login .login__form { padding: 1.7rem 1.1rem 1.6rem; }
+  section.template-minimal.login.login .template-minimal__wrap { padding: 2rem 0.5rem; }
+}
+
+/* ---------- 减少动效：关闭本块所有动画/过渡 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  section.template-minimal.login.login,
+  section.template-minimal.login.login::before,
+  section.template-minimal.login.login::after,
+  section.template-minimal.login.login .template-minimal__wrap,
+  section.template-minimal.login.login .template-minimal__wrap::before,
+  section.template-minimal.login.login .template-minimal__wrap::after,
+  section.template-minimal.login.login .login__brand,
+  section.template-minimal.login.login .login__brand::before,
+  section.template-minimal.login.login .login__brand::after,
+  section.template-minimal.login.login .login__brand img,
+  section.template-minimal.login.login .feishu-login-wrap,
+  section.template-minimal.login.login .feishu-login-link,
+  section.template-minimal.login.login .login__form,
+  section.template-minimal.login.login .login__form::before,
+  section.template-minimal.login.login .login__form::after,
+  section.template-minimal.login.login .login__form .field-type,
+  section.template-minimal.login.login .login__form input,
+  section.template-minimal.login.login .login__form .form-submit button[type='submit'] {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ====================================================================
+   云岫小筑 · 东方云主题登录页 —— 最高优先级覆盖
+   --------------------------------------------------------------------
+   触发条件：LoginBrand 组件在登录页给 <html> 打 data-yx-page="login"
+   作用域：html[data-yx-page='login'] body ... 全程仅登录页生效
+   视觉规范来源：云岫小筑｜东方云主题登录页 UI 制作规范（v1.0）
+   设计要点：
+     1. 月白底 + 远山 + 云雾 + 光晕分层
+     2. 慢、轻、柔和、克制（所有动画 20s+ 周期）
+     3. 鼠标视差（--yx-mx / --yx-my 由 LoginBrand 注入）
+     4. 玻璃拟态必须极轻（避免 SaaS 模板感）
+     5. 深黛青按钮 + 暖金聚焦 + 朱砂仅作错误点缀
+   ==================================================================== */
+
+/* ---------- 调色板：月白（Light） ---------- */
+html[data-yx-page='login'] {
+  /* 月白系 */
+  --yx-bg-main: #f4f1e8;          /* 主背景：宣纸月白 */
+  --yx-bg-sub: #e8e4da;           /* 次背景 */
+  --yx-ink: #252522;              /* 主文字：墨色 */
+  --yx-ink-soft: #6b6a64;         /* 次文字 */
+  --yx-ink-faint: #a8a49a;        /* 极弱文字（占位符） */
+  --yx-dai: #344c50;              /* 深黛（主按钮） */
+  --yx-dai-deep: #243a3e;         /* 黛青深（hover） */
+  --yx-qing: #5d7070;             /* 青灰 */
+  --yx-gold: #b99a63;             /* 暖金（聚焦、强调） */
+  --yx-cinnabar: #a8473d;         /* 朱砂（仅错误态） */
+
+  /* 云 / 雾 / 山 色阶 */
+  --yx-cloud: rgba(255, 252, 245, 0.92);
+  --yx-cloud-soft: rgba(250, 246, 236, 0.55);
+  --yx-mist: rgba(210, 215, 208, 0.35);
+  --yx-mt-far: #c9cdd0;           /* 远山 */
+  --yx-mt-mid: #9fadb0;           /* 中山 */
+  --yx-mt-near: #5d7070;          /* 近山（青灰） */
+
+  /* 视差变量（JS 注入） */
+  --yx-mx: 0;
+  --yx-my: 0;
+
+  /* 动画缓动 */
+  --yx-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- 深色模式：墨色 + 青灰 + 云雾（东方夜景） ---------- */
+html[data-yx-page='login'][data-theme='dark'],
+html[data-yx-page='login'].payload-admin-theme-dark,
+html[data-yx-page='login'] body[data-theme='dark'],
+html[data-yx-page='login']:has([data-theme='dark']) {
+  --yx-bg-main: #121817;
+  --yx-bg-sub: #1a2120;
+  --yx-ink: #e8e4da;
+  --yx-ink-soft: #9c9a91;
+  --yx-ink-faint: #5c5a54;
+  --yx-dai: #1d3031;
+  --yx-dai-deep: #2c4547;
+  --yx-qing: #60716f;
+  --yx-cloud: rgba(46, 56, 55, 0.85);
+  --yx-cloud-soft: rgba(36, 46, 45, 0.5);
+  --yx-mist: rgba(70, 84, 82, 0.32);
+  --yx-mt-far: #3a4644;
+  --yx-mt-mid: #2a3534;
+  --yx-mt-near: #1d2a29;
+}
+
+/* ---------- 关键帧：云 / 山 / 光晕 / 入场 ---------- */
+/* 云雾缓慢漂移（35s，用户停留 10s 才意识到） */
+@keyframes yx-cloud-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(3.5vw, -1.2vh) scale(1.04); }
+}
+@keyframes yx-cloud-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1.06); }
+  50%      { transform: translate(-4vw, 1.5vh) scale(0.98); }
+}
+@keyframes yx-cloud-drift-c {
+  0%, 100% { transform: translate(0, 0); opacity: 0.55; }
+  50%      { transform: translate(2vw, -0.8vh); opacity: 0.85; }
+}
+
+/* 水面雾气缓慢呼吸 */
+@keyframes yx-mist-breathe {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50%      { opacity: 0.85; transform: translateY(-1vh); }
+}
+
+/* 光晕缓慢变化（80s 一圈） */
+@keyframes yx-light-shift {
+  0%   { transform: translate(0, 0); opacity: 0.6; }
+  33%  { transform: translate(4vw, 2vh); opacity: 0.85; }
+  66%  { transform: translate(-3vw, -1vh); opacity: 0.5; }
+  100% { transform: translate(0, 0); opacity: 0.6; }
+}
+
+/* 微粒尘埃漂浮 */
+@keyframes yx-dust-float {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  20%  { opacity: 0.4; }
+  80%  { opacity: 0.4; }
+  100% { transform: translate(3vw, -8vh); opacity: 0; }
+}
+
+/* 入场动画：淡入 + 轻微上浮（克制） */
+@keyframes yx-enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes yx-enter-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Logo 缓慢呼吸（不可察觉的浮动） */
+@keyframes yx-logo-breathe {
+  0%, 100% { transform: translateY(0); opacity: 0.92; }
+  50%      { transform: translateY(-3px); opacity: 1; }
+}
+
+/* 按钮云雾纹理（极缓慢的横向漂移） */
+@keyframes yx-btn-cloud {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* ====================================================================
+   LAYER 0：页面根 —— 月白底 + 整体入场
+   ==================================================================== */
+html[data-yx-page='login'],
+html[data-yx-page='login'] body {
+  background: var(--yx-bg-main) !important;
+  transition: background 700ms var(--yx-ease);
+}
+
+html[data-yx-page='login'] section.template-minimal.login,
+html[data-yx-page='login'] section.template-minimal.login.login {
+  position: relative;
+  min-height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  /* 修复：不要给 section 加垂直 padding。
+     原因：section 是 flex + border-box + min-height:100vh，
+     wrap 又是 min-height:100vh 的 flex 子项，
+     如果 section 有上下 padding，会让 wrap 实际占据的空间小于视口，
+     再叠加 wrap 内容本身的高度时就会溢出视口（登录页出现滚动条）。
+     只保留水平 padding 给背景装饰留出边缘呼吸。 */
+  padding: 0 1.15rem;
+  isolation: isolate;
+  color: var(--yx-ink);
+  background:
+    /* 顶部天光 */
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(255, 252, 240, 0.55), transparent 60%),
+    /* 主底色：月白 → 浅灰青渐变 */
+    linear-gradient(180deg,
+      var(--yx-bg-main) 0%,
+      var(--yx-bg-main) 45%,
+      var(--yx-bg-sub) 100%);
+  /* 隐藏原手账/极光背景的伪元素 */
+}
+
+/* 屏蔽旧主题伪元素与动画（同时清空背景避免叠加） */
+html[data-yx-page='login'] section.template-minimal.login::before,
+html[data-yx-page='login'] section.template-minimal.login::after,
+html[data-yx-page='login'] section.template-minimal.login.login::before,
+html[data-yx-page='login'] section.template-minimal.login.login::after,
+html[data-yx-page='login'] section.template-minimal.login .login__brand::before,
+html[data-yx-page='login'] section.template-minimal.login .login__brand::after,
+html[data-yx-page='login'] section.template-minimal.login .login__form::before,
+html[data-yx-page='login'] section.template-minimal.login .login__form::after,
+html[data-yx-page='login'] section.template-minimal.login.login .template-minimal__wrap::before,
+html[data-yx-page='login'] section.template-minimal.login.login .template-minimal__wrap::after {
+  content: none !important;
+  animation: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  opacity: 0 !important;
+}
+
+/* ====================================================================
+   LAYER 1-2：天空 + 远山（伪元素 + CSS 渐变山体）
+   ==================================================================== */
+
+/* 远山剪影层（最远，0.2x 视差）—— 用多重 radial-gradient 描绘山形 */
+html[data-yx-page='login'] section.template-minimal.login .template-minimal__wrap {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  background: transparent;
+  animation: yx-enter-fade 800ms var(--yx-ease) both;
+}
+
+/* 远山层（用 .template-minimal__wrap::before 复用，注意要清除旧星星） */
+html[data-yx-page='login'] section.template-minimal.login .template-minimal__wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background-image:
+    /* 远山（最低饱和，最远） */
+    radial-gradient(ellipse 90% 28% at 15% 78%, var(--yx-mt-far) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 22% at 70% 82%, var(--yx-mt-far) 0%, transparent 60%),
+    radial-gradient(ellipse 100% 25% at 45% 80%, var(--yx-mt-far) 0%, transparent 62%);
+  opacity: 0.55;
+  transform: translate(
+    calc(var(--yx-mx, 0) * -4px),
+    calc(var(--yx-my, 0) * -2px)
+  );
+  transition: transform 600ms var(--yx-ease);
+}
+
+/* 中景山体（0.5x 视差） */
+html[data-yx-page='login'] section.template-minimal.login .template-minimal__wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    radial-gradient(ellipse 80% 32% at 25% 88%, var(--yx-mt-mid) 0%, transparent 60%),
+    radial-gradient(ellipse 65% 26% at 80% 92%, var(--yx-mt-mid) 0%, transparent 55%);
+  opacity: 0.65;
+  filter: blur(0.4px);
+  transform: translate(
+    calc(var(--yx-mx, 0) * -8px),
+    calc(var(--yx-my, 0) * -4px)
+  );
+  transition: transform 600ms var(--yx-ease);
+}
+
+/* ====================================================================
+   LAYER 3-5：云雾 / 光晕 —— 通过 body 伪元素 + section 伪元素叠加
+   由于 ::before/::after 已被远山占用，云雾放到 body::before / body::after
+   ==================================================================== */
+
+/* 主体云雾（远景，缓慢漂移 A） */
+html[data-yx-page='login'] body::before {
+  content: '';
+  position: fixed;
+  top: -10%;
+  left: -15%;
+  width: 80vmax;
+  height: 50vmax;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 40%, var(--yx-cloud) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at 65% 60%, var(--yx-cloud-soft) 0%, transparent 70%);
+  filter: blur(40px);
+  opacity: 0.85;
+  animation: yx-cloud-drift-a 40s ease-in-out infinite,
+             yx-enter-fade 1200ms var(--yx-ease) 200ms both;
+  transform: translate(
+    calc(var(--yx-mx, 0) * -12px),
+    calc(var(--yx-my, 0) * -6px)
+  );
+  transition: transform 800ms var(--yx-ease);
+}
+
+/* 次云雾（近景，缓慢漂移 B） */
+html[data-yx-page='login'] body::after {
+  content: '';
+  position: fixed;
+  bottom: -15%;
+  right: -12%;
+  width: 70vmax;
+  height: 45vmax;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 45% at 60% 55%, var(--yx-cloud) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 35% at 30% 45%, var(--yx-cloud-soft) 0%, transparent 70%);
+  filter: blur(50px);
+  opacity: 0.7;
+  animation: yx-cloud-drift-b 50s ease-in-out infinite,
+             yx-enter-fade 1200ms var(--yx-ease) 400ms both;
+  transform: translate(
+    calc(var(--yx-mx, 0) * -18px),
+    calc(var(--yx-my, 0) * -9px)
+  );
+  transition: transform 800ms var(--yx-ease);
+}
+
+/* ====================================================================
+   LAYER 6-8：水面雾气 + 光晕 —— 通过 section 内部的额外元素
+   使用 ::selection 之外的可用伪元素 —— 实际上 Payload 模板里我们可以
+   利用 .login__brand 自身的样式作为载体（不含伪元素）
+   ==================================================================== */
+
+/* 水面雾气（底部横向薄雾带） */
+html[data-yx-page='login'] section.template-minimal.login {
+  box-shadow: inset 0 -18vh 18vh -10vh var(--yx-mist);
+}
+
+/* 顶部光晕（暖金天光）—— 借助 ::selection 不可行，改用登录卡片容器的兄弟层
+   由于 Payload 模板结构固定，把光晕合并到 body 主渐变中（见上方） */
+
+/* ====================================================================
+   品牌区：Logo + 云岫小筑 + 云深处 · 见自己
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .login__brand,
+html[data-yx-page='login'] section.template-minimal.login.login .login__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0 auto 2.2rem;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: yx-enter-up 700ms var(--yx-ease) 600ms both;
+}
+
+/* Logo 图形（云字） */
+html[data-yx-page='login'] section.template-minimal.login .login__brand .graphic-logo,
+html[data-yx-page='login'] section.template-minimal.login .login__brand .cloud-logo,
+html[data-yx-page='login'] section.template-minimal.login .login__brand img,
+html[data-yx-page='login'] section.template-minimal.login .login__brand svg {
+  height: 4.2rem !important;
+  width: auto;
+  max-height: none;
+  filter: drop-shadow(0 4px 16px rgba(52, 76, 80, 0.15));
+  animation: yx-logo-breathe 6s ease-in-out 1.4s infinite;
+}
+
+/* 品牌文字容器（LoginBrand 注入） */
+html[data-yx-page='login'] .yx-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.9rem;
+  text-align: center;
+  user-select: none;
+}
+
+html[data-yx-page='login'] .yx-brand__name {
+  font-family: 'ZCOOL XiaoWei', 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive;
+  font-size: 40px;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em; /* 视觉居中补偿字间距 */
+  color: var(--yx-ink);
+  line-height: 1.2;
+  margin: 0 0 0.6rem;
+  text-shadow: 0 0 24px rgba(255, 240, 200, 0.18);
+}
+
+html[data-yx-page='login'] .yx-brand__slogan {
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.44em;
+  color: var(--yx-ink-soft);
+  text-indent: 0.44em; /* 视觉居中补偿字间距 */
+  margin: 0;
+}
+
+/* ====================================================================
+   登录卡片：极轻玻璃拟态（避免 SaaS 模板感）
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .login__form,
+html[data-yx-page='login'] section.template-minimal.login.login .login__form {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: min(92vw, 26rem);
+  margin: 0 auto;
+  padding: 2.2rem 2.4rem 2rem;
+  color: var(--yx-ink);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(30, 40, 40, 0.08);
+  animation: yx-enter-up 750ms var(--yx-ease) 750ms both;
+}
+
+/* 不支持毛玻璃时退化为宣纸白 */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  html[data-yx-page='login'] section.template-minimal.login .login__form,
+  html[data-yx-page='login'] section.template-minimal.login.login .login__form {
+    background: rgba(255, 252, 245, 0.92);
+    border-color: rgba(52, 76, 80, 0.1);
+  }
+}
+
+/* 深色模式卡片 */
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form,
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login.login .login__form,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login.login .login__form {
+  background: rgba(18, 24, 23, 0.45);
+  border-color: rgba(232, 228, 218, 0.12);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* 隐藏 Payload 默认渲染的空 label */
+html[data-yx-page='login'] section.template-minimal.login .login__form > .label,
+html[data-yx-page='login'] section.template-minimal.login .login__form > .field-label {
+  display: none !important;
+}
+
+/* ====================================================================
+   表单：输入框组
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .login__form__inputWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+/* 单字段入场 */
+html[data-yx-page='login'] section.template-minimal.login .login__form .field-type,
+html[data-yx-page='login'] section.template-minimal.login .login__form__inputWrap > .field-type {
+  animation: yx-enter-up 600ms var(--yx-ease) both;
+}
+html[data-yx-page='login'] section.template-minimal.login .login__form__inputWrap > .field-type:nth-child(1) { animation-delay: 900ms; }
+html[data-yx-page='login'] section.template-minimal.login .login__form__inputWrap > .field-type:nth-child(2) { animation-delay: 1000ms; }
+
+/* 字段标签 */
+html[data-yx-page='login'] section.template-minimal.login .login__form .field-label,
+html[data-yx-page='login'] section.template-minimal.login.login .login__form .field-label {
+  display: block;
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: none;
+  color: var(--yx-ink-soft);
+  margin-bottom: 0.45rem;
+  transition: color 220ms var(--yx-ease);
+}
+
+/* 输入框本体 */
+html[data-yx-page='login'] section.template-minimal.login .login__form input[type='email'],
+html[data-yx-page='login'] section.template-minimal.login .login__form input[type='password'],
+html[data-yx-page='login'] section.template-minimal.login .login__form input[type='text'],
+html[data-yx-page='login'] section.template-minimal.login .login__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.78rem 1rem;
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  font-size: 14px;
+  color: var(--yx-ink);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(37, 37, 34, 0.14);
+  border-radius: 10px;
+  outline: none;
+  transition:
+    border-color 260ms var(--yx-ease),
+    background 260ms var(--yx-ease),
+    box-shadow 260ms var(--yx-ease);
+}
+
+/* 占位符 */
+html[data-yx-page='login'] section.template-minimal.login .login__form input::placeholder {
+  color: var(--yx-ink-faint);
+  letter-spacing: 0.02em;
+}
+
+/* Hover：边框透明度提高 + 背景稍微变亮 */
+html[data-yx-page='login'] section.template-minimal.login .login__form input:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(37, 37, 34, 0.22);
+}
+
+/* Focus：淡暖金边框 + 极轻微光晕 */
+html[data-yx-page='login'] section.template-minimal.login .login__form input:focus {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--yx-gold);
+  box-shadow: 0 0 0 3px rgba(185, 154, 99, 0.08);
+}
+
+/* 深色模式输入框 */
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form input,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form input {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(232, 228, 218, 0.14);
+  color: var(--yx-ink);
+}
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form input:hover,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form input:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(232, 228, 218, 0.22);
+}
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form input:focus,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--yx-gold);
+}
+
+/* 深色模式输入框：覆盖 Chrome/Safari 自动填充的浅米色背景
+   Chrome 用 -webkit-box-shadow 绘制 autofill 背景，必须用 inset 阴影覆盖 */
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form input:-webkit-autofill,
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form input:-webkit-autofill:hover,
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .login__form input:-webkit-autofill:focus,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form input:-webkit-autofill,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form input:-webkit-autofill:hover,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .login__form input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #121817 inset;
+  box-shadow: 0 0 0 1000px #121817 inset;
+  -webkit-text-fill-color: var(--yx-ink);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* 密码显隐切换按钮（LoginBrand 注入） */
+html[data-yx-page='login'] .yx-pw-toggle {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--yx-ink-faint);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 220ms var(--yx-ease), background 220ms var(--yx-ease);
+}
+html[data-yx-page='login'] .yx-pw-toggle:hover {
+  color: var(--yx-gold);
+  background: rgba(185, 154, 99, 0.08);
+}
+html[data-yx-page='login'] .yx-pw-toggle.yx-pw-toggle--show {
+  color: var(--yx-gold);
+}
+/* 显示状态：眼睛睁开；隐藏状态：闭眼（用透明度切换） */
+html[data-yx-page='login'] .yx-pw-toggle.yx-pw-toggle--show .yx-eye-open {
+  opacity: 0.55;
+}
+
+/* 忘记密码链接：隐藏（按规范） */
+html[data-yx-page='login'] section.template-minimal.login .login__form > a[href*='forgot'] {
+  display: none !important;
+}
+
+/* ====================================================================
+   提交按钮：入 岫 →  深黛青 + 云雾纹理
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit,
+html[data-yx-page='login'] section.template-minimal.login.login .login__form .form-submit {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.4rem;
+  animation: yx-enter-up 600ms var(--yx-ease) 1100ms both;
+}
+
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit button[type='submit'],
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit .btn.btn--style-primary,
+html[data-yx-page='login'] section.template-minimal.login.login .login__form .form-submit button[type='submit'],
+html[data-yx-page='login'] section.template-minimal.login.login .login__form .form-submit .btn.btn--style-primary {
+  position: relative;
+  width: 100%;
+  height: 52px;
+  padding: 0 1.6rem;
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em; /* 视觉居中 */
+  color: #f4f1e8;
+  background:
+    /* 云雾纹理（极缓慢的横向滚动） */
+    radial-gradient(ellipse 60% 80% at 20% 50%, rgba(255, 252, 245, 0.1), transparent 60%),
+    radial-gradient(ellipse 50% 70% at 80% 50%, rgba(255, 252, 245, 0.06), transparent 60%),
+    /* 主底色：深黛 */
+    linear-gradient(135deg, var(--yx-dai) 0%, var(--yx-dai-deep) 100%);
+  background-size: 200% 100%, 200% 100%, 100% 100%;
+  border: 1px solid rgba(37, 37, 34, 0.2);
+  border-radius: 26px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(52, 76, 80, 0.18);
+  animation: yx-btn-cloud 30s linear infinite;
+  transition:
+    transform 220ms var(--yx-ease),
+    box-shadow 260ms var(--yx-ease),
+    filter 260ms var(--yx-ease);
+}
+
+/* Hover：亮度 +5%，箭头右移（由 .yx-btn-text 内的 → 字符承担） */
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit button[type='submit']:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 12px 32px rgba(52, 76, 80, 0.28);
+}
+
+/* Active：缩小 1~2% */
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit button[type='submit']:active {
+  transform: translateY(0) scale(0.985);
+  transition-duration: 100ms;
+}
+
+/* Disabled：登录中状态 */
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit button[type='submit']:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.6) brightness(0.9);
+}
+
+/* ====================================================================
+   飞书扫码登录（beforeLogin 插槽，运行时被挪到提交按钮之后）
+   常规登录页顺序：邮箱 → 密码 → 提交 → 「或」 → 第三方登录
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-wrap,
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.9rem;
+  width: min(92vw, 26rem);
+  margin: 1.1rem auto 0;
+  animation: yx-enter-up 700ms var(--yx-ease) 1050ms both;
+}
+/* 顺序：分隔线在上（靠提交按钮），飞书按钮在下（作为最末尾的第三方入口） */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider { order: 1; }
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link { order: 2; }
+
+/* 飞书按钮：青黛玻璃药丸（与主按钮同色系，更轻） */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link,
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-family: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--yx-dai);
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(52, 76, 80, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(52, 76, 80, 0.08);
+  cursor: pointer;
+  text-decoration: none;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    transform 260ms var(--yx-ease),
+    background 260ms var(--yx-ease),
+    border-color 260ms var(--yx-ease),
+    box-shadow 260ms var(--yx-ease);
+}
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(185, 154, 99, 0.45);
+  box-shadow: 0 8px 24px rgba(52, 76, 80, 0.14);
+  color: var(--yx-dai);
+}
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link:active {
+  transform: translateY(0);
+}
+
+/* 飞书图标着色：随主题色 */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+/* 分隔线「或」 */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider,
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-divider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.32em;
+  color: var(--yx-ink-faint);
+  text-indent: 0.32em;
+}
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider::before,
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(37, 37, 34, 0.14), transparent);
+  border-top: none;
+}
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .feishu-login-divider::before,
+html[data-yx-page='login'][data-theme='dark'] section.template-minimal.login .feishu-login-divider::after,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .feishu-login-divider::before,
+html[data-yx-page='login']:has([data-theme='dark']) section.template-minimal.login .feishu-login-divider::after {
+  background: linear-gradient(90deg, transparent, rgba(232, 228, 218, 0.18), transparent);
+}
+
+/* ====================================================================
+   飞书扫码弹窗（与主题协调）
+   ==================================================================== */
+html[data-yx-page='login'] .publish-modal__mask {
+  background: rgba(37, 37, 34, 0.32);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+html[data-yx-page='login'] .feishu-qr-modal {
+  background: rgba(255, 252, 245, 0.92);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(37, 37, 34, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(30, 40, 40, 0.18);
+  color: var(--yx-ink);
+}
+html[data-yx-page='login'] .feishu-qr-modal__qr {
+  display: flex;
+  justify-content: center;
+  padding: 0.6rem;
+  background: #fffefb;
+  border-radius: 12px;
+  border: 1px solid rgba(37, 37, 34, 0.06);
+}
+html[data-yx-page='login'] .feishu-qr-modal__hint,
+html[data-yx-page='login'] .feishu-qr-modal__tip {
+  color: var(--yx-ink-soft);
+}
+html[data-yx-page='login'] .feishu-qr-modal__error {
+  color: var(--yx-cinnabar);
+}
+html[data-yx-page='login'] .feishu-qr-modal .publish-modal__btn--primary {
+  background: linear-gradient(135deg, var(--yx-dai), var(--yx-dai-deep));
+  color: #f4f1e8;
+  border: none;
+  border-radius: 10px;
+}
+
+/* ====================================================================
+   错误状态：边框变朱砂（淡），下方淡入提示
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .login__form .field-type--error input,
+html[data-yx-page='login'] section.template-minimal.login .login__form .field-type.error input,
+html[data-yx-page='login'] section.template-minimal.login .login__form input[aria-invalid='true'] {
+  border-color: rgba(168, 71, 61, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(168, 71, 61, 0.08) !important;
+}
+html[data-yx-page='login'] section.template-minimal.login .login__form .field-error,
+html[data-yx-page='login'] section.template-minimal.login .login__form .error-message,
+html[data-yx-page='login'] section.template-minimal.login .login__form [class*='error'] {
+  color: var(--yx-cinnabar);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  animation: yx-enter-up 280ms var(--yx-ease) both;
+}
+
+/* ====================================================================
+   响应式
+   ==================================================================== */
+/* Tablet 768-1199：减少近景山体、降低云雾数量、登录区居中 */
+@media (max-width: 1199px) and (min-width: 768px) {
+  html[data-yx-page='login'] body::before {
+    width: 60vmax;
+    height: 36vmax;
+    filter: blur(36px);
+  }
+  html[data-yx-page='login'] body::after {
+    width: 50vmax;
+    height: 30vmax;
+    filter: blur(40px);
+  }
+}
+
+/* Mobile <768：精简视觉元素，聚焦登录 */
+@media (max-width: 767px) {
+  html[data-yx-page='login'] section.template-minimal.login .login__brand .graphic-logo,
+  html[data-yx-page='login'] section.template-minimal.login .login__brand img,
+  html[data-yx-page='login'] section.template-minimal.login .login__brand svg {
+    height: 3.4rem !important;
+  }
+  html[data-yx-page='login'] .yx-brand__name {
+    font-size: 30px;
+    letter-spacing: 0.16em;
+  }
+  html[data-yx-page='login'] .yx-brand__slogan {
+    font-size: 13px;
+    letter-spacing: 0.28em;
+  }
+  html[data-yx-page='login'] section.template-minimal.login .login__form,
+  html[data-yx-page='login'] section.template-minimal.login.login .login__form,
+  html[data-yx-page='login'] section.template-minimal.login .feishu-login-wrap {
+    width: calc(100% - 40px);
+    max-width: 420px;
+  }
+  html[data-yx-page='login'] section.template-minimal.login .login__form {
+    padding: 1.8rem 1.5rem 1.6rem;
+  }
+  html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit button[type='submit'] {
+    font-size: 15px;
+  }
+  /* 移动端视差减弱一半 */
+  html[data-yx-page='login'] body::before {
+    filter: blur(28px);
+    opacity: 0.7;
+  }
+  html[data-yx-page='login'] body::after {
+    filter: blur(32px);
+    opacity: 0.55;
+  }
+}
+
+/* ====================================================================
+   飞书登录按钮居中修复（最终定稿，覆盖前面所有旧规则）
+   问题：旧规则残留 display: inline-flex + max-width: 22rem + 未清 margin，
+        叠加新规则特异性冲突，导致按钮在 wrap 内不居中（宽度比 wrap 少 48px）。
+   修复：把按钮宽度设为父容器 100%（覆盖 max-width），
+        同时给 wrap 强制 align-items: stretch，确保子项水平撑满。
+   使用 !important 以覆盖前面积累的旧规则。
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important; /* 让按钮水平居中（而不是 stretch 到 100%） */
+  justify-content: flex-start;
+  width: min(92vw, 30rem) !important;
+  max-width: 30rem !important;
+  margin: 1.1rem auto 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box;
+}
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  /* 关键：按钮宽度自适应内容，不撑满父容器，避免溢出 */
+  width: auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0.75rem 1.5rem !important;
+  box-sizing: border-box;
+  gap: 0.55rem;
+}
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider {
+  width: 100% !important; /* 分隔线仍占满宽度（视觉分隔感） */
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* ====================================================================
+   仙气感字体统一层：云上飘飘
+   设计思路：
+     - 全页以「楷体」族为默认（笔画自然飘逸、气韵舒展）
+     - 品牌名「云岫小筑」用 ZCOOL XiaoWei（纤细雅致宋楷，web font）
+     - Slogan、忘记密码、飞书按钮、分隔线用 LXGW WenKai（霞鹜文楷手写风，web font）
+     - 表单标签、主提交按钮用楷体，加大字距营造"云上呼吸感"
+     - 所有 fallback 到本地 KaiTi / STKaiti / Kaiti SC / 楷体，
+       即使 web font 加载失败也能保持仙气
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login {
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive;
+  letter-spacing: 0.06em;
+  font-feature-settings: 'palt' 1; /* 中文紧凑排版 */
+}
+
+/* 表单字段标签：楷体 + 大字距（像古籍小注） */
+html[data-yx-page='login'] section.template-minimal.login .login__form .field-label,
+html[data-yx-page='login'] section.template-minimal.login.login .login__form .field-label {
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive !important;
+  font-weight: 400;
+  letter-spacing: 0.28em;
+}
+
+/* 输入框内容：楷体（用户看到的输入文字也用仙气字体） */
+html[data-yx-page='login'] section.template-minimal.login .login__form input,
+html[data-yx-page='login'] section.template-minimal.login.login .login__form input {
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+
+/* 主提交按钮：ZCOOL XiaoWei + 楷体，字距放大，带柔光 */
+html[data-yx-page='login'] section.template-minimal.login .login__form .form-submit button[type='submit'],
+html[data-yx-page='login'] section.template-minimal.login.login .login__form .form-submit .btn.btn--style-primary {
+  font-family: 'ZCOOL XiaoWei', 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive !important;
+  font-weight: 400;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em; /* 视觉居中补偿 */
+}
+
+/* 「忘记密码？」链接：楷体 + 淡色字距 */
+html[data-yx-page='login'] section.template-minimal.login .login__form a[href*='forgot'],
+html[data-yx-page='login'] section.template-minimal.login .login__form a[href*='forgot-password'] {
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive;
+  letter-spacing: 0.2em;
+  font-size: 13px;
+}
+
+/* 飞书按钮：楷体（比主按钮更淡） */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link,
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-link {
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive !important;
+  font-weight: 400;
+  letter-spacing: 0.04em !important; /* 收回到最小字距：LXGW WenKai 字宽偏大，加大字距会撑破按钮 */
+  font-size: 14px;
+  padding: 0.75rem 1.5rem !important;
+  min-width: 0 !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+/* 飞书按钮内的文字允许换行/收缩，但优先不换 */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link > span {
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+/* 飞书图标固定尺寸，避免 flex 挤压后变大 */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-link .feishu-login-icon {
+  width: 20px !important;
+  height: 20px !important;
+  flex-shrink: 0;
+}
+
+/* 分隔线"或"：楷体 + 极大字距（更像题跋小注） */
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider,
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-divider {
+  font-family: 'ZCOOL XiaoWei', 'LXGW WenKai', 'KaiTi', 'STKaiti', 'Kaiti SC', 'DFKai-SB', '楷体', cursive !important;
+  font-size: 11px;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+}
+
+/* ====================================================================
+   飞书按钮居中最终修复（v2）
+   问题：wrap 被前面的 .template-minimal.login.login .feishu-login-wrap 撑到
+        min(92vw, 30rem)，且旧响应式规则又覆盖成 calc(100%-40px)。
+        按钮即使 align-items: center 居中，wrap 太宽时视觉就"偏左"。
+   修复：在最末尾用 !important 强制 wrap 收缩到按钮自然宽度并居中。
+   ==================================================================== */
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-wrap,
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-wrap {
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 1.1rem auto 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+html[data-yx-page='login'] section.template-minimal.login.login .feishu-login-divider,
+html[data-yx-page='login'] section.template-minimal.login .feishu-login-divider {
+  width: 100% !important;
+  max-width: 20rem;
+  margin: 0 auto !important;
+}
+
+/* ====================================================================
+   减少动效偏好：停用所有东方云主题动画
+   ==================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  html[data-yx-page='login'] body::before,
+  html[data-yx-page='login'] body::after,
+  html[data-yx-page='login'] section.template-minimal.login,
+  html[data-yx-page='login'] section.template-minimal.login *,
+  html[data-yx-page='login'] section.template-minimal.login .login__brand,
+  html[data-yx-page='login'] section.template-minimal.login .login__form,
+  html[data-yx-page='login'] section.template-minimal.login .feishu-login-link,
+  html[data-yx-page='login'] section.template-minimal.login .form-submit button {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ====================================================================
+   登录成功过渡动画：「入岫」
+   触发：LoginBrand 组件在 form submit 时给 <html> 打 data-yx-transition
+   阶段：
+     gathering → 云雾向中心聚拢（0.9s）
+     fadeout   → 云雾覆盖整屏（0.9s 后），整体淡出
+   总时长：约 1.8s
+   ==================================================================== */
+
+/* 聚拢态：云雾收缩到屏幕中心 */
+html[data-yx-page='login'][data-yx-transition='gathering'] body::before {
+  animation: yx-cloud-gather-a 900ms var(--yx-ease) forwards !important;
+}
+html[data-yx-page='login'][data-yx-transition='gathering'] body::after {
+  animation: yx-cloud-gather-b 900ms var(--yx-ease) forwards !important;
+}
+
+/* 消散态：云雾扩散覆盖整屏，整体淡出 */
+html[data-yx-page='login'][data-yx-transition='fadeout'] body::before {
+  animation: yx-cloud-cover-a 900ms var(--yx-ease) forwards !important;
+}
+html[data-yx-page='login'][data-yx-transition='fadeout'] body::after {
+  animation: yx-cloud-cover-b 900ms var(--yx-ease) forwards !important;
+}
+html[data-yx-page='login'][data-yx-transition='fadeout'] section.template-minimal.login {
+  animation: yx-page-fadeout 900ms var(--yx-ease) forwards !important;
+}
+html[data-yx-page='login'][data-yx-transition='fadeout'] .template-minimal__wrap {
+  animation: yx-page-fadeout 900ms var(--yx-ease) forwards !important;
+}
+
+/* 云雾聚拢关键帧：向中心收缩 + 变浓 */
+@keyframes yx-cloud-gather-a {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.85; }
+  100% { transform: translate(15vw, 8vh) scale(0.6); opacity: 0.95; }
+}
+@keyframes yx-cloud-gather-b {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0.7; }
+  100% { transform: translate(-12vw, -6vh) scale(0.55); opacity: 0.9; }
+}
+
+/* 云雾覆盖关键帧：扩散充满整屏 */
+@keyframes yx-cloud-cover-a {
+  0%   { transform: translate(15vw, 8vh) scale(0.6); opacity: 0.95; filter: blur(40px); }
+  100% { transform: translate(0, 0) scale(2.2); opacity: 1; filter: blur(60px); }
+}
+@keyframes yx-cloud-cover-b {
+  0%   { transform: translate(-12vw, -6vh) scale(0.55); opacity: 0.9; filter: blur(50px); }
+  100% { transform: translate(0, 0) scale(2.0); opacity: 1; filter: blur(70px); }
+}
+
+/* 页面淡出：内容透明 + 轻微上浮 */
+@keyframes yx-page-fadeout {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+/* 减少动效偏好：登录过渡也禁用 */
+@media (prefers-reduced-motion: reduce) {
+  html[data-yx-page='login'][data-yx-transition] body::before,
+  html[data-yx-page='login'][data-yx-transition] body::after,
+  html[data-yx-page='login'][data-yx-transition] section.template-minimal.login,
+  html[data-yx-page='login'][data-yx-transition] .template-minimal__wrap {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+

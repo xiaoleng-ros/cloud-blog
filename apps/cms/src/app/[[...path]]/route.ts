@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { join, extname, resolve } from 'node:path'
+import { join, extname, resolve, sep } from 'node:path'
 import { NextResponse } from 'next/server'
-import { renderBlocksForPathname } from '../../lib/blog-render'
+import { renderBlocksForPathname, resolveLegacyPostPath } from '../../lib/blog-render'
 import { injectSyncBlocks } from '../../lib/html-inject'
 
 // 每个 HTML 响应都要按最新后台数据渲染区块，必须走运行时（不能在构建期预渲染）
@@ -42,6 +42,43 @@ function resolveHtmlDir(): string | null {
     // 兜底：从 cwd 逐级向上找「哪个目录下的 public/__blog 存在」
     ...walkUpFor(`public/${HTML_DIR_NAME}`),
   ])
+}
+
+/**
+ * 归一化请求路径，拒绝目录穿越段。
+ * catch-all 参数已被解码，`%2e%2e` 会变成 `..` 原样传进来；
+ * 若保留这些段，join 后会逃出 public/__blog 读到 payload.db、.env、源码。
+ * 站点里没有合法 URL 需要 `.`/`..`，所以直接判定为非法请求。
+ * @returns 归一化后的绝对路径；含穿越段时返回 null
+ */
+function normalizeRequestPath(segments: string[] | undefined): string | null {
+  const decoded: string[] = []
+  for (const raw of segments ?? []) {
+    const value = safeDecode(raw)
+    if (value === '..' || value === '.') return null
+    if (value.includes('/') || value.includes('\\') || value.includes('\0')) return null
+    if (value) decoded.push(value)
+  }
+  return '/' + decoded.join('/')
+}
+
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+
+/**
+ * 把 baseDir + 路径段解析到 baseDir 内，越界则返回 null。
+ * normalizeRequestPath 已挡住穿越段，这里再兜一层，保证两个读取分支都收敛在 baseDir 内。
+ */
+function resolveWithin(baseDir: string, ...segments: string[]): string | null {
+  const root = resolve(baseDir)
+  const target = resolve(root, ...segments)
+  if (target !== root && !target.startsWith(root + sep)) return null
+  return target
 }
 
 /** 静态资源根目录（CSS/JS/图片；正常情况下 Next 的静态处理器先命中，这里只是兜底） */
@@ -109,24 +146,24 @@ function getStaticHtmlPath(pathname: string): string | null {
   const htmlDir = resolveHtmlDir()
   if (!htmlDir) return null
 
-  // 移除开头和结尾的斜杠，拆分路径段
+  // 拆分路径段（调用方已归一化并拒绝穿越段，此处段内不含 '/'）
   const segments = pathname.split('/').filter(Boolean)
   const candidates: string[] = []
 
   if (segments.length === 0) {
-    candidates.push(join(htmlDir, 'index.html'))
+    candidates.push('index.html')
   } else {
-    const basePath = join(htmlDir, ...segments)
-    candidates.push(join(basePath, 'index.html'))
+    candidates.push(join(...segments, 'index.html'))
     // 也尝试不带 index.html 的情况（如 /posts 对应 __blog/posts.html）
-    candidates.push(basePath + '.html')
+    candidates.push(join(...segments) + '.html')
     if (segments.length === 1) {
-      candidates.push(join(htmlDir, segments[0] + '.html'))
+      candidates.push(segments[0] + '.html')
     }
   }
 
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate
+  for (const relative of candidates) {
+    const safe = resolveWithin(htmlDir, ...relative.split(/[\\/]/).filter(Boolean))
+    if (safe && existsSync(safe)) return safe
   }
   return null
 }
@@ -185,7 +222,25 @@ export async function GET(
   { params }: { params: Promise<{ path?: string[] }> }
 ) {
   const { path } = await params
-  const pathname = '/' + (path?.join('/') ?? '')
+  const pathname = normalizeRequestPath(path)
+  if (pathname === null) {
+    return new NextResponse('Bad Request', { status: 400 })
+  }
+
+  // 历史链接 /posts/{id}/ → 301 到现行的 /posts/{分类名}/{id}/。
+  // 旧链接在静态产物里也是一份完整页面（Astro 静态输出不执行 getStaticPaths 的 redirect），
+  // 所以真 301 只能在「实际返回 HTML 的这一层」做；解析失败就照常返回静态外壳，不影响可访问性。
+  try {
+    const canonical = await resolveLegacyPostPath(pathname)
+    if (canonical) {
+      return new NextResponse(null, {
+        status: 301,
+        headers: { Location: canonical, 'Cache-Control': 'public, max-age=86400' },
+      })
+    }
+  } catch (err) {
+    console.error('[blog-html] 旧链接规范化失败，按原路径继续:', err)
+  }
 
   // 有扩展名的路径按静态文件处理：直接从 public 读取并返回
   // 注意：不能使用 NextResponse.next()（app route handler 不支持），必须返回实际内容
@@ -193,8 +248,8 @@ export async function GET(
   if (ext && MIME_TYPES[ext] && ext !== '.html') {
     const assetDir = resolveAssetDir()
     if (assetDir) {
-      const filePath = join(assetDir, ...pathname.split('/').filter(Boolean))
-      if (existsSync(filePath)) {
+      const filePath = resolveWithin(assetDir, ...pathname.split('/').filter(Boolean))
+      if (filePath && existsSync(filePath)) {
         const data = readFileSync(filePath)
         return new NextResponse(data, {
           headers: {

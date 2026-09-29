@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { publishedOnlyForAnonymous } from '../lib/access'
 import { syncInvalidateHook } from '../lib/sync-cache'
 
 /** 博客文章集合：字段与前台 markdown frontmatter 对齐，正文用 Markdown 源码 + 实时预览 */
@@ -20,7 +21,8 @@ export const Posts: CollectionConfig = {
     plural: '文章',
   },
   access: {
-    read: () => true,
+    // 草稿不可匿名读取（见 lib/access）
+    read: publishedOnlyForAnonymous,
   },
   hooks: {
     afterChange: [syncInvalidateHook],

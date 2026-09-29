@@ -117,20 +117,33 @@ function basenameOfUrl(url: string): string {
  *
  * 性能：单次查库，limit=0 全量拉取；结果被 snapshot 缓存，5s 内不再重查。
  */
-export async function fetchMediaAltMap(): Promise<Map<string, string>> {
+export interface MediaAltStats {
+  map: Map<string, string>
+  /** 配了 alt 的图片条数：删图/删 alt 时 updatedAt 可能不涨，靠条数兜住变化 */
+  count: number
+  /** 所有图片里最大的 updatedAt：只改 alt 也会变，版本号据此感知 */
+  updatedAt?: string
+}
+
+export async function fetchMediaAltMap(): Promise<MediaAltStats> {
   const map = new Map<string, string>()
+  let count = 0
+  let updatedAt: string | undefined
   try {
     const payload = await getDb()
     const { docs } = await payload.find({
       collection: 'media',
-      // 只需 url + alt 两列，减小网络与内存开销
-      select: { url: true, alt: true },
+      // 只需 url + alt 两列，减小网络与内存开销；updatedAt 用于计算版本号
+      select: { url: true, alt: true, updatedAt: true },
       limit: 0,
     })
     for (const doc of docs as any[]) {
+      const stamp: string | undefined = doc?.updatedAt
+      if (stamp && (!updatedAt || new Date(stamp) > new Date(updatedAt))) updatedAt = stamp
       const url: string | undefined = doc?.url
       const alt: string | undefined = typeof doc?.alt === 'string' ? doc.alt.trim() : undefined
       if (url && alt) {
+        count += 1
         // 归一化 key：Payload 存的是绝对/相对 URL，前台可能拼接域名；
         // 这里同时按原样和"去掉域名前缀"两种形态存一份，命中率更高
         map.set(url, alt)
@@ -142,7 +155,7 @@ export async function fetchMediaAltMap(): Promise<Map<string, string>> {
   } catch (err) {
     console.warn('[blog-sync] 拉取 Media alt 映射失败，回退到无 alt 渲染:', (err as Error).message)
   }
-  return map
+  return { map, count, updatedAt }
 }
 
 /** 拉取全部已发布文章，按 slug 作为 id（与前台路径一致） */
@@ -293,6 +306,9 @@ export interface FetchAllResult {
   navUpdatedAt?: string
   /** Media 集合的 url → alt 映射（Markdown 正文图片补 alt 用） */
   mediaAltMap: Map<string, string>
+  /** 配了 alt 的图片条数，与 mediaUpdatedAt 一起构成 Media 的变更指纹 */
+  mediaCount: number
+  mediaUpdatedAt?: string
 }
 
 /**
@@ -302,7 +318,7 @@ export interface FetchAllResult {
  * 这样 coverAlt 与正文图片 alt 共用同一份数据源，避免二次查询。
  */
 export async function fetchAllData(): Promise<FetchAllResult> {
-  const [postsRaw, notesRaw, projects, settings, navGlobal, mediaAltMap] = await Promise.all([
+  const [postsRaw, notesRaw, projects, settings, navGlobal, media] = await Promise.all([
     fetchPosts(),
     fetchNotes(),
     fetchProjects(),
@@ -310,6 +326,7 @@ export async function fetchAllData(): Promise<FetchAllResult> {
     getNavGlobal(),
     fetchMediaAltMap(),
   ])
+  const mediaAltMap = media.map
 
   // 用 altMap 回填 coverAlt：文章/随笔的封面 URL 若在 Media 表里配了 alt，一并带上
   const withCoverAlt = (entries: MdEntry[]) => {
@@ -327,18 +344,65 @@ export async function fetchAllData(): Promise<FetchAllResult> {
 
   const items = parseNavLines(navGlobal?.navItems)
   const nav = items.length > 0 ? items.filter((item) => item.href && item.label) : DEFAULT_NAV
-  return { posts, notes, projects, settings, nav, navUpdatedAt: navGlobal?.updatedAt, mediaAltMap }
+  return {
+    posts,
+    notes,
+    projects,
+    settings,
+    nav,
+    navUpdatedAt: navGlobal?.updatedAt,
+    mediaAltMap,
+    mediaCount: media.count,
+    mediaUpdatedAt: media.updatedAt,
+  }
 }
 
-/** 从已查数据计算版本号：各文档/全局 updatedAt 的最大值（毫秒时间戳） */
+/** 时间戳列表中最大的一个；无有效值时返回 undefined */
+function maxStamp(stamps: Array<string | number | undefined | null>): number | undefined {
+  let max: number | undefined
+  for (const s of stamps) {
+    if (s === undefined || s === null || s === '') continue
+    const t = new Date(s).getTime()
+    if (Number.isNaN(t)) continue
+    if (max === undefined || t > max) max = t
+  }
+  return max
+}
+
+/**
+ * 各数据源的「变更指纹」：条数 + 该源最大 updatedAt。
+ *
+ * 只给前台一个版本号时，「删掉一篇文章」可能被漏掉（剩下的文档 updatedAt 反而更小），
+ * 而条数一定会变。这里把两者拼在一起，供 /api/blog-sync?digest=1 让前台 loader
+ * 用极小的响应体判断「这一路数据到底要不要重拉全量」。
+ */
+export function computeSourceDigests(data: FetchAllResult): Record<string, string> {
+  const stampOf = (docs: Array<{ updatedAt?: string }>, count: number) =>
+    `${count}:${maxStamp(docs.map((d) => d.updatedAt)) ?? 0}`
+  return {
+    posts: stampOf(data.posts, data.posts.length),
+    notes: stampOf(data.notes, data.notes.length),
+    projects: stampOf(data.projects, data.projects.length),
+    settings: `${maxStamp([data.settings?.updatedAt]) ?? 0}`,
+    nav: `${maxStamp([data.navUpdatedAt]) ?? 0}`,
+    media: `${data.mediaCount}:${maxStamp([data.mediaUpdatedAt]) ?? 0}`,
+  }
+}
+
+/** 从已查数据计算版本号：各文档/全局 updatedAt 的最大值（毫秒时间戳）+ 各源条数指纹 */
 export function computeVersion(data: FetchAllResult): string {
-  const stamps: number[] = []
-  for (const p of data.posts) if (p.updatedAt) stamps.push(new Date(p.updatedAt).getTime())
-  for (const n of data.notes) if (n.updatedAt) stamps.push(new Date(n.updatedAt).getTime())
-  for (const pr of data.projects) if (pr.updatedAt) stamps.push(new Date(pr.updatedAt).getTime())
-  if (data.settings?.updatedAt) stamps.push(new Date(data.settings.updatedAt).getTime())
-  if (data.navUpdatedAt) stamps.push(new Date(data.navUpdatedAt).getTime())
-  return String(stamps.length ? Math.max(...stamps) : Date.now())
+  const digests = computeSourceDigests(data)
+  const max = maxStamp([
+    ...data.posts.map((p) => p.updatedAt),
+    ...data.notes.map((n) => n.updatedAt),
+    ...data.projects.map((p) => p.updatedAt),
+    data.settings?.updatedAt,
+    data.navUpdatedAt,
+    data.mediaUpdatedAt,
+  ])
+  // 无任何文档时退回当前时间，保持「每次不同」的旧行为
+  const stamp = max === undefined ? Date.now() : max
+  return `${stamp}:${digests.posts}|${digests.notes}|${digests.projects}|${digests.settings}|${digests.nav}|${digests.media}`
 }
 
 /**
@@ -359,6 +423,8 @@ export async function getSyncData(): Promise<SyncSnapshot> {
     nav: data.nav,
     navUpdatedAt: data.navUpdatedAt,
     mediaAltMap: data.mediaAltMap,
+    // 随快照一起缓存：?digest=1 命中缓存时零重算，直接回给前台
+    digests: computeSourceDigests(data),
     version,
     ts: Date.now(),
   }

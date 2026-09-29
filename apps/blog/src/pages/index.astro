@@ -9,6 +9,7 @@ import {
   getPostCategory,
   getPostCover,
   getPostDescription,
+  getPostPath,
   site,
   sortPosts,
   sortPostsByDate,
@@ -18,7 +19,7 @@ const posts = sortPosts(await getCollection('posts'));
 const featuredPosts = posts.filter((post) => (post.data.sticky ?? 0) > 0);
 const latestPosts = sortPostsByDate(posts).slice(0, 8);
 
-// Hero "精选" picks: sticky posts first, topped up with the latest, max 3.
+// Hero "精选" picks: sticky posts first, topped up with the latest, max 5.
 const heroPicks = [
   ...featuredPosts,
   ...latestPosts.filter((post) => !featuredPosts.some((f) => f.id === post.id)),
@@ -108,7 +109,7 @@ const coverHue = (value: string) => {
         <>
           <p class="hero__picks-label">精选</p>
           <div class="picks">
-          <a class="pick-hero" href={`/posts/${heroPicks[0].id}/`}>
+          <a class="pick-hero" href={getPostPath(heroPicks[0])}>
             {getPostCover(heroPicks[0]) ? (
               <span class="pick-hero__thumb">
                 <img
@@ -141,7 +142,7 @@ const coverHue = (value: string) => {
             <ul class="pick-side">
               {heroPicks.slice(1, 5).map((post) => (
                 <li>
-                  <a class="pick-side__item" href={`/posts/${post.id}/`}>
+                  <a class="pick-side__item" href={getPostPath(post)}>
                     {getPostCover(post) ? (
                       <span class="pick-side__thumb">
                         <img src={getPostCover(post)} alt={post.data.coverAlt ?? ''} loading="lazy" referrerpolicy="no-referrer" />

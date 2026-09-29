@@ -23,6 +23,9 @@ interface Props {
   type?: 'website' | 'article';
   jsonLd?: unknown;
   articleMeta?: ArticleMeta;
+  /** 规范链接路径（如 /posts/{分类名}/{id}/）。同一篇文章存在旧地址时由页面传入，
+   *  让旧地址那份产物把 canonical / og:url 指向新形态，避免搜索结果里两份重复内容 */
+  canonicalPath?: string;
 }
 
 // 站点信息：优先后台站点设置（SiteSettings），后台不可用时回退本地配置
@@ -41,10 +44,11 @@ const {
   type = 'website',
   jsonLd,
   articleMeta,
+  canonicalPath,
 } = Astro.props;
 
 const pageTitle = title === defaultInfo.name ? title : `${title} - ${defaultInfo.name}`;
-const canonicalUrl = absoluteUrl(Astro.url.pathname);
+const canonicalUrl = absoluteUrl(canonicalPath ?? Astro.url.pathname);
 const imageUrl = image ? absoluteUrl(image) : undefined;
 
 const websiteSchema = {
@@ -671,6 +675,10 @@ const routeMotion = {
         const POLL_URL = '/api/blog-sync';
         const SSE_TIMEOUT_MS = 30_000;
         const POLL_INTERVAL_MS = 30_000;
+        // SSE 断开后的重连退避：服务端会周期性回收连接（单连接存活上限），
+        // 所以断开是正常事件，必须真重连，而不是永远退化成轮询。
+        const SSE_RETRY_MS = 5_000;
+        const SSE_RETRY_MAX_MS = 60_000;
         // 与 CMS 渲染层约定的区块 ID → 页面锚点（data-sync-block 属性）映射
         const BLOCK_SELECTOR = '[data-sync-block]';
         // 滚动显现（scroll reveal）目标：新插入的 DOM 默认无 is-revealed 会隐藏，
@@ -767,6 +775,23 @@ const routeMotion = {
         let sseSource = null;
         let pollTimer = null;
         let sseEstablished = false;
+        let handshakeTimer = null;
+        let reconnectTimer = null;
+        let reconnectDelayMs = SSE_RETRY_MS;
+
+        const clearHandshakeTimer = () => {
+          if (handshakeTimer) {
+            window.clearTimeout(handshakeTimer);
+            handshakeTimer = null;
+          }
+        };
+
+        const clearReconnectTimer = () => {
+          if (reconnectTimer) {
+            window.clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+          }
+        };
 
         // 启动轮询兜底（SSE 不可用或超时后调用）
         const startPolling = () => {
@@ -782,48 +807,71 @@ const routeMotion = {
           }
         };
 
+        // 退避重连：服务端会按存活上限主动回收连接，断开是常态而非终点
+        const scheduleReconnect = () => {
+          if (reconnectTimer) return;
+          const delay = reconnectDelayMs;
+          reconnectDelayMs = Math.min(reconnectDelayMs * 2, SSE_RETRY_MAX_MS);
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connectSse();
+          }, delay);
+        };
+
         // 尝试连接 SSE 流：收到 update 事件时触发一次 sync，建立后停止轮询
         const connectSse = () => {
+          if (sseSource) return;
           try {
             sseSource = new EventSource(SSE_STREAM_URL, { withCredentials: false });
           } catch {
             startPolling();
+            scheduleReconnect();
             return;
           }
 
-          // 30 秒超时：若 SSE 未能建立稳定连接则降级为轮询
-          const timeout = window.setTimeout(() => {
-            if (!sseEstablished) {
-              sseSource?.close();
-              sseSource = null;
-              startPolling();
-            }
+          // 每次只认当前这一个连接：否则旧的超时定时器会误杀之后新建的连接
+          const source = sseSource;
+          sseEstablished = false;
+
+          // 超时：若 SSE 未能建立稳定连接则先降级为轮询，稍后仍会重试（代理可能只是慢）
+          clearHandshakeTimer();
+          handshakeTimer = window.setTimeout(() => {
+            handshakeTimer = null;
+            if (sseEstablished || sseSource !== source) return;
+            source.close();
+            sseSource = null;
+            startPolling();
+            scheduleReconnect();
           }, SSE_TIMEOUT_MS);
 
-          sseSource.addEventListener('open', () => {
+          source.addEventListener('open', () => {
             sseEstablished = true;
-            window.clearTimeout(timeout);
+            reconnectDelayMs = SSE_RETRY_MS;
+            clearHandshakeTimer();
+            clearReconnectTimer();
             stopPolling();
           });
 
-          sseSource.addEventListener('update', () => {
+          source.addEventListener('update', () => {
             sync();
           });
 
-          sseSource.addEventListener('error', () => {
-            if (sseEstablished) {
-              // SSE 已建立后断开：尝试重连，同时启动轮询兜底
-              sseSource.close();
-              sseSource = null;
-              startPolling();
-            } else {
-              // 首次连接失败：等待超时自动降级
-            }
+          source.addEventListener('error', () => {
+            // 断开（含服务端回收、代理空闲切断）：轮询先兜底，同时退避重连。
+            // 只降级不重连会让页面在一次断开后永久停在 30s 轮询上。
+            clearHandshakeTimer();
+            source.close();
+            if (sseSource === source) sseSource = null;
+            sseEstablished = false;
+            startPolling();
+            scheduleReconnect();
           });
         };
 
         connectSse();
         signal.addEventListener('abort', () => {
+          clearHandshakeTimer();
+          clearReconnectTimer();
           sseSource?.close();
           sseSource = null;
           if (pollTimer) window.clearInterval(pollTimer);

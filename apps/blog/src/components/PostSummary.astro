@@ -1,5 +1,5 @@
 ---
-import { getPostCategory, getPostExcerpt, type BlogPost } from '../lib/posts';
+import { getPostCategory, getPostExcerpt, getPostPath, type BlogPost } from '../lib/posts';
 
 interface Props {
   post: BlogPost;
@@ -16,7 +16,7 @@ const category = getPostCategory(post);
 ---
 
 <article class:list={['post-row', compact && 'post-row--compact', !date && 'post-row--plain']}>
-  <a href={`/posts/${post.id}/`}>
+  <a href={getPostPath(post)}>
     {date && (
       <time class="post-row__date" datetime={date.toISOString()}>
         <span class="post-row__md">{monthDay}</span>

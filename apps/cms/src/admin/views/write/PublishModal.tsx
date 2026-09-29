@@ -17,6 +17,8 @@ export interface PublishMeta {
 
 interface Props {
   collection: 'posts' | 'notes'
+  /** 弹窗用途：'publish' 走完发布校验；'draft' 只为存草稿收集元信息（标题可留空，分类仍必填） */
+  mode?: 'publish' | 'draft'
   /** 初始值（编辑/草稿回填） */
   initial: Partial<PublishMeta>
   /** 确认发布回调（meta 为弹窗内收集的元信息） */
@@ -28,9 +30,17 @@ interface Props {
 }
 
 /**
- * 发布弹窗：文章（标题/摘要/封面/分类/标签/置顶权重）；随笔（标题/心情/日期/标签）
+ * 元信息弹窗：文章（标题/摘要/封面/分类/标签/置顶权重）；随笔（标题/心情/日期/标签）
  */
-export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, onCancel, saving }) => {
+export const PublishModal: React.FC<Props> = ({
+  collection,
+  mode = 'publish',
+  initial,
+  onConfirm,
+  onCancel,
+  saving,
+}) => {
+  const isDraft = mode === 'draft'
   // 表单状态（初始值来自传入草稿）
   const [title, setTitle] = useState(initial.title ?? '')
   const [description, setDescription] = useState(initial.description ?? '')
@@ -57,11 +67,12 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
 
   /** 提交校验并回调 */
   const submit = async () => {
-    if (collection === 'posts' && !title.trim()) {
+    if (!isDraft && collection === 'posts' && !title.trim()) {
       setError('请填写标题')
       return
     }
-    // 分类必填（文章 / 随笔都需要，用于生成 URL）
+    // 分类必填（草稿也一样）：数据库里 posts/notes.categories_id 是 NOT NULL，
+    // 而且文章 URL 由「分类名/ID」拼接，缺了分类后端直接 400
     if (categoryIds.length === 0) {
       setError('请选择分类（必填，决定文章链接）')
       return
@@ -131,17 +142,21 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
     <div className="publish-modal__mask" onClick={onCancel}>
       <div className="publish-modal" onClick={(e) => e.stopPropagation()}>
         <header className="publish-modal__head">
-          <h3 className="publish-modal__title">{collection === 'posts' ? '发布文章' : '发布随笔'}</h3>
+          <h3 className="publish-modal__title">
+            {isDraft ? '存草稿' : collection === 'posts' ? '发布文章' : '发布随笔'}
+          </h3>
           <button type="button" className="publish-modal__close" onClick={onCancel} aria-label="关闭">×</button>
         </header>
 
         <div className="publish-modal__body">
-          <label className="publish-modal__label">{collection === 'posts' ? '标题（必填）' : '标题'}</label>
+          <label className="publish-modal__label">
+            {!isDraft && collection === 'posts' ? '标题（必填）' : '标题'}
+          </label>
           <input
             className="publish-modal__input"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={collection === 'posts' ? '请输入文章标题' : '可选'}
+            placeholder={isDraft ? '可留空，自动按日期命名' : collection === 'posts' ? '请输入文章标题' : '可选'}
           />
 
           {collection === 'posts' && (
@@ -204,7 +219,13 @@ export const PublishModal: React.FC<Props> = ({ collection, initial, onConfirm, 
             onClick={() => void submit()}
             disabled={saving}
           >
-            {saving ? '提交中…' : collection === 'posts' ? '发布文章' : '发布随笔'}
+            {saving
+              ? '提交中…'
+              : isDraft
+                ? '保存草稿'
+                : collection === 'posts'
+                  ? '发布文章'
+                  : '发布随笔'}
           </button>
         </footer>
       </div>

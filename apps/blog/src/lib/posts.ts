@@ -47,7 +47,20 @@ function postCategoryName(post: BlogPost): string {
 
 /** 文章链接：/posts/{分类名}/{数字ID}/ */
 export function getPostPath(post: BlogPost) {
-  return `/posts/${encodeURIComponent(postCategoryName(post))}/${String(post.id)}/`;
+  // 直接复用 getPostPathParams 再编码，保证「路由参数」与「链接」两条路永远一致
+  return `/posts/${getPostPathParams(post)
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/')}/`;
+}
+
+/**
+ * getStaticPaths 用的路由参数值（**不做 URL 编码**）。
+ * Astro 会按参数原值生成目录，编码后的值会落成 `%xx` 目录名，
+ * 而 CMS 的路由拿到的是解码后的分类名，两边对不上就会 404。
+ */
+export function getPostPathParams(post: BlogPost) {
+  return `${postCategoryName(post)}/${String(post.id)}`;
 }
 
 /** 文章绝对 URL */

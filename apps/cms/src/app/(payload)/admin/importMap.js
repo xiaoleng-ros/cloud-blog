@@ -5,6 +5,8 @@ import { SocialLinksField as SocialLinksField_1abbff97fa1db6a0b8127a2e95003282 }
 import { NavItemsField as NavItemsField_d447d1ca34b268f715fc3ad3605eae28 } from '../../../../src/admin/components/NavItemsField.tsx'
 import { CustomNav as CustomNav_c3cf622793693287a4c5a05434793407 } from '../../../../src/admin/components/CustomNav.tsx'
 import { CloudLogo as CloudLogo_d06fa95a4848ce56f762457715ce74a8 } from '../../../../src/admin/components/CloudGraphics.tsx'
+import { FeishuLoginLink as FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593 } from '../../../../src/admin/components/FeishuLoginLink.tsx'
+import { LoginBrand as LoginBrand_6a9d4450ccefb77d748f6fa2e00f2590 } from '../../../../src/admin/components/LoginBrand.tsx'
 import { DashboardView as DashboardView_1b3552f3c55b03dbdd4b9732a8e74d1d } from '../../../../src/admin/views/DashboardView.tsx'
 import { AccountView as AccountView_b1e2354f00c039951dd0009e54fea135 } from '../../../../src/admin/views/AccountView.tsx'
 import { PostComposeView as PostComposeView_c48bc1412d48efbcf260795811a628d2 } from '../../../../src/admin/views/write/PostComposeView.tsx'
@@ -21,6 +23,8 @@ export const importMap = {
   "/src/admin/components/NavItemsField.tsx#NavItemsField": NavItemsField_d447d1ca34b268f715fc3ad3605eae28,
   "/src/admin/components/CustomNav.tsx#CustomNav": CustomNav_c3cf622793693287a4c5a05434793407,
   "/src/admin/components/CloudGraphics.tsx#CloudLogo": CloudLogo_d06fa95a4848ce56f762457715ce74a8,
+  "/src/admin/components/FeishuLoginLink.tsx#FeishuLoginLink": FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593,
+  "/src/admin/components/LoginBrand.tsx#LoginBrand": LoginBrand_6a9d4450ccefb77d748f6fa2e00f2590,
   "/src/admin/views/DashboardView.tsx#DashboardView": DashboardView_1b3552f3c55b03dbdd4b9732a8e74d1d,
   "/src/admin/views/AccountView.tsx#AccountView": AccountView_b1e2354f00c039951dd0009e54fea135,
   "/src/admin/views/write/PostComposeView.tsx#PostComposeView": PostComposeView_c48bc1412d48efbcf260795811a628d2,

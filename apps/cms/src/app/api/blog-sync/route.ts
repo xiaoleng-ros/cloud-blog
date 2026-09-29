@@ -5,10 +5,15 @@ import { getSyncData } from '../../../lib/blog-sync'
 /**
  * 博客前台数据同步 API
  *
+/**
  * 两种模式：
  * 1. 版本探测：GET /api/blog-sync?version=1
  *    只返回 { version, ts }，不渲染区块（命中快照缓存时零查库、零渲染）。
  *    前台轮询兜底时先用它判断数据是否变化，变了再拉全量区块。
+ * 1b. 分源指纹：GET /api/blog-sync?digest=1
+ *    返回 { version, digests: { posts, notes, projects, settings, nav, media }, ts }，
+ *    每个值是「条数:最大 updatedAt」。供 Astro loader 用 <1KB 的响应体判断某一路数据
+ *    是否需要重拉全量（否则每 3s 都要把全部正文跨公网拖一遍）。
  * 2. 全量区块：GET /api/blog-sync?path=/posts/xxx
  *    返回 { version, title, blocks }，供前台局部替换页面内容。
  *
@@ -22,10 +27,15 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
 
     // 轻量版本探测：只返回版本号，不渲染区块
-    if (url.searchParams.get('version') === '1') {
+    if (url.searchParams.get('version') === '1' || url.searchParams.get('digest') === '1') {
       const snapshot = await getSyncData()
+      const wantDigest = url.searchParams.get('digest') === '1'
       return NextResponse.json(
-        { version: snapshot.version, ts: Date.now() },
+        {
+          version: snapshot.version,
+          ts: Date.now(),
+          ...(wantDigest ? { digests: snapshot.digests } : {}),
+        },
         { headers: { 'Cache-Control': 'no-store, max-age=0' } },
       )
     }
