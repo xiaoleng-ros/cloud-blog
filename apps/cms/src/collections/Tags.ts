@@ -7,6 +7,14 @@ export const Tags: CollectionConfig = {
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'createdAt'],
+    components: {
+      // 定制双栏管理页：左列表（含关联文章数）+ 右新建/编辑面板
+      views: {
+        list: {
+          Component: '/src/admin/views/tags/TagsListView.tsx#TagsListView',
+        },
+      },
+    },
   },
   labels: {
     singular: '标签',

@@ -11,6 +11,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react'
 import { PASSWORD_RULE_TEXT, validatePasswordStrength } from '../../lib/password'
+import { PageHeader } from '../components/PageHeader'
 
 /** 当前登录用户（仅取用到的字段） */
 type MeUser = {
@@ -190,11 +191,11 @@ export const AccountView = () => {
       {notice && <div className={`account-view__notice account-view__notice--${notice.type}`}>{notice.text}</div>}
 
       {/* 页头 */}
-      <header className="account-view__header">
-        <p className="account-view__eyebrow">Account</p>
-        <h1 className="account-view__title">账号设置</h1>
-        <p className="account-view__desc">管理登录账号的昵称、邮箱与密码。</p>
-      </header>
+      <PageHeader
+        eyebrow="Account"
+        title="账号设置"
+        desc="管理登录账号的昵称、邮箱与密码。"
+      />
 
       {/* 顶部分栏导航 */}
       <nav className="account-view__tabs" role="tablist" aria-label="账号设置分栏">

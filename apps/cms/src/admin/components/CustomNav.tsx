@@ -12,7 +12,7 @@
  * 挂载方式：
  * - 通过 payload.config.ts 的 admin.components.nav 注册
  * - 复刻 Payload 默认 Nav 的 DOM 结构（aside.nav > div.nav__scroll > nav.nav__wrap），
- *   保证移动端汉堡开合逻辑与手账风主题样式继续生效
+ *   保证移动端汉堡开合逻辑与后台主题样式继续生效
  */
 import { Hamburger, Link, Logout, useConfig, useNav } from '@payloadcms/ui'
 import { usePathname } from 'next/navigation'
@@ -66,6 +66,7 @@ const sections: NavSection[] = [
       { label: '写文章', path: '/write-post', icon: 'dark' },
       { label: '写随笔', path: '/write-note', icon: 'dark' },
       { label: '草稿箱', path: '/drafts', icon: 'dark' },
+      { label: '回收站', path: '/trash', icon: 'dark' },
     ],
   },
   {

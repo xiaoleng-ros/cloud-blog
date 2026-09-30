@@ -5,6 +5,8 @@ import { syncInvalidateHook } from '../lib/sync-cache'
 /** 博客文章集合：字段与前台 markdown frontmatter 对齐，正文用 Markdown 源码 + 实时预览 */
 export const Posts: CollectionConfig = {
   slug: 'posts',
+  // 软删除：删除仅打 deletedAt 标记进回收站，所有默认查询（前台同步/列表/草稿箱）自动排除
+  trash: true,
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'status', 'updatedAt'],
@@ -14,6 +16,14 @@ export const Posts: CollectionConfig = {
       const cat = (doc as unknown as { categories?: { name?: string } | { name?: string }[] }).categories
       const name = Array.isArray(cat) ? cat[0]?.name : cat?.name
       return `/posts/${encodeURIComponent(name || '')}/${doc.id}/`
+    },
+    components: {
+      // 定制管理列表：搜索/分类/标签/日期筛选 + 导出/导入 + 批量移入回收站
+      views: {
+        list: {
+          Component: '/src/admin/views/manage/ManageListView.tsx#ManageListView',
+        },
+      },
     },
   },
   labels: {

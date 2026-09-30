@@ -1,6 +1,9 @@
 import { CoverField as CoverField_b015e341ee5dfbb7005249419be75cfd } from '../../../../src/admin/components/CoverField.tsx'
 import { PostCategoryField as PostCategoryField_665e39a0443bb5ed393749b801571ddc } from '../../../../src/admin/components/PostCategoryField.tsx'
 import { MarkdownEditorField as MarkdownEditorField_39f26ae0489753f9c48c7dcf90ee0578 } from '../../../../src/editor/MarkdownEditor.tsx'
+import { ManageListView as ManageListView_73e62e78b473461b8f71e9dc8c2a32e4 } from '../../../../src/admin/views/manage/ManageListView.tsx'
+import { CategoriesListView as CategoriesListView_04455d182a2a787ecb77abe09ca9dee3 } from '../../../../src/admin/views/categories/CategoriesListView.tsx'
+import { TagsListView as TagsListView_3d89435d3501d2d917eb5ad710f3d99f } from '../../../../src/admin/views/tags/TagsListView.tsx'
 import { SocialLinksField as SocialLinksField_1abbff97fa1db6a0b8127a2e95003282 } from '../../../../src/admin/components/SocialLinksField.tsx'
 import { NavItemsField as NavItemsField_d447d1ca34b268f715fc3ad3605eae28 } from '../../../../src/admin/components/NavItemsField.tsx'
 import { CustomNav as CustomNav_c3cf622793693287a4c5a05434793407 } from '../../../../src/admin/components/CustomNav.tsx'
@@ -12,6 +15,7 @@ import { AccountView as AccountView_b1e2354f00c039951dd0009e54fea135 } from '../
 import { PostComposeView as PostComposeView_c48bc1412d48efbcf260795811a628d2 } from '../../../../src/admin/views/write/PostComposeView.tsx'
 import { NoteComposeView as NoteComposeView_af4b37b184560c1455536f139ac92696 } from '../../../../src/admin/views/write/NoteComposeView.tsx'
 import { DraftsView as DraftsView_e8ffb8e11909aedb00bac5188e12dcc7 } from '../../../../src/admin/views/drafts/DraftsView.tsx'
+import { TrashView as TrashView_dfd0e9988da2b44465fe388ce4eeaedf } from '../../../../src/admin/views/trash/TrashView.tsx'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -19,6 +23,9 @@ export const importMap = {
   "/src/admin/components/CoverField.tsx#CoverField": CoverField_b015e341ee5dfbb7005249419be75cfd,
   "/src/admin/components/PostCategoryField.tsx#PostCategoryField": PostCategoryField_665e39a0443bb5ed393749b801571ddc,
   "/src/editor/MarkdownEditor.tsx#MarkdownEditorField": MarkdownEditorField_39f26ae0489753f9c48c7dcf90ee0578,
+  "/src/admin/views/manage/ManageListView.tsx#ManageListView": ManageListView_73e62e78b473461b8f71e9dc8c2a32e4,
+  "/src/admin/views/categories/CategoriesListView.tsx#CategoriesListView": CategoriesListView_04455d182a2a787ecb77abe09ca9dee3,
+  "/src/admin/views/tags/TagsListView.tsx#TagsListView": TagsListView_3d89435d3501d2d917eb5ad710f3d99f,
   "/src/admin/components/SocialLinksField.tsx#SocialLinksField": SocialLinksField_1abbff97fa1db6a0b8127a2e95003282,
   "/src/admin/components/NavItemsField.tsx#NavItemsField": NavItemsField_d447d1ca34b268f715fc3ad3605eae28,
   "/src/admin/components/CustomNav.tsx#CustomNav": CustomNav_c3cf622793693287a4c5a05434793407,
@@ -30,5 +37,6 @@ export const importMap = {
   "/src/admin/views/write/PostComposeView.tsx#PostComposeView": PostComposeView_c48bc1412d48efbcf260795811a628d2,
   "/src/admin/views/write/NoteComposeView.tsx#NoteComposeView": NoteComposeView_af4b37b184560c1455536f139ac92696,
   "/src/admin/views/drafts/DraftsView.tsx#DraftsView": DraftsView_e8ffb8e11909aedb00bac5188e12dcc7,
+  "/src/admin/views/trash/TrashView.tsx#TrashView": TrashView_dfd0e9988da2b44465fe388ce4eeaedf,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }

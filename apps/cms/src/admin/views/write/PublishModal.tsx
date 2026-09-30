@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { CoverUploader } from '../../components/CoverUploader'
-import { fetchTerms, type TermOption } from '../lib/api'
+import { fetchSelectableCategories, fetchTerms, type TermOption } from '../lib/api'
 
 /** 发布前的元信息（文章与随笔共用结构，字段按集合取用） */
 export interface PublishMeta {
@@ -55,9 +55,9 @@ export const PublishModal: React.FC<Props> = ({
   const [tags, setTags] = useState<TermOption[]>([])
   const [error, setError] = useState('')
 
-  // 挂载时拉取分类 / 标签列表（失败不阻塞发布）
+  // 挂载时拉取分类 / 标签列表（失败不阻塞发布）；分类只列「类型=分类且前台可见」的节点
   useEffect(() => {
-    void Promise.all([fetchTerms('categories'), fetchTerms('tags')])
+    void Promise.all([fetchSelectableCategories(), fetchTerms('tags')])
       .then(([cs, ts]) => {
         setCategories(cs)
         setTags(ts)

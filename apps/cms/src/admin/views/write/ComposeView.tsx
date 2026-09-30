@@ -14,6 +14,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarkdownEditor } from '../../../editor/MarkdownEditor'
+import { PageHeader } from '../../components/PageHeader'
 import {
   ApiError,
   createDoc,
@@ -158,6 +159,8 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
             }
             if (bundle.content) {
               setContent(bundle.content)
+              // 恢复的草稿即新的「初始内容」，否则清空正文会被误判为无改动，旧草稿永远留在本地
+              initialContentRef.current = bundle.content
               setSaveTip('已恢复本地草稿')
               setTimeout(() => setSaveTip(''), 2500)
             }
@@ -191,6 +194,10 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
           localStorage.setItem(storageKey, bundle)
           setSaveTip('已自动保存到本地')
           setTimeout(() => setSaveTip(''), 2000)
+        } else {
+          // 正文已清空：删除本地草稿，否则刷新后旧内容会再次「复活」
+          localStorage.removeItem(storageKey)
+          dirtyRef.current = false
         }
       } catch {
         // 忽略 localStorage 异常
@@ -332,26 +339,26 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
 
   return (
     <div className="compose">
-      <header className="compose__header">
-        <div>
-          <p className="compose__eyebrow">{collection === 'posts' ? 'Post' : 'Note'}</p>
-          <h1 className="compose__title">{title}</h1>
-        </div>
-        <div className="compose__actions">
-          {saveTip && <span className="compose__tip">{saveTip}</span>}
-          <button type="button" className="compose__btn" onClick={() => void saveDraft()} disabled={loading}>
-            💾 存草稿
-          </button>
-          <button
-            type="button"
-            className="compose__btn compose__btn--primary"
-            onClick={() => setModal('publish')}
-            disabled={loading}
-          >
-            🚀 发布
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow={collection === 'posts' ? 'Post' : 'Note'}
+        title={title}
+        actions={
+          <>
+            {saveTip && <span className="compose__tip">{saveTip}</span>}
+            <button type="button" className="compose__btn" onClick={() => void saveDraft()} disabled={loading}>
+              💾 存草稿
+            </button>
+            <button
+              type="button"
+              className="compose__btn compose__btn--primary"
+              onClick={() => setModal('publish')}
+              disabled={loading}
+            >
+              🚀 发布
+            </button>
+          </>
+        }
+      />
 
       <div className="compose__body">
         {collection === 'posts' && (

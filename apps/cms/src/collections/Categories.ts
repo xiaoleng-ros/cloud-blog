@@ -1,5 +1,12 @@
-import type { CollectionConfig } from 'payload'
+import { APIError, type CollectionConfig } from 'payload'
 import { syncInvalidateHook } from '../lib/sync-cache'
+
+/** 从关系字段值里取 id（兼容 depth 展开后的对象与裸 id） */
+const refId = (v: unknown): number | null => {
+  if (v == null) return null
+  if (typeof v === 'object') return Number((v as { id: unknown }).id) || null
+  return Number(v) || null
+}
 
 /** 文章分类集合 */
 export const Categories: CollectionConfig = {
@@ -7,6 +14,14 @@ export const Categories: CollectionConfig = {
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'createdAt'],
+    components: {
+      // 定制树形管理页：图例/搜索/展开折叠 + 新建编辑弹窗
+      views: {
+        list: {
+          Component: '/src/admin/views/categories/CategoriesListView.tsx#CategoriesListView',
+        },
+      },
+    },
   },
   labels: {
     singular: '分类',
@@ -20,11 +35,53 @@ export const Categories: CollectionConfig = {
     // 否则旧链接映射残留 → 死链（此前只有 Posts/Notes/Projects 挂了同步钩子）。
     afterChange: [syncInvalidateHook],
     afterDelete: [syncInvalidateHook],
+    beforeChange: [
+      // 层级防环：上级不能是自己或自己的后代（弹窗会排除，但 API 直改也要拦）。
+      async ({ data, originalDoc, req }) => {
+        if (!data || data.parent === undefined) return data
+        const pid = refId(data.parent)
+        if (pid == null) return data
+        const selfId = originalDoc?.id != null ? Number(originalDoc.id) : null
+        let cursor: number | null = pid
+        const seen = new Set<number>()
+        while (cursor != null) {
+          if (cursor === selfId) {
+            // 必须显式传 400：Payload 对 500 状态的消息一律隐藏成 "Something went wrong."
+            throw new APIError('上级分类不能选择自己或自己的子分类，会形成循环层级。', 400)
+          }
+          if (seen.has(cursor)) break
+          seen.add(cursor)
+          try {
+            const up = await req.payload.findByID({
+              collection: 'categories',
+              id: cursor,
+              depth: 0,
+              req,
+            })
+            cursor = refId(up?.parent)
+          } catch {
+            cursor = null
+          }
+        }
+        return data
+      },
+    ],
     beforeDelete: [
       // categories_id 在 posts/notes 上是 NOT NULL 列，而外键写的是 ON DELETE set null
       // （见 20260926 迁移）——删除仍被引用的分类会撞约束、直接 500。
       // 这里提前拦截并给出可读报错，把「数据库冲突」变成「后台可理解的提示」。
       async ({ id, req }) => {
+        const children = await req.payload.count({
+          collection: 'categories',
+          where: { parent: { equals: id } },
+          req,
+        })
+        if (children.totalDocs > 0) {
+          throw new APIError(
+            `该分类下还有 ${children.totalDocs} 个子分类，请先处理子分类的层级，再删除它。`,
+            400,
+          )
+        }
         const posts = await req.payload.count({
           collection: 'posts',
           where: { categories: { equals: id } },
@@ -37,8 +94,9 @@ export const Categories: CollectionConfig = {
         })
         const inUse = posts.totalDocs + notes.totalDocs
         if (inUse > 0) {
-          throw new Error(
+          throw new APIError(
             `该分类下还有 ${inUse} 篇内容，请先把它们移到其它分类，再删除这个分类。`,
+            400,
           )
         }
       },
@@ -59,6 +117,45 @@ export const Categories: CollectionConfig = {
         position: 'sidebar',
         description: '仅用于导入脚本等内部标识；前台文章 URL 用的是「分类名称」，不是这一项。',
       },
+    },
+    {
+      name: 'nodeType',
+      type: 'select',
+      required: true,
+      defaultValue: 'category',
+      label: '节点类型',
+      options: [
+        { label: '分类（归档文章）', value: 'category' },
+        { label: '页面（站内页面）', value: 'page' },
+        { label: '导航（外链跳转）', value: 'nav' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: '仅「分类」且前台可见的节点会出现在写文章/写随笔的分类下拉；页面/导航是层级标记，前台暂不消费。',
+      },
+    },
+    {
+      name: 'parent',
+      type: 'relationship',
+      relationTo: 'categories',
+      label: '上级分类',
+      admin: { position: 'sidebar' },
+      // 下拉里排除自己（后代由 beforeChange 防环钩子兜底）
+      filterOptions: ({ id }) => (id ? { id: { not_equals: id } } : true),
+    },
+    {
+      name: 'sort',
+      type: 'number',
+      defaultValue: 0,
+      label: '排序权重',
+      admin: { position: 'sidebar', description: '同级内数字越小越靠前' },
+    },
+    {
+      name: 'visible',
+      type: 'checkbox',
+      defaultValue: true,
+      label: '前台可见',
+      admin: { position: 'sidebar' },
     },
   ],
 }

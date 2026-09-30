@@ -16,6 +16,7 @@ import { FieldError, FieldLabel, useField } from '@payloadcms/ui'
 interface CategoryDoc {
   id: number
   name: string
+  sort?: number | null
 }
 
 interface CategoryListResponse {
@@ -32,13 +33,20 @@ export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
   const [categories, setCategories] = useState<CategoryDoc[]>([])
   const [loaded, setLoaded] = useState(false)
 
-  // 挂载时拉取分类列表
+  // 挂载时拉取「可选分类」：只列节点类型=分类且前台可见的节点，按权重→名称排序
   useEffect(() => {
-    fetch('/api/categories?limit=0&sort=name', {
+    const where = encodeURIComponent(
+      JSON.stringify({ nodeType: { equals: 'category' }, visible: { not_equals: false } }),
+    )
+    fetch(`/api/categories?limit=0&sort=name&where=${where}`, {
       headers: { accept: 'application/json' },
     })
       .then((res) => res.json() as Promise<CategoryListResponse>)
-      .then((json) => setCategories(Array.isArray(json?.docs) ? json.docs : []))
+      .then((json) => {
+        const docs = Array.isArray(json?.docs) ? json.docs : []
+        docs.sort((a, b) => (Number(a.sort ?? 0) - Number(b.sort ?? 0)) || a.name.localeCompare(b.name, 'zh'))
+        setCategories(docs)
+      })
       .catch(() => setCategories([]))
       .finally(() => setLoaded(true))
   }, [])

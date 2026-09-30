@@ -4,7 +4,7 @@
  * 自定义仪表盘视图（仿 ThriveX-Admin 的数据概览页）
  *
  * 功能说明：
- * - 顶部展示五张统计便签卡片：文章 / 随笔 / 分类 / 标签 / 图片
+ * - 顶部展示五张统计卡片：文章 / 随笔 / 分类 / 标签 / 图片
  * - 中部左右两栏：最近文章 + 最近随笔
  * - 底部快捷操作：写文章 / 写随笔 / 站点设置
  *
@@ -19,6 +19,7 @@
  */
 import { Link, useConfig } from '@payloadcms/ui'
 import React, { useEffect, useState } from 'react'
+import { PageHeader } from '../components/PageHeader'
 
 /** 统计卡片数据结构 */
 type StatCard = {
@@ -30,7 +31,7 @@ type StatCard = {
   unit: string
   /** 点击跳转的 admin 路径 */
   href: string
-  /** 便签配色（对应主题 CSS 的四色便签） */
+  /** 卡片配色（对应主题 CSS 的 stat 变体） */
   color: 'yellow' | 'cyan' | 'pink' | 'purple' | 'green'
 }
 
@@ -146,7 +147,7 @@ export const DashboardView = () => {
     void load()
   }, [])
 
-  // 统计卡片配置（颜色轮转，手账便签风）
+  // 统计卡片配置（颜色轮转）
   const statCards: StatCard[] = [
     { label: '文章', value: stats.posts ?? 0, unit: '篇', href: `${adminRoute}/collections/posts`, color: 'yellow' },
     { label: '随笔', value: stats.notes ?? 0, unit: '条', href: `${adminRoute}/collections/notes`, color: 'cyan' },
@@ -158,13 +159,13 @@ export const DashboardView = () => {
   return (
     <div className="dashboard">
       {/* 页头 */}
-      <header className="dashboard__header">
-        <p className="dashboard__eyebrow">Dashboard</p>
-        <h1 className="dashboard__title">数据概览</h1>
-        <p className="dashboard__desc">站点内容一览，点击卡片可跳转对应管理页面。</p>
-      </header>
+      <PageHeader
+        eyebrow="Dashboard"
+        title="数据概览"
+        desc="站点内容一览，点击卡片可跳转对应管理页面。"
+      />
 
-      {/* 统计便签卡片 */}
+      {/* 统计卡片 */}
       <section className="dashboard__stats" aria-label="内容统计">
         {statCards.map((card) => (
           <Link key={card.label} href={card.href} prefetch={false} className={`dashboard__stat dashboard__stat--${card.color}`}>

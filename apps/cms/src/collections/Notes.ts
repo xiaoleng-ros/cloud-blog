@@ -5,6 +5,8 @@ import { syncInvalidateHook } from '../lib/sync-cache'
 /** 随笔集合：对齐前台 src/content/notes/*.md */
 export const Notes: CollectionConfig = {
   slug: 'notes',
+  // 软删除：删除仅打 deletedAt 标记进回收站，所有默认查询（前台同步/列表/草稿箱）自动排除
+  trash: true,
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['date', 'title', 'status', 'updatedAt'],
@@ -12,6 +14,14 @@ export const Notes: CollectionConfig = {
     preview: (doc) => {
       const cat = (doc as unknown as { categories?: { name?: string } }).categories
       return `/notes/${encodeURIComponent(cat?.name || '')}/${doc.id}/`
+    },
+    components: {
+      // 定制管理列表：搜索/分类/标签/日期筛选 + 导出/导入 + 批量移入回收站
+      views: {
+        list: {
+          Component: '/src/admin/views/manage/ManageListView.tsx#ManageListView',
+        },
+      },
     },
   },
   labels: {

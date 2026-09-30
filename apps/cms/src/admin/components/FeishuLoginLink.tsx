@@ -146,7 +146,7 @@ export function FeishuLoginLink() {
         instanceRef.current = window.QRLogin({
           id: QR_CONTAINER_ID,
           goto: data.qrAuthUrl,
-          style: 'border:none;background-color:#fffefb;width:266px;height:266px;',
+          style: 'border:none;background-color:#ffffff;width:266px;height:266px;',
         })
 
         // 4. 监听扫码结果：手机确认授权后 SDK 会 postMessage 回传 tmp_code，

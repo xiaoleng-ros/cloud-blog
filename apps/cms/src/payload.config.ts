@@ -306,7 +306,7 @@ export default buildConfig({
       graphics: {
         Logo: '/src/admin/components/CloudGraphics.tsx#CloudLogo',
       },
-      // 东方云主题登录页注入器（品牌文案 / 视差 / 按钮改写）
+      // 登录页注入器（品牌文案 / 密码显隐 / 飞书入口归位 / 提交过渡态）
       providers: ['/src/admin/components/LoginBrand.tsx#LoginBrand'],
       views: {
         // 自定义仪表盘：统计卡片 + 最近内容（数据来自 Payload REST API）
@@ -330,6 +330,11 @@ export default buildConfig({
         drafts: {
           Component: '/src/admin/views/drafts/DraftsView.tsx#DraftsView',
           path: '/drafts',
+        },
+        // 回收站：软删除文档的恢复/彻底删除（路由 /admin/trash）
+        trash: {
+          Component: '/src/admin/views/trash/TrashView.tsx#TrashView',
+          path: '/trash',
         },
       },
     },

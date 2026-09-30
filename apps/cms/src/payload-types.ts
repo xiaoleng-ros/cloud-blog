@@ -169,6 +169,7 @@ export interface Post {
   content?: string | null;
   updatedAt: string;
   createdAt: string;
+  deletedAt?: string | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -181,6 +182,16 @@ export interface Category {
    * 仅用于导入脚本等内部标识；前台文章 URL 用的是「分类名称」，不是这一项。
    */
   slug?: string | null;
+  /**
+   * 仅「分类」且前台可见的节点会出现在写文章/写随笔的分类下拉；页面/导航是层级标记，前台暂不消费。
+   */
+  nodeType: 'category' | 'page' | 'nav';
+  parent?: (number | null) | Category;
+  /**
+   * 同级内数字越小越靠前
+   */
+  sort?: number | null;
+  visible?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -219,6 +230,7 @@ export interface Note {
   content?: string | null;
   updatedAt: string;
   createdAt: string;
+  deletedAt?: string | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -424,6 +436,7 @@ export interface PostsSelect<T extends boolean = true> {
   content?: T;
   updatedAt?: T;
   createdAt?: T;
+  deletedAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -439,6 +452,7 @@ export interface NotesSelect<T extends boolean = true> {
   content?: T;
   updatedAt?: T;
   createdAt?: T;
+  deletedAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -447,6 +461,10 @@ export interface NotesSelect<T extends boolean = true> {
 export interface CategoriesSelect<T extends boolean = true> {
   name?: T;
   slug?: T;
+  nodeType?: T;
+  parent?: T;
+  sort?: T;
+  visible?: T;
   updatedAt?: T;
   createdAt?: T;
 }

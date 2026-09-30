@@ -3,17 +3,17 @@
 import { useEffect, type ReactNode } from 'react'
 
 /**
- * 云岫小筑 —— 东方云主题登录页注入器（全局 Provider，在所有后台页面加载）
+ * 登录页行为注入器（全局 Provider，在所有后台页面加载）
  *
  * 功能：
  *   1. 登录页检测：根据 URL (/admin/login /admin/create-first-user 等)
  *      给 <html> 打 data-yx-page="login" 标记，驱动 admin-theme.css 中的
- *      东方云主题样式（样式全部按属性选择器作用域，不影响其它后台页面）
- *   2. 品牌区注入：在 .login__brand 容器内追加品牌文案
- *      （云岫小筑 / 云深处 · 见自己），Logo 本身仍复用 CloudGraphics
- *   3. 提交按钮文案改写：「登录」→「入 岫 →」
- *   4. 鼠标视差：document 级监听，向 <html> 写入 --yx-mx / --yx-my 视差变量，
- *      供 CSS 中远山 / 云雾层消费（transform: translate(calc(var(--yx-mx)*...))）
+ *      登录页样式（样式全部按属性选择器作用域，不影响其它后台页面）
+ *   2. 品牌区注入：在 .login__brand 容器内追加品牌文案（云岫小筑）
+ *   3. 密码显隐切换：Payload 原生输入框无显隐按钮，此处补充
+ *   4. 飞书入口归位：把 beforeLogin 插槽渲染的扫码块移到提交按钮之后
+ *   5. 提交过渡态：登录请求进行中给 <html> 打 data-yx-transition 标记，
+ *      失败（非 2xx）立即复位，避免表单停在半透明态无法重新输入
  *
  * 设计说明：
  *   - 不改 Payload 内部组件、不动表单 DOM 层级、不拦截提交事件，
@@ -37,23 +37,12 @@ export function LoginBrand({ children }: Props) {
       )
     }
 
-    /** 进入登录页前记录当前 theme（用于退出登录页时恢复） */
-    const rememberedTheme = document.documentElement.dataset.theme ?? null
-
-    /** 应用/移除登录页标记，并强制深色主题 */
+    /** 应用/移除登录页标记（主题只做浅色，不再强制深色） */
     const syncPageFlag = () => {
       if (isLoginPage()) {
         document.documentElement.dataset.yxPage = 'login'
-        // 登录页强制深色：让所有 [data-theme='dark'] 选择器匹配
-        document.documentElement.dataset.theme = 'dark'
       } else {
         delete document.documentElement.dataset.yxPage
-        // 恢复用户偏好（首次访问则移除）
-        if (rememberedTheme) {
-          document.documentElement.dataset.theme = rememberedTheme
-        } else {
-          delete document.documentElement.dataset.theme
-        }
       }
     }
 
@@ -68,21 +57,8 @@ export function LoginBrand({ children }: Props) {
       wrap.className = 'yx-brand'
       wrap.innerHTML = `
         <div class="yx-brand__name">云岫小筑</div>
-        <div class="yx-brand__slogan">云深处 · 见自己</div>
       `
       brand.appendChild(wrap)
-    }
-
-    /** 改写提交按钮文案（入 岫 →） */
-    const rewriteSubmitLabel = () => {
-      if (!isLoginPage()) return
-      const btn = document.querySelector<HTMLButtonElement>(
-        '.login__form .form-submit button[type="submit"]',
-      )
-      if (!btn) return
-      if (btn.dataset.yxRewritten) return
-      btn.dataset.yxRewritten = '1'
-      btn.innerHTML = '<span class="yx-btn-text">入&nbsp;&nbsp;岫</span>'
     }
 
     /** 密码输入框右侧补充显隐切换图标按钮 */
@@ -173,8 +149,8 @@ export function LoginBrand({ children }: Props) {
     }
 
     // ── 一次性拦截 window.fetch，识别 Payload 登录请求 ──
-    // 关键修复：登录失败（非 2xx）时立即清除 fadeout，避免「forwards」把
-    // 表单永远保持 opacity:0，让用户无法重新输入。
+    // 关键修复：登录失败（非 2xx）时立即清除过渡标记，避免表单
+    // 永远保持半透明，让用户无法重新输入。
     const originalFetch = window.fetch.bind(window)
     window.fetch = (async (...args: Parameters<typeof fetch>) => {
       const input = args[0]
@@ -204,7 +180,7 @@ export function LoginBrand({ children }: Props) {
       }
     }) as typeof fetch
 
-    /** 登录提交：触发云雾聚拢过渡动画（不拦截原生提交） */
+    /** 登录提交：标记过渡态（不拦截原生提交），CSS 按属性存在性做半透明淡出 */
     const bindSubmitTransition = () => {
       if (!isLoginPage()) return
       const form = document.querySelector<HTMLFormElement>('.login__form')
@@ -214,12 +190,7 @@ export function LoginBrand({ children }: Props) {
       form.addEventListener(
         'submit',
         () => {
-          // 立即进入「入岫」聚拢态（云雾向中心收缩）
-          document.documentElement.dataset.yxTransition = 'gathering'
-          // 900ms 后进入 fadeout 态（整屏云雾覆盖）
-          window.setTimeout(() => {
-            document.documentElement.dataset.yxTransition = 'fadeout'
-          }, 900)
+          document.documentElement.dataset.yxTransition = 'active'
           // 兜底：3s 后若没收到响应则复位
           armResetTimer()
           // 不调用 preventDefault，让 Payload 原生提交逻辑继续走
@@ -232,7 +203,6 @@ export function LoginBrand({ children }: Props) {
     const runAll = () => {
       syncPageFlag()
       injectBrandText()
-      rewriteSubmitLabel()
       ensurePasswordToggle()
       bindSubmitTransition()
       relocateFeishuAfterSubmit()
@@ -246,31 +216,12 @@ export function LoginBrand({ children }: Props) {
     })
     observer.observe(document.body, { childList: true, subtree: true })
 
-    // ── 鼠标视差：写入 CSS 变量供背景层消费 ──
-    let rafId = 0
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isLoginPage()) return
-      if (rafId) return
-      rafId = requestAnimationFrame(() => {
-        const nx = (e.clientX / window.innerWidth) * 2 - 1
-        const ny = (e.clientY / window.innerHeight) * 2 - 1
-        document.documentElement.style.setProperty('--yx-mx', nx.toFixed(4))
-        document.documentElement.style.setProperty('--yx-my', ny.toFixed(4))
-        rafId = 0
-      })
-    }
-    window.addEventListener('mousemove', onMouseMove, { passive: true })
-
     return () => {
       delete document.documentElement.dataset.yxPage
-      // 复位过渡态，避免组件卸载时页面仍卡在 fadeout 状态
+      // 复位过渡态，避免组件卸载时页面仍卡在淡出状态
       resetTransition()
       // 恢复原始 fetch（防 StrictMode 下双调用导致 fetch 被嵌套 patch）
       window.fetch = originalFetch
-      document.documentElement.style.removeProperty('--yx-mx')
-      document.documentElement.style.removeProperty('--yx-my')
-      window.removeEventListener('mousemove', onMouseMove)
-      if (rafId) cancelAnimationFrame(rafId)
       observer.disconnect()
     }
   }, [])

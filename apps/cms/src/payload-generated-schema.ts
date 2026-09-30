@@ -17,6 +17,8 @@ import {
   integer,
   numeric,
   timestamp,
+  type AnyPgColumn,
+  boolean,
   jsonb,
   pgEnum,
 } from "@payloadcms/db-postgres/drizzle/pg-core";
@@ -28,6 +30,11 @@ export const enum_posts_status = pgEnum("enum_posts_status", [
 export const enum_notes_status = pgEnum("enum_notes_status", [
   "draft",
   "published",
+]);
+export const enum_categories_node_type = pgEnum("enum_categories_node_type", [
+  "category",
+  "page",
+  "nav",
 ]);
 export const enum_projects_status = pgEnum("enum_projects_status", [
   "draft",
@@ -65,11 +72,17 @@ export const posts = pgTable(
     })
       .defaultNow()
       .notNull(),
+    deletedAt: timestamp("deleted_at", {
+      mode: "string",
+      withTimezone: true,
+      precision: 3,
+    }),
   },
   (columns) => [
     index("posts_categories_idx").on(columns.categories),
     index("posts_updated_at_idx").on(columns.updatedAt),
     index("posts_created_at_idx").on(columns.createdAt),
+    index("posts_deleted_at_idx").on(columns.deletedAt),
   ],
 );
 
@@ -132,11 +145,17 @@ export const notes = pgTable(
     })
       .defaultNow()
       .notNull(),
+    deletedAt: timestamp("deleted_at", {
+      mode: "string",
+      withTimezone: true,
+      precision: 3,
+    }),
   },
   (columns) => [
     index("notes_categories_idx").on(columns.categories),
     index("notes_updated_at_idx").on(columns.updatedAt),
     index("notes_created_at_idx").on(columns.createdAt),
+    index("notes_deleted_at_idx").on(columns.deletedAt),
   ],
 );
 
@@ -173,6 +192,14 @@ export const categories = pgTable(
     id: serial("id").primaryKey(),
     name: varchar("name").notNull(),
     slug: varchar("slug"),
+    nodeType: enum_categories_node_type("node_type")
+      .notNull()
+      .default("category"),
+    parent: integer("parent_id").references((): AnyPgColumn => categories.id, {
+      onDelete: "set null",
+    }),
+    sort: numeric("sort", { mode: "number" }).default(0),
+    visible: boolean("visible").default(true),
     updatedAt: timestamp("updated_at", {
       mode: "string",
       withTimezone: true,
@@ -189,6 +216,7 @@ export const categories = pgTable(
       .notNull(),
   },
   (columns) => [
+    index("categories_parent_idx").on(columns.parent),
     index("categories_updated_at_idx").on(columns.updatedAt),
     index("categories_created_at_idx").on(columns.createdAt),
   ],
@@ -653,7 +681,13 @@ export const relations_notes = relations(notes, ({ one, many }) => ({
     relationName: "_rels",
   }),
 }));
-export const relations_categories = relations(categories, () => ({}));
+export const relations_categories = relations(categories, ({ one }) => ({
+  parent: one(categories, {
+    fields: [categories.parent],
+    references: [categories.id],
+    relationName: "parent",
+  }),
+}));
 export const relations_tags = relations(tags, () => ({}));
 export const relations_media = relations(media, () => ({}));
 export const relations_projects = relations(projects, () => ({}));
@@ -759,6 +793,7 @@ export const relations_navigation = relations(navigation, () => ({}));
 type DatabaseSchema = {
   enum_posts_status: typeof enum_posts_status;
   enum_notes_status: typeof enum_notes_status;
+  enum_categories_node_type: typeof enum_categories_node_type;
   enum_projects_status: typeof enum_projects_status;
   posts: typeof posts;
   posts_rels: typeof posts_rels;

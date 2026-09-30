@@ -1,58 +1,60 @@
 'use client'
 
 /**
- * 草稿箱内容（client 组件，由 DraftsView server 包装渲染在 DefaultTemplate 布局内）
+ * 回收站内容（client 组件，由 TrashView server 包装渲染在 DefaultTemplate 布局内）
  *
  * 功能：
- * 1. 文章 / 随笔两个 Tab，各自分页列草案稿（GET /api/*?where[status][equals]=draft）
- * 2. 标题模糊搜索 + 创建时间日期范围过滤（与回收站同款工具栏）
- * 3. 「编辑」→ 跳转创作页回填（/admin/write-post?id=X&draft=1）
- * 4. 「删除」→ 软删除移入回收站（PATCH deletedAt）后刷新当前页
+ * 1. 文章 / 随笔两个 Tab，列出软删除文档（where deletedAt exists + ?trash=true）
+ * 2. 标题模糊搜索 + 发布时间日期范围过滤
+ * 3. 「恢复」→ 清空 deletedAt；「彻底删除」→ 二次确认后硬删
  *
- * 表格 / Tab / 分页 / 确认框复用 drafts__* 通用类，工具栏复用 trash__*；
+ * 表格 / Tab / 分页 / 确认框复用草稿箱的 drafts__* 通用类；
  * 加载中仅刷新数据区，页头 / Tab / 工具栏骨架常驻。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useConfig } from '@payloadcms/ui'
 import { PageHeader } from '../../components/PageHeader'
 import { clip, extractNames, fmt, tagPill } from '../lib/format'
-import { listDocs, trashDoc, type AdminNote, type AdminPost } from '../lib/api'
+import {
+  deleteTrashedDoc,
+  listDocs,
+  restoreDoc,
+  type AdminNote,
+  type AdminPost,
+} from '../lib/api'
 
 type Tab = 'posts' | 'notes'
 
-/** 待删除确认信息 */
+/** 待彻底删除确认信息 */
 interface ConfirmState {
   collection: Tab
   id: number
+  title: string
 }
 
-/** 草稿行公共结构（文章/随笔归一化） */
-interface DraftRow {
+/** 回收站行结构（文章/随笔归一化） */
+interface TrashRow {
   id: number
   title: string
   excerpt: string
   categoryNames: string[]
   tagNames: string[]
-  createdAt?: string
+  /** 发布时间：文章取 createdAt，随笔取 date 字段 */
+  publishedAt?: string
 }
 
-export const DraftsViewInner = () => {
-  const { config } = useConfig()
-  const adminRoute = config.routes.admin
-  // Tab → 创作页视图路由前缀（posts → write-post；notes → write-note）
-  const composePath: Record<Tab, string> = { posts: 'write-post', notes: 'write-note' }
-
+export const TrashViewInner = () => {
   const [tab, setTab] = useState<Tab>('posts')
   const [titleInput, setTitleInput] = useState('')
   // 搜索防抖后的实际生效关键词
   const [keyword, setKeyword] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [rows, setRows] = useState<DraftRow[]>([])
+  const [rows, setRows] = useState<TrashRow[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState<ConfirmState | null>(null)
+  const [busyId, setBusyId] = useState<number | null>(null)
 
   // 输入停顿 400ms 后才发起查询，避免每敲一个字打一次 API
   useEffect(() => {
@@ -66,12 +68,21 @@ export const DraftsViewInner = () => {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const and: Record<string, unknown>[] = [{ status: { equals: 'draft' } }]
+      // 日期范围按发布时间过滤：文章比 createdAt，随笔比 date 字段
+      const dateField = tab === 'posts' ? 'createdAt' : 'date'
+      const and: Record<string, unknown>[] = [{ deletedAt: { exists: true } }]
       if (keyword) and.push({ title: { like: keyword } })
-      if (from) and.push({ createdAt: { greater_than_equal: from } })
-      if (to) and.push({ createdAt: { less_than_equal: to } })
+      if (from) and.push({ [dateField]: { greater_than_equal: from } })
+      if (to) and.push({ [dateField]: { less_than_equal: to } })
 
-      const res = await listDocs<AdminPost | AdminNote>(tab, { and }, page, 10, '-createdAt')
+      const res = await listDocs<AdminPost | AdminNote>(
+        tab,
+        { and },
+        page,
+        10,
+        `-createdAt`,
+        true,
+      )
       setTotal(res.totalDocs)
       setRows(
         res.docs.map((d) => {
@@ -86,7 +97,7 @@ export const DraftsViewInner = () => {
                 : (note.mood ?? '').trim() || clip(note.content) || '—',
             categoryNames: extractNames(d.categories),
             tagNames: extractNames(d.tags),
-            createdAt: d.createdAt,
+            publishedAt: tab === 'posts' ? post.createdAt : note.date ?? post.createdAt,
           }
         }),
       )
@@ -98,42 +109,52 @@ export const DraftsViewInner = () => {
     }
   }, [tab, keyword, from, to, page])
 
-  // 页码 / Tab / 过滤条件变化时重新加载
   useEffect(() => {
     void load()
   }, [load])
 
-  /** 切换 Tab 时重置页码与过滤条件 */
   const switchTab = (next: Tab) => {
     setTab(next)
     setPage(1)
-    setTitleInput('')
-    setKeyword('')
-    setFrom('')
-    setTo('')
   }
 
-  /** 确认移入回收站后刷新列表（软删除，可在回收站恢复） */
+  /** 恢复：清空 deletedAt 后刷新当前页 */
+  const handleRestore = async (row: TrashRow) => {
+    setBusyId(row.id)
+    try {
+      await restoreDoc(tab, row.id)
+      await load()
+    } catch (error) {
+      alert(`恢复失败：${(error as Error).message}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  /** 确认彻底删除后刷新列表 */
   const confirmDelete = async () => {
     if (!deleting) return
+    setBusyId(deleting.id)
     try {
-      await trashDoc(deleting.collection, deleting.id)
+      await deleteTrashedDoc(deleting.collection, deleting.id)
       setDeleting(null)
-      void load()
+      await load()
     } catch (error) {
-      alert(`删除失败：${(error as Error).message}`)
+      alert(`彻底删除失败：${(error as Error).message}`)
       setDeleting(null)
+    } finally {
+      setBusyId(null)
     }
   }
 
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / 10)), [total])
 
   return (
-    <div className="drafts">
+    <div className="drafts trash">
       <PageHeader
-        eyebrow="Draft Box"
-        title="草稿箱"
-        desc="未发布的文章与随笔草稿，可编辑后发布或删除。"
+        eyebrow="Trash"
+        title="回收站"
+        desc="已删除的文章与随笔会先进入这里，可恢复或彻底删除。"
       />
 
       <div className="drafts__tabs" role="tablist">
@@ -144,7 +165,7 @@ export const DraftsViewInner = () => {
           className={`drafts__tab${tab === 'posts' ? ' drafts__tab--active' : ''}`}
           onClick={() => switchTab('posts')}
         >
-          文章草稿
+          文章
         </button>
         <button
           type="button"
@@ -153,11 +174,11 @@ export const DraftsViewInner = () => {
           className={`drafts__tab${tab === 'notes' ? ' drafts__tab--active' : ''}`}
           onClick={() => switchTab('notes')}
         >
-          随笔草稿
+          随笔
         </button>
       </div>
 
-      {/* 工具栏：标题搜索 + 创建时间范围 */}
+      {/* 工具栏：标题搜索 + 发布时间范围 */}
       <div className="trash__toolbar">
         <input
           type="search"
@@ -204,7 +225,7 @@ export const DraftsViewInner = () => {
               <th>标签</th>
               <th>浏览量</th>
               <th>评论</th>
-              <th>创建时间</th>
+              <th>发布时间</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -231,21 +252,25 @@ export const DraftsViewInner = () => {
                   {/* 浏览量 / 评论：新后台暂无数据源，占位展示 */}
                   <td className="drafts__muted">—</td>
                   <td className="drafts__muted">—</td>
-                  <td className="drafts__cell-date">{fmt(row.createdAt)}</td>
+                  <td className="drafts__cell-date">{fmt(row.publishedAt)}</td>
                   <td className="drafts__cell-ops">
-                    <Link
-                      href={`${adminRoute}/${composePath[tab]}?id=${row.id}&draft=1`}
-                      prefetch={false}
+                    <button
+                      type="button"
                       className="drafts__op"
+                      disabled={busyId === row.id}
+                      onClick={() => void handleRestore(row)}
                     >
-                      编辑
-                    </Link>
+                      恢复
+                    </button>
                     <button
                       type="button"
                       className="drafts__op drafts__op--danger"
-                      onClick={() => setDeleting({ collection: tab, id: row.id })}
+                      disabled={busyId === row.id}
+                      onClick={() =>
+                        setDeleting({ collection: tab, id: row.id, title: row.title })
+                      }
                     >
-                      删除
+                      彻底删除
                     </button>
                   </td>
                 </tr>
@@ -275,12 +300,12 @@ export const DraftsViewInner = () => {
       {deleting && (
         <div className="drafts__confirm-mask" onClick={() => setDeleting(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
-            <h3>确认删除</h3>
-            <p>删除后可在「回收站」恢复，确定删除这条草稿吗？</p>
+            <h3>确认彻底删除</h3>
+            <p>「{deleting.title}」将被永久删除，无法恢复，确定继续吗？</p>
             <div className="drafts__confirm-actions">
               <button type="button" className="drafts__op" onClick={() => setDeleting(null)}>取消</button>
               <button type="button" className="drafts__op drafts__op--danger" onClick={() => void confirmDelete()}>
-                移入回收站
+                彻底删除
               </button>
             </div>
           </div>
@@ -290,4 +315,4 @@ export const DraftsViewInner = () => {
   )
 }
 
-export default DraftsViewInner
+export default TrashViewInner

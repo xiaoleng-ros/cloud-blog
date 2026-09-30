@@ -4,9 +4,9 @@
  * 1. 全部走同源相对路径 /api/*，登录后由 cookie 会话认证
  * 2. 失败时抛出带错误信息的 ApiError，便于视图层根据 status 做差异化提示
  */
-import type { ListResponse, TermOption } from './types'
+import type { CategoryDoc, ListResponse, TermOption } from './types'
 // 重新导出类型，供各视图统一从 api 模块引入
-export type { ListResponse, TermOption, AdminPost, AdminNote } from './types'
+export type { ListResponse, TermOption, AdminPost, AdminNote, CategoryDoc } from './types'
 
 /**
  * 带 HTTP 状态码的错误对象
@@ -55,13 +55,14 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return (await res.json()) as T
 }
 
-/** 分页拉取列表（带 where 过滤与排序；depth=1 展开关联） */
+/** 分页拉取列表（带 where 过滤与排序；depth=1 展开关联；trash=true 时结果包含回收站文档） */
 export async function listDocs<T>(
   collection: 'posts' | 'notes',
   where: Record<string, unknown>,
   page = 1,
   size = 10,
   sort = '-updatedAt',
+  trash = false,
 ): Promise<ListResponse<T>> {
   const query = new URLSearchParams({
     page: String(page),
@@ -70,6 +71,7 @@ export async function listDocs<T>(
     depth: '1',
     where: JSON.stringify(where),
   })
+  if (trash) query.set('trash', 'true')
   return request<ListResponse<T>>('GET', `/api/${collection}?${query.toString()}`)
 }
 
@@ -97,6 +99,26 @@ export async function deleteDoc(collection: 'posts' | 'notes', id: number | stri
   await request<unknown>('DELETE', `/api/${collection}/${id}`)
 }
 
+/**
+ * 移入回收站（软删除）
+ *
+ * Payload trash 机制：PATCH deletedAt 即标记删除；权限按 delete 校验。
+ * 标记后该文档对所有默认查询（前台同步、列表、草稿箱）不可见。
+ */
+export async function trashDoc(collection: 'posts' | 'notes', id: number | string): Promise<void> {
+  await request<unknown>('PATCH', `/api/${collection}/${id}`, { deletedAt: new Date().toISOString() })
+}
+
+/** 从回收站恢复：清空 deletedAt。必须带 ?trash=true，否则后端查询排除已删文档导致 404 */
+export async function restoreDoc(collection: 'posts' | 'notes', id: number | string): Promise<void> {
+  await request<unknown>('PATCH', `/api/${collection}/${id}?trash=true`, { deletedAt: null })
+}
+
+/** 彻底删除回收站中的文档（硬删）。同样需要 ?trash=true 定位已删文档 */
+export async function deleteTrashedDoc(collection: 'posts' | 'notes', id: number | string): Promise<void> {
+  await request<unknown>('DELETE', `/api/${collection}/${id}?trash=true`)
+}
+
 /** 拉取分类 / 标签全量列表（用于下拉选择） */
 export async function fetchTerms(collection: 'categories' | 'tags'): Promise<TermOption[]> {
   const res = await request<ListResponse<TermOption>>(
@@ -104,6 +126,76 @@ export async function fetchTerms(collection: 'categories' | 'tags'): Promise<Ter
     `/api/${collection}?limit=0&depth=0&sort=createdAt`,
   )
   return res.docs
+}
+
+/** 新建分类 / 标签（导入时按名称匹配不到标签则自动补建） */
+export async function createTerm(collection: 'categories' | 'tags', name: string): Promise<TermOption> {
+  return request<TermOption>('POST', `/api/${collection}`, { name })
+}
+
+/** 「可选分类」下拉专用：只列节点类型=分类 且 前台可见 的节点，按权重排序 */
+export async function fetchSelectableCategories(): Promise<TermOption[]> {
+  const where = { nodeType: { equals: 'category' }, visible: { not_equals: false } }
+  const res = await request<ListResponse<TermOption>>(
+    'GET',
+    `/api/categories?limit=0&depth=0&sort=sort&where=${encodeURIComponent(JSON.stringify(where))}`,
+  )
+  return res.docs
+}
+
+/** 分类管理树视图：全量拉取（depth=0，parent 为裸 id） */
+export async function listCategoryDocs(): Promise<CategoryDoc[]> {
+  const res = await request<ListResponse<CategoryDoc>>(
+    'GET',
+    '/api/categories?limit=0&depth=0&sort=sort',
+  )
+  return res.docs
+}
+
+/** 新建分类（弹窗提交，字段见 Collections/Categories.ts） */
+export async function createCategory(data: Record<string, unknown>): Promise<CategoryDoc> {
+  return request<CategoryDoc>('POST', '/api/categories', data)
+}
+
+/** 更新分类 */
+export async function updateCategory(id: number, data: Record<string, unknown>): Promise<CategoryDoc> {
+  return request<CategoryDoc>('PATCH', `/api/categories/${id}`, data)
+}
+
+/** 删除分类（被引用 / 有子分类时后端 beforeDelete 会抛可读错误） */
+export async function deleteCategory(id: number): Promise<void> {
+  await request<unknown>('DELETE', `/api/categories/${id}`)
+}
+
+/** 更新标签（标签管理页改名） */
+export async function updateTag(id: number, data: Record<string, unknown>): Promise<TermOption> {
+  return request<TermOption>('PATCH', `/api/tags/${id}`, data)
+}
+
+/** 删除标签。hasMany 关联存在中间表（ON DELETE cascade），删除后自动从文章/随笔上移除 */
+export async function deleteTag(id: number): Promise<void> {
+  await request<unknown>('DELETE', `/api/tags/${id}`)
+}
+
+/** 统计每个标签被多少文章/随笔引用（标签管理「关联文章」列） */
+export async function fetchTagUsage(): Promise<Record<number, number>> {
+  const [posts, notes] = await Promise.all([
+    request<ListResponse<{ tags?: Array<{ id: number } | number> | { id: number } | number | null }>>(
+      'GET',
+      '/api/posts?limit=0&depth=0&select[tags]=1',
+    ),
+    request<ListResponse<{ tags?: Array<{ id: number } | number> | { id: number } | number | null }>>(
+      'GET',
+      '/api/notes?limit=0&depth=0&select[tags]=1',
+    ),
+  ])
+  const usage: Record<number, number> = {}
+  for (const docs of [posts.docs, notes.docs]) {
+    for (const d of docs) {
+      for (const id of idsOf(d.tags)) usage[id] = (usage[id] ?? 0) + 1
+    }
+  }
+  return usage
 }
 
 /**
