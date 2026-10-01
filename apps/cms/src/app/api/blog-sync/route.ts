@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { renderBlocksForPathname } from '../../../lib/blog-render'
-import { getSyncData } from '../../../lib/blog-sync'
+import { getSyncProbe } from '../../../lib/blog-sync'
 
 /**
  * 博客前台数据同步 API
@@ -26,15 +26,16 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
 
-    // 轻量版本探测：只返回版本号，不渲染区块
+    // 轻量版本/指纹探测：走独立的探测查询（每源 count + max updatedAt，DB 层过滤 status），
+    // 不再复用全量快照 —— 避免快照一过期，3s 一次的探测就把六路全表全正文拖一遍。
     if (url.searchParams.get('version') === '1' || url.searchParams.get('digest') === '1') {
-      const snapshot = await getSyncData()
+      const probe = await getSyncProbe()
       const wantDigest = url.searchParams.get('digest') === '1'
       return NextResponse.json(
         {
-          version: snapshot.version,
+          version: probe.version,
           ts: Date.now(),
-          ...(wantDigest ? { digests: snapshot.digests } : {}),
+          ...(wantDigest ? { digests: probe.digests } : {}),
         },
         { headers: { 'Cache-Control': 'no-store, max-age=0' } },
       )
@@ -52,9 +53,11 @@ export async function GET(request: Request) {
       },
     })
   } catch (err) {
+    // 真实错误只进服务端日志；响应体不回显 String(err)（本接口匿名可访问，
+    // 原始错误可能带连接串/SQL/堆栈等内部信息）
     console.error('[blog-sync] render failed:', err)
     return NextResponse.json(
-      { version: String(Date.now()), title: null, blocks: {}, error: String(err) },
+      { version: String(Date.now()), title: null, blocks: {}, error: '同步数据加载失败，请稍后重试' },
       { status: 500 },
     )
   }

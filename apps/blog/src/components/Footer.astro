@@ -3,7 +3,8 @@ import Icon from './Icon.astro';
 import { site } from '../lib/posts';
 import { getFooter, getSiteSettings } from '../lib/site-settings';
 
-const year = new Date().getFullYear();
+// 构建年份仅作为无 JS 环境的静态兜底；展示年份由页尾小脚本按访客本地时间动态更新
+const buildYear = new Date().getFullYear();
 
 // 作者名：优先后台站点设置，后台不可用时回退本地配置
 const settings = await getSiteSettings();
@@ -68,10 +69,28 @@ const groups = footer.groups;
   </div>
 
   <div class="site-footer__bar" data-sync-block="footerBar">
-    <span>© {year} {author}</span>
+    <span>© <span data-copyright-year>{buildYear}</span> {author}</span>
     <span aria-hidden="true">·</span>
     <a href={site.url}>{site.url.replace('https://', '')}</a>
     <span aria-hidden="true">·</span>
     <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>
   </div>
 </footer>
+
+<script is:inline data-astro-rerun>
+  (() => {
+    // 静态产物里的年份是构建时冻结的：这里按访客当前年份刷新，无副作用。
+    // footerBar 会被后台数据同步整块替换，故同时监听 blog:sync-updated 重打补丁。
+    const setYear = () => {
+      const y = String(new Date().getFullYear());
+      document.querySelectorAll('[data-copyright-year]').forEach((el) => {
+        el.textContent = y;
+      });
+    };
+    setYear();
+    window.__blogFooterYearCleanup?.();
+    const onSync = () => setYear();
+    document.addEventListener('blog:sync-updated', onSync);
+    window.__blogFooterYearCleanup = () => document.removeEventListener('blog:sync-updated', onSync);
+  })();
+</script>

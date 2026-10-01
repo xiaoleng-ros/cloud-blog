@@ -4,6 +4,7 @@ import { SITE_DEFAULTS } from './site-defaults';
 // 通用文章工具函数从共享包重导出，保证前台各页面调用不变
 export {
   formatDate,
+  toShanghaiParts,
   getPostCategory,
   getPostCover,
   getPostDescription,

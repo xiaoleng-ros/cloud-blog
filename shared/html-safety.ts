@@ -36,6 +36,66 @@ export function safeHref(raw: unknown, fallback = '#'): string {
   return isSafeHref(raw) ? String(raw).trim() : fallback;
 }
 
+const NAMED_ENTITY_MAP: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  colon: ':',
+  semi: ';',
+  lpar: '(',
+  rpar: ')',
+  excl: '!',
+  quest: '?',
+  num: '#',
+  dollar: '$',
+  percnt: '%',
+  lowbar: '_',
+  equals: '=',
+  period: '.',
+  sol: '/',
+  comma: ',',
+  hyphen: '-',
+  tab: '\t',
+  newline: '\n',
+};
+
+/**
+ * 把 &colon; / &#58; / &#x3a; 这类实体还原一次，模拟浏览器的解析行为。
+ * 净化器必须用「解码后的值」做协议校验，否则 `javascript&colon;alert(1)`
+ * 会因为看不到冒号而被 isSafeHref 误判为相对路径。
+ */
+function decodeHtmlEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);?/g, (match, body: string) => {
+    if (body.startsWith('#')) {
+      const codePoint = body.startsWith('#x') || body.startsWith('#X')
+        ? Number.parseInt(body.slice(2), 16)
+        : Number.parseInt(body.slice(1), 10);
+      if (Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10_ff_ff) {
+        try {
+          return String.fromCodePoint(codePoint);
+        } catch {
+          return match;
+        }
+      }
+      return match;
+    }
+    const key = body.toLowerCase();
+    return key in NAMED_ENTITY_MAP ? NAMED_ENTITY_MAP[key] : match;
+  });
+}
+
+/** 属性值输出转义：与浏览器的一次实体解码互为逆操作，防止注入新属性或绕过协议白名单 */
+function escapeAttrValue(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
 /** 关于页正文允许的标签：只放排版类标签，覆盖现有 `marker-highlight` span 写法 */
 const ALLOWED_INLINE_TAGS = new Set([
   'span',
@@ -94,9 +154,11 @@ export function sanitizeInlineHtml(raw: unknown): string {
         const attr = found[1].toLowerCase();
         const value = found[2] ?? found[3] ?? '';
         if (attr === 'href' && keepHref) {
-          attrs.push(`href="${safeHref(value, '#')}"`);
+          // 先按浏览器行为解码实体再校验协议，输出时统一转义，堵住
+          // `href='x"onmouseover="alert(1)'`（属性注入）与 `javascript&colon;`（协议伪装）两类绕过
+          attrs.push(`href="${escapeAttrValue(safeHref(decodeHtmlEntities(value), '#'))}"`);
         } else if (ALLOWED_ATTRS.has(attr)) {
-          attrs.push(`${attr}="${value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')}"`);
+          attrs.push(`${attr}="${escapeAttrValue(value)}"`);
         }
       }
       const selfClose = tag === 'br' || match.trimEnd().endsWith('/>') ? ' /' : '';

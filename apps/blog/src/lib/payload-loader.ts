@@ -211,11 +211,22 @@ async function storeEntries(
   ctx: LoaderContext,
   store: DataStore,
   entries: MdEntry[],
-  fileOf?: (id: string) => string,
+  fileOf?: (id: string) => string | undefined,
 ) {
+  // 单条脏数据只该影响它自己：parseData/renderMarkdown 逐条 try-catch，
+  // 坏条目跳过并计数告警，绝不让整批拉取失败（进而误降级成本地 markdown 兜底）。
+  let skipped = 0;
+
   for (const entry of entries) {
     // 用前台 collection schema 校验/清洗数据
-    const data = await ctx.parseData({ id: entry.id, data: entry.data });
+    let data: Awaited<ReturnType<typeof ctx.parseData>>;
+    try {
+      data = await ctx.parseData({ id: entry.id, data: entry.data });
+    } catch (error) {
+      skipped += 1;
+      ctx.logger.warn(`[payload-loader] 数据校验失败，跳过该条 ${entry.id}: ${(error as Error).message}`);
+      continue;
+    }
 
     // 传 fileURL 以便 markdown 内相对图片路径解析
     const file = fileOf?.(entry.id);
@@ -231,8 +242,14 @@ async function storeEntries(
     }
   }
 
+  if (skipped > 0) {
+    ctx.logger.warn(`[payload-loader] 本批 ${entries.length} 条中有 ${skipped} 条脏数据被跳过（其余照常入库）`);
+  }
+
   // 删除本次结果里已经不存在的条目：轮询只 set 不删的话，
   // 后台删掉的文章/随笔会永远残留在仓库里（前台仍能看到已删内容）。
+  // 判断依据是「本批出现过的 id」（含被跳过的脏条目）：脏条目保留仓库里的旧版本，
+  // 好过让一篇文章因后台一次字段错误而从前台消失。
   const liveIds = new Set(entries.map((e) => String(e.id)));
   for (const id of [...store.keys()]) {
     if (!liveIds.has(String(id))) store.delete(id);
@@ -352,8 +369,13 @@ export const payloadProjectsLoader: Loader = {
       const entries = await fetchProjects();
       ctx.logger.info(`[payload-loader] 项目：从后台 API 载入 ${entries.length} 条`);
       for (const entry of entries) {
-        const data = await ctx.parseData({ id: entry.id, data: entry });
-        ctx.store.set({ id: entry.id, data });
+        // 单条脏数据跳过并计数，不让整批初始载入失败（同 storeEntries 的策略）
+        try {
+          const data = await ctx.parseData({ id: entry.id, data: entry });
+          ctx.store.set({ id: entry.id, data });
+        } catch (error) {
+          ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+        }
       }
       ctx.meta.set(DIGEST_KEYS.projects, ctx.generateDigest(JSON.stringify(entries)));
       commitStamps(ctx, stamps, ['projects']);
@@ -421,11 +443,17 @@ function schedulePolling(
 }
 
 /**
- * 轮询文章 + 站点设置 + 导航：有任何变化时更新/记录，返回是否变化
+ * 轮询文章 + 站点设置 + 导航：有任何**真实内容**变化时更新/记录，返回是否需要刷新页面
  *
  * 先看后台指纹，只有变了的那一路才去拉全量正文（探测失败时 stampDiffers 一律返回 true，
  * 等价于旧版「每轮全量重拉」）。
  * 设置/导航不进 store：它们由 SSR 渲染时实时读取，这里拉一次只为触发页面刷新。
+ *
+ * 「changed」必须同时满足两个条件才会触发整页 reload：
+ *   1. 这一路全量拉取成功（失败时保留旧指纹、不置 changed —— 否则探测能通、全量超时，
+ *      每 3s 都会误判「有变化」把 dev 页面刷到不可用）；
+ *   2. 正文摘要（digest）相对上一轮真的变了（指纹探测整体不可用时，
+ *      stampDiffers 恒为 true，靠 digest 比较兜底防「每轮都 reload」）。
  */
 async function pollPostsAndSettings(ctx: LoaderContext): Promise<boolean> {
   let changed = false;
@@ -438,31 +466,43 @@ async function pollPostsAndSettings(ctx: LoaderContext): Promise<boolean> {
   if (stampDiffers(ctx, digests, 'posts') || mediaAltChanged) {
     const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>();
     const entries = await fetchPosts(altMap);
-    ctx.meta.set(DIGEST_KEYS.posts, ctx.generateDigest(JSON.stringify(entries)));
+    const nextDigest = ctx.generateDigest(JSON.stringify(entries));
+    const contentChanged = ctx.meta.get(DIGEST_KEYS.posts) !== nextDigest;
     await storeEntries(ctx, ctx.store, entries);
+    ctx.meta.set(DIGEST_KEYS.posts, nextDigest);
     commitStamps(ctx, digests, ['posts']);
-    changed = true;
+    changed = changed || contentChanged || mediaAltChanged;
   }
 
   if (stampDiffers(ctx, digests, 'settings')) {
     const data = await fetchSiteSettings();
-    // 拉到 null 说明这次请求失败：不落指纹，下一轮重试，别把「没拉到」记成「没变化」
-    if (data) commitStamps(ctx, digests, ['settings']);
-    ctx.meta.set(DIGEST_KEYS.settings, ctx.generateDigest(JSON.stringify(data ?? null)));
-    changed = true;
+    // 拉到 null 说明这次请求失败：不置 changed、不落指纹（下一轮重试）。
+    // 修复「探测成功 + 全量失败」时每 3s 误判变化触发整页 reload 的循环。
+    if (data) {
+      const nextDigest = ctx.generateDigest(JSON.stringify(data));
+      const contentChanged = ctx.meta.get(DIGEST_KEYS.settings) !== nextDigest;
+      ctx.meta.set(DIGEST_KEYS.settings, nextDigest);
+      commitStamps(ctx, digests, ['settings']);
+      changed = changed || contentChanged;
+    }
   }
 
   if (stampDiffers(ctx, digests, 'nav')) {
     const navItems = await fetchNavItems();
-    if (navItems) commitStamps(ctx, digests, ['nav']);
-    ctx.meta.set(DIGEST_KEYS.nav, ctx.generateDigest(JSON.stringify(navItems ?? null)));
-    changed = true;
+    // 同上：失败（null）时保持旧指纹、不刷新；[] 是合法的「导航清空」，照常应用
+    if (navItems) {
+      const nextDigest = ctx.generateDigest(JSON.stringify(navItems));
+      const contentChanged = ctx.meta.get(DIGEST_KEYS.nav) !== nextDigest;
+      ctx.meta.set(DIGEST_KEYS.nav, nextDigest);
+      commitStamps(ctx, digests, ['nav']);
+      changed = changed || contentChanged;
+    }
   }
 
   return changed;
 }
 
-/** 轮询随笔：指纹有变化时更新 store，返回是否变化 */
+/** 轮询随笔：指纹有变化时更新 store，仅当正文真的变了（或 alt 映射变了）才触发刷新 */
 async function pollNotes(ctx: LoaderContext): Promise<boolean> {
   const digests = await peekStamps();
   const mediaAltChanged = await refreshMediaAltMap(ctx, digests);
@@ -477,23 +517,32 @@ async function pollNotes(ctx: LoaderContext): Promise<boolean> {
       if (alt) e.data.coverAlt = alt;
     }
   }
-  ctx.meta.set(DIGEST_KEYS.notes, ctx.generateDigest(JSON.stringify(entries)));
+  const nextDigest = ctx.generateDigest(JSON.stringify(entries));
+  const contentChanged = ctx.meta.get(DIGEST_KEYS.notes) !== nextDigest;
+  ctx.meta.set(DIGEST_KEYS.notes, nextDigest);
   await storeEntries(ctx, ctx.store, entries);
   commitStamps(ctx, digests, ['notes']);
-  return true;
+  return contentChanged || mediaAltChanged;
 }
 
-/** 轮询项目：指纹有变化时清空并重新写入，返回是否变化 */
+/** 轮询项目：指纹有变化时清空并重新写入，仅当正文真的变了才触发刷新 */
 async function pollProjects(ctx: LoaderContext): Promise<boolean> {
   const digests = await peekStamps();
   if (!stampDiffers(ctx, digests, 'projects')) return false;
   const entries = await fetchProjects();
-  ctx.meta.set(DIGEST_KEYS.projects, ctx.generateDigest(JSON.stringify(entries)));
+  const nextDigest = ctx.generateDigest(JSON.stringify(entries));
+  const contentChanged = ctx.meta.get(DIGEST_KEYS.projects) !== nextDigest;
+  ctx.meta.set(DIGEST_KEYS.projects, nextDigest);
   ctx.store.clear();
   for (const entry of entries) {
-    const data = await ctx.parseData({ id: entry.id, data: entry });
-    ctx.store.set({ id: entry.id, data });
+    // 单条脏数据跳过并计数，不让整批轮询失败（同 storeEntries 的策略）
+    try {
+      const data = await ctx.parseData({ id: entry.id, data: entry });
+      ctx.store.set({ id: entry.id, data });
+    } catch (error) {
+      ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+    }
   }
   commitStamps(ctx, digests, ['projects']);
-  return true;
+  return contentChanged;
 }

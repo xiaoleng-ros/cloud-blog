@@ -5,6 +5,7 @@ import * as migration_20260926_000000_remove_posts_slug_add_categories from './2
 import * as migration_20260929_000000_add_users_feishu_binding from './20260929_000000_add_users_feishu_binding';
 import * as migration_20260930_000000_add_posts_notes_trash from './20260930_000000_add_posts_notes_trash';
 import * as migration_20261001_000000_add_categories_tree_fields from './20261001_000000_add_categories_tree_fields';
+import * as migration_20261002_000000_add_users_feishu_open_id_unique from './20261002_000000_add_users_feishu_open_id_unique';
 
 export const migrations = [
   {
@@ -41,5 +42,10 @@ export const migrations = [
     up: migration_20261001_000000_add_categories_tree_fields.up,
     down: migration_20261001_000000_add_categories_tree_fields.down,
     name: '20261001_000000_add_categories_tree_fields'
+  },
+  {
+    up: migration_20261002_000000_add_users_feishu_open_id_unique.up,
+    down: migration_20261002_000000_add_users_feishu_open_id_unique.down,
+    name: '20261002_000000_add_users_feishu_open_id_unique'
   },
 ];

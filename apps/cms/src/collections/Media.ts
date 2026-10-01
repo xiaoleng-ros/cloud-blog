@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { syncInvalidateHook } from '../lib/sync-cache'
-import { MAX_IMAGE_SIZE_BYTES } from '../lib/media-upload'
+import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES } from '../lib/media-upload'
 
 /**
  * 图片 / 多媒体集合：文章封面、正文图片、头像等上传文件都会存到这里。
@@ -54,6 +54,19 @@ export const Media: CollectionConfig = {
           `图片过大：${(size / 1024 / 1024).toFixed(1)}MB，上限 ${Math.round(MAX_IMAGE_SIZE_BYTES / 1024 / 1024)}MB`,
           400,
         )
+      },
+      ({ data }) => {
+        // 像素上限：防「解压缩炸弹」（几 MB 的 PNG 解出上亿像素打爆内存）。
+        // 字节数校验挡不住这类文件，必须看解码后的宽高。
+        const dims = data as { width?: number; height?: number } | undefined
+        const pixels = Number(dims?.width ?? 0) * Number(dims?.height ?? 0)
+        if (pixels && pixels > MAX_IMAGE_PIXELS) {
+          throw new APIError(
+            `图片分辨率过高：约 ${(pixels / 1_000_000).toFixed(0)} 百万像素，上限 ${MAX_IMAGE_PIXELS / 1_000_000} 百万像素`,
+            400,
+          )
+        }
+        return data
       },
     ],
     afterChange: [syncInvalidateHook],

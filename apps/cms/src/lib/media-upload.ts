@@ -10,6 +10,9 @@
 /** 图片上传前端大小上限 10MB，与后端 Payload upload collection 的限制保持一致 */
 export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
 
+/** 图片像素上限 4000 万（约 8000×5000），拦截解压缩炸弹类文件 */
+export const MAX_IMAGE_PIXELS = 40_000_000
+
 /**
  * 调用 Payload Media 上传接口
  *

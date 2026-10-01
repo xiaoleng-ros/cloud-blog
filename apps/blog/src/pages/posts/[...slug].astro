@@ -43,6 +43,9 @@ export async function getStaticPaths() {
 }
 
 const { post, canonicalPath } = Astro.props;
+// 旧 URL 形态（/posts/{id}/）会生成一份完整静态副本：canonical 指向新形态，
+// 同时 noindex 提示搜索引擎不要收录重复页，真 301 由 CMS catch-all 负责。
+const isLegacyDuplicate = Boolean(canonicalPath);
 const posts = sortPosts(await getCollection('posts'));
 const { Content, headings } = await render(post);
 const category = getPostCategory(post);
@@ -93,6 +96,7 @@ const articleSchema = {
   type="article"
   jsonLd={articleSchema}
   canonicalPath={canonicalPath}
+  noindex={isLegacyDuplicate}
   articleMeta={{
     ...(post.data.date ? { publishedTime: post.data.date.toISOString() } : {}),
     ...(updatedDate ? { modifiedTime: updatedDate.toISOString() } : {}),
@@ -130,6 +134,8 @@ const articleSchema = {
           class="article__cover"
           src={cover}
           alt={coverAlt}
+          width="1200"
+          height="630"
           loading="eager"
           fetchpriority="high"
           referrerpolicy="no-referrer"
@@ -146,6 +152,8 @@ const articleSchema = {
             class="article__cover"
             src={cover}
             alt={coverAlt}
+            width="1200"
+            height="630"
             loading="eager"
             fetchpriority="high"
             referrerpolicy="no-referrer"

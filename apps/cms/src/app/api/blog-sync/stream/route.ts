@@ -13,6 +13,14 @@ import {
  * 调用 broadcastSse('update', ...)，本端点把事件转发给所有在线客户端，
  * 客户端收到 update 后拉 /api/blog-sync?path=... 拿最新区块局部替换页面。
  *
+ * 消费方核实结论（勿轻易加鉴权）：本端点唯一的真实消费者是 **前台公开页面**
+ * （apps/blog BaseLayout.astro 的 EventSource，withCredentials:false、匿名访问），
+ * 后台管理界面并不订阅它。若在入口校验 admin 登录态，前台整条近实时同步链路即断，
+ * 因此保持匿名可访问是契约的一部分。
+ * 防占满措施已在位：MAX_SSE_CLIENTS=500 全局上限（满员拒绝新连接并给出 5 分钟
+ * 重连间隔）、单连接 10 分钟存活上限 + 队列积压判死 + 模块级定期扫描回收，
+ * 匿名流量无法让连接数单调增长。事件载荷只有 { at: 时间戳 }，不含任何数据内容。
+ *
  * 连接回收（这里实测踩过坑，注释别删）：
  * 浏览器关掉页面后 `controller.enqueue()` 并不会抛错 —— 字节只是排进 ReadableStream
  * 自己的队列；运行时何时发现连接已死、会不会触发 abort / cancel 全看实现。本地 Next dev

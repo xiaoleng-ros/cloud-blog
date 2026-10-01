@@ -67,6 +67,12 @@ interface SyncCacheState {
   clientIdSeq: number
   /** 定期扫描的「代数」：只有最新登记的那条定时器链在跑，防止模块被重复实例化时留下孤儿 */
   sweepGeneration: number
+  /**
+   * 缓存写入静默期截止（epoch ms）。afterChange 钩子跑在事务提交**之前**：
+   * 若此刻有并发读者拿旧数据重建快照并缓存，会把「已失效」悄悄变回「缓存旧内容直到 TTL」。
+   * 失效钩子触发后短暂拒绝写入新快照/区块（读请求照常实时查库），跨过提交窗口。
+   */
+  cacheWriteBypassUntil: number
 }
 
 const STATE_KEY = '__cloudBlogSyncCacheState'
@@ -79,6 +85,7 @@ function createState(): SyncCacheState {
     sseClients: new Set<SseClient>(),
     clientIdSeq: 0,
     sweepGeneration: 0,
+    cacheWriteBypassUntil: 0,
   }
 }
 
@@ -107,6 +114,7 @@ export function getSnapshot(): SyncSnapshot | null {
 }
 
 export function setSnapshot(snapshot: SyncSnapshot): void {
+  if (Date.now() < state.cacheWriteBypassUntil) return
   state.snapshotCache = snapshot
 }
 
@@ -123,6 +131,7 @@ export function getBlock(pathname: string): CachedBlock | undefined {
 }
 
 export function setBlock(pathname: string, block: CachedBlock): void {
+  if (Date.now() < state.cacheWriteBypassUntil) return
   // 达到上限时淘汰 Map 第一个条目（最久未使用）
   if (blockCache.size >= MAX_BLOCK_CACHE_SIZE && !blockCache.has(pathname)) {
     const oldestKey = blockCache.keys().next().value
@@ -135,6 +144,9 @@ export function setBlock(pathname: string, block: CachedBlock): void {
 export function invalidateAll(): void {
   blockCache.clear()
   state.snapshotCache = null
+  // 钩子先于事务提交触发：接下来 1.5s 内禁止把（可能仍是提交前旧数据的）重建结果写回缓存，
+  // 读请求不阻塞、只是不缓存，跨过提交窗口后恢复正常缓存。
+  state.cacheWriteBypassUntil = Math.max(state.cacheWriteBypassUntil, Date.now() + 1_500)
 }
 
 // --- SSE ---

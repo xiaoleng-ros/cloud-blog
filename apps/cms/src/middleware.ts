@@ -19,11 +19,14 @@ import type { NextRequest } from 'next/server'
  *   不再依赖 RSC client-side navigation，从而绕开 EdgeOne 上 RSC 间歇性 500。
  *
  * 命中范围：
- *   仅精确匹配 /admin（根路径），不影响：
- *   - /admin/login            登录页本身
- *   - /admin/_next/...        admin 静态资源（JS/CSS chunk）
- *   - /admin/collections/...  已登录后的子页面
- *   - /admin/api/...          Payload REST API
+ *   匹配 /admin 前缀（管理入口及其子页面），但登录页本身放行（避免重定向死循环）：
+ *   - /admin/login            登录页本身 → 放行
+ *   - /admin/...              其余后台页：无有效 token → HTTP 307 到 /admin/login
+ *   Payload REST API 挂在 /api（见 payload.config 的 routes.api，默认 '/api'），
+ *   不在 /admin 前缀下，故不受本中间件影响；/_next/* 静态资源同理不命中。
+ *   注：对已登录（token 结构合法）的子页面一律放行，交由 Payload 自身鉴权；
+ *   与旧版「仅精确匹配 /admin」相比，这里放宽到 /admin 前缀，让未登录深链也直接走
+ *   稳定的整页 307，而不是依赖 EdgeOne 上间歇性 500 的 RSC 重定向。
  *
  * 鉴权判断：
  *   检查 payload-token cookie 是否存在。cookie 不存在 = 未登录，直接 307。
@@ -87,18 +90,40 @@ function isValidJwtShape(token: string): boolean {
   }
 }
 
+/**
+ * 后台鉴权相关常量（与 payload.config 的对应关系，务必同步维护）：
+ * - COOKIE_NAME   = `${cookiePrefix}-token`：Payload 3.x 默认 cookiePrefix 为 'payload'
+ *                   （payload.config 未覆盖 routes/cookiePrefix），故登录令牌名为 'payload-token'。
+ * - ADMIN_ROOT    = payload.config 的 routes.admin：本仓库未显式配置，取 Payload 默认 '/admin'。
+ * - ADMIN_LOGIN_PATH = ADMIN_ROOT + '/login'，登录页本身（放行，避免 307 死循环）。
+ * 若将来在 payload.config 修改 cookiePrefix 或 routes.admin，需同步这三处常量。
+ */
+const COOKIE_NAME = 'payload-token'
+const ADMIN_ROOT = '/admin'
+const ADMIN_LOGIN_PATH = `${ADMIN_ROOT}/login`
+
+/** pathname 是否落在 prefix 之下（prefix 本身或 `${prefix}/` 前缀） */
+function isUnder(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`)
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // 仅处理精确的 /admin（不带尾随斜杠、不带子路径）
-  if (pathname === '/admin') {
+  // 处理 /admin 前缀（管理入口及其子页面）
+  if (isUnder(pathname, ADMIN_ROOT)) {
+    // 登录页本身放行，避免重定向死循环
+    if (isUnder(pathname, ADMIN_LOGIN_PATH)) {
+      return NextResponse.next()
+    }
+
     // Payload 3.x 默认 cookie 名为 payload-token（cookiePrefix 默认 'payload'）
-    const token = request.cookies.get('payload-token')?.value
+    const token = request.cookies.get(COOKIE_NAME)?.value
 
     // 未登录（无 token）或 token 结构明显损坏 → HTTP 307 到登录页
     if (!token || !isValidJwtShape(token)) {
       const loginUrl = request.nextUrl.clone()
-      loginUrl.pathname = '/admin/login'
+      loginUrl.pathname = ADMIN_LOGIN_PATH
       return NextResponse.redirect(loginUrl, 307)
     }
   }
@@ -110,7 +135,7 @@ export function middleware(request: NextRequest) {
 // 使用 Next.js 默认的 Edge runtime 即可，无需 experimental flag，构建稳定。
 // 注：EdgeOne Makers 作为 Next.js 托管平台支持 Edge runtime middleware。
 
-// 精确匹配 /admin，不匹配子路径（/admin/login、/admin/_next 等不受影响）
+// 匹配 /admin 前缀（含 /admin 本身与其下所有子路径），鉴权判断见上方 isUnder 逻辑
 export const config = {
-  matcher: '/admin',
+  matcher: '/admin/:path*',
 }

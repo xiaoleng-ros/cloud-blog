@@ -276,7 +276,9 @@ export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[
           id: String(doc.id),
           title: doc.title,
           description: doc.description ?? undefined,
-          // 后台不再维护「发布时间」，前台用创建时间（createdAt）兜底，保证排序与展示正常
+          // 后台不再维护「发布时间」，前台用创建时间（createdAt）兜底，保证排序与展示正常。
+          // 这里是 UTC ISO instant（与时区无关）；「哪天发布」的展示/归档统一由
+          // shared/post-utils 的 toShanghaiParts/formatDate 按 Asia/Shanghai 定格
           date: String(doc.createdAt),
           cover,
           coverAlt,

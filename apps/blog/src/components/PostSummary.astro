@@ -1,5 +1,5 @@
 ---
-import { getPostCategory, getPostExcerpt, getPostPath, type BlogPost } from '../lib/posts';
+import { getPostCategory, getPostExcerpt, getPostPath, toShanghaiParts, type BlogPost } from '../lib/posts';
 
 interface Props {
   post: BlogPost;
@@ -9,18 +9,19 @@ interface Props {
 
 const { post, hideYear = false, compact = false } = Astro.props;
 const date = post.data.date;
-const pad = (n: number) => String(n).padStart(2, '0');
-const monthDay = date ? `${pad(date.getMonth() + 1)}·${pad(date.getDate())}` : '';
+// 日/年统一按 Asia/Shanghai 取值，避免构建机 TZ 不同时列表页与 formatDate 显示不一致
+const parts = toShanghaiParts(date);
+const monthDay = parts ? `${parts.month}·${parts.day}` : '';
 const excerpt = compact ? undefined : getPostExcerpt(post);
 const category = getPostCategory(post);
 ---
 
 <article class:list={['post-row', compact && 'post-row--compact', !date && 'post-row--plain']}>
   <a href={getPostPath(post)}>
-    {date && (
+    {date && parts && (
       <time class="post-row__date" datetime={date.toISOString()}>
         <span class="post-row__md">{monthDay}</span>
-        {!hideYear && <span class="post-row__yy">{date.getFullYear()}</span>}
+        {!hideYear && <span class="post-row__yy">{parts.year}</span>}
       </time>
     )}
     <div class="post-row__main">

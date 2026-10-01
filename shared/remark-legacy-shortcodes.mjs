@@ -7,6 +7,22 @@ const escapeHtml = (value = '') =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 
+// 与 shared/html-safety.ts 的 isSafeHref/safeHref 保持同一套协议白名单（此处为 .mjs 无法 import .ts，改动需两处同步）
+const ALLOWED_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
+
+const isSafeHref = (raw = '') => {
+  const value = String(raw).trim();
+  if (!value) return false;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return false;
+  if (value.includes('\\')) return false;
+  if (value.startsWith('//')) return false;
+  const scheme = value.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+  if (!scheme) return true;
+  return ALLOWED_SCHEMES.has(scheme[1].toLowerCase());
+};
+
+const safeHref = (raw, fallback = '#') => (isSafeHref(raw) ? String(raw).trim() : fallback);
+
 const splitArgs = (value = '') =>
   value
     .split(',')
@@ -81,12 +97,12 @@ export const shortcodeToHtml = (raw) => {
 
   if (normalized === 'cell') {
     const [label = '查看链接', url = '#'] = splitArgs(rest);
-    return `<a class="legacy-button" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+    return `<a class="legacy-button" href="${escapeHtml(safeHref(url))}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
   }
 
   if (normalized === 'link') {
     const [label = '查看链接', description = '', url = '#'] = splitArgs(rest);
-    return `<a class="legacy-link-card" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><span>${escapeHtml(label)}</span><small>${escapeHtml(description)}</small></a>`;
+    return `<a class="legacy-link-card" href="${escapeHtml(safeHref(url))}" target="_blank" rel="noopener noreferrer"><span>${escapeHtml(label)}</span><small>${escapeHtml(description)}</small></a>`;
   }
 
   if (normalized === 'site') {
@@ -96,11 +112,11 @@ export const shortcodeToHtml = (raw) => {
     const url = values.url ?? '#';
     const description = values.description ?? '';
     const screenshot = values.screenshot ?? values.avatar;
-    const image = screenshot
-      ? `<img src="${escapeHtml(screenshot)}" alt="" loading="lazy" />`
+    const image = screenshot && isSafeHref(screenshot)
+      ? `<img src="${escapeHtml(safeHref(screenshot))}" alt="" loading="lazy" />`
       : '';
 
-    return `<a class="legacy-site-card" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${image}<span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(description)}</small></span></a>`;
+    return `<a class="legacy-site-card" href="${escapeHtml(safeHref(url))}" target="_blank" rel="noopener noreferrer">${image}<span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(description)}</small></span></a>`;
   }
 
   return '';

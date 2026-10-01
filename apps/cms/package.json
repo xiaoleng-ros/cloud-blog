@@ -24,11 +24,11 @@
     "typecheck": "cross-env NODE_OPTIONS=--no-deprecation tsc --noEmit"
   },
   "dependencies": {
-    "@payloadcms/db-postgres": "^3.88.0",
+    "@payloadcms/db-postgres": "3.88.0",
     "@payloadcms/db-sqlite": "3.88.0",
     "@payloadcms/next": "3.88.0",
     "@payloadcms/richtext-lexical": "3.88.0",
-    "@payloadcms/storage-s3": "^3.88.0",
+    "@payloadcms/storage-s3": "3.88.0",
     "@payloadcms/ui": "3.88.0",
     "cloud-blog": "file:../..",
     "cross-env": "^7.0.3",
@@ -40,6 +40,8 @@
     "payload": "3.88.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "rehype-stringify": "^10.0.1",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",

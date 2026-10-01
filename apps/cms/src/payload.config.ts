@@ -49,6 +49,9 @@ const SUPABASE_STORAGE_ENDPOINT =
     ? `https://${new URL(process.env.POSTGRES_URL).hostname.split('.')[0]}.supabase.co/storage/v1`
     : undefined)
 
+/** S3/Supabase 对象存储凭据是否配齐（缺任何一项都不注入 s3Storage 插件） */
+const HAS_S3_CONFIG = Boolean(SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SUPABASE_STORAGE_ENDPOINT)
+
 /**
  * 组装插件列表：仅当 S3 凭据齐全时注入 s3Storage。
  *
@@ -65,19 +68,21 @@ const SUPABASE_STORAGE_ENDPOINT =
  * 用 `as unknown as Plugin` 强制收敛，运行时行为完全不变。
  */
 const plugins: Plugin[] =
-  SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SUPABASE_STORAGE_ENDPOINT
+  HAS_S3_CONFIG
     ? [
+        // HAS_S3_CONFIG 已保证三项 env 均非空，但 TS 无法据此收窄 process.env 类型，
+        // 故此处用非空断言。
         s3Storage({
           collections: { media: true },
-          bucket: SUPABASE_BUCKET,
+          bucket: SUPABASE_BUCKET!,
           acl: 'public-read', // 图片公开可读，浏览器可直接加载，不走 signed URL
           config: {
-            endpoint: SUPABASE_STORAGE_ENDPOINT,
+            endpoint: SUPABASE_STORAGE_ENDPOINT!,
             region: 'us-east-1', // Supabase 的 S3 兼容接口固定这个 region
             credentials: {
               // AWS SDK 里 accessKeyId = "supabase-demo" 是占位符，secretAccessKey 才是真 key
               accessKeyId: 'supabase-demo',
-              secretAccessKey: SUPABASE_SERVICE_ROLE_KEY,
+              secretAccessKey: SUPABASE_SERVICE_ROLE_KEY!,
             },
             // 注：Supabase Storage 兼容模式使用 v4 签名，AWS SDK 默认即 v4，无需显式配置
             // forcePathStyle: false → bucket 走虚拟主机样式（<bucket>.<endpoint>），
@@ -169,6 +174,29 @@ if (usingFallback || usingWeakSecret) {
   level('[payload]   注意：生产环境（NODE_ENV=production）不再允许上述回落，会直接退出。')
   level('[payload]   本地演练生产校验：设置 PAYLOAD_REQUIRE_SECRET=1。')
   level(`${banner}\n`)
+}
+
+/**
+ * 媒体存储 fail-fast（P1）：生产环境必须配齐对象存储环境变量。
+ *
+ * 未配齐时 plugins 为空数组，media 上传会「静默」落进容器临时磁盘：
+ * 后台不报错、图片当场能看，但实例一回收全部丢失（链接集体 404）。
+ * 与 PAYLOAD_SECRET 同一策略：config 加载期直接抛错退出，把事故挡在部署阶段，
+ * 让平台侧能看到明确崩溃原因而不是留一个迟早爆雷的线上状态。
+ * dev / 本地（NODE_ENV 非 production）不受影响，继续用本地磁盘。
+ */
+if (IS_PRODUCTION && !HAS_S3_CONFIG) {
+  const banner = '='.repeat(64)
+  console.error(`\n${banner}`)
+  console.error('[payload] 生产环境未配置对象存储，拒绝启动')
+  console.error('[payload]   原因：SUPABASE_SERVICE_ROLE_KEY / SUPABASE_BUCKET / SUPABASE_STORAGE_ENDPOINT 未配齐。')
+  console.error('[payload]   后果：图片上传会静默落容器临时盘，实例回收即全部丢失。')
+  console.error('[payload]   修复：在部署平台配置上述变量（endpoint 缺省时可从 POSTGRES_URL 的项目 ref 推导）。')
+  console.error(`${banner}\n`)
+  // 同 PAYLOAD_SECRET 分支：顶层 throw 在 RSC import 上下文可能被 Next 吞成静默白屏，
+  // 下一拍强制退出，保证平台记录到非零退出码与明确原因。
+  setTimeout(() => process.exit(1), 0)
+  throw new Error('[payload] 生产环境必须配置对象存储（SUPABASE_SERVICE_ROLE_KEY + SUPABASE_BUCKET）')
 }
 
 /**

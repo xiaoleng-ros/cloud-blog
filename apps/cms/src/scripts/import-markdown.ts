@@ -9,6 +9,7 @@
  *
  * 用法（在 apps/cms 目录下执行）：
  *   npm run import:data
+ *   可选危险开关：--force-dedupe（仅清理「同日期且内容完全一致」的重复随笔；默认不删任何文档）
  */
 import 'dotenv/config'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -166,15 +167,33 @@ async function main() {
     notesByDate.set(key, [...(notesByDate.get(key) ?? []), { id: note.id, date: note.date as string | Date }])
   }
 
-  // 清理历史重复记录（同日期只保留一条）
-  for (const [key, list] of notesByDate) {
-    if (list.length > 1) {
-      const keep = list[0]
-      for (const dup of list.slice(1)) {
-        await payload.delete({ collection: 'notes', id: dup.id })
-        console.log(`🧹 清理重复随笔：${key}`)
+  // 历史重复记录清理：**默认不删除任何文档**。
+  // 旧版本按「同日期」硬删只保留一条，但同一天完全可能有多个真实内容不同的随笔，
+  // 等于静默丢数据。现在仅当显式传入 --force-dedupe 时才清理，且只删
+  // 「日期相同且正文内容完全一致（trim 后逐字相等）」的多余副本。
+  const FORCE_DEDUPE = process.argv.includes('--force-dedupe')
+  if (FORCE_DEDUPE) {
+    for (const [key, list] of notesByDate) {
+      if (list.length <= 1) continue
+      const seenContents = new Set<string>()
+      const keep: typeof list = []
+      for (const item of list) {
+        const full = await payload.findByID({ collection: 'notes', id: item.id, depth: 0 })
+        const norm = String((full as unknown as { content?: unknown }).content ?? '').trim()
+        if (seenContents.has(norm)) {
+          await payload.delete({ collection: 'notes', id: item.id })
+          console.log(`🧹 清理重复随笔（同日期且内容完全一致）：${key}`)
+        } else {
+          seenContents.add(norm)
+          keep.push(item)
+        }
       }
-      notesByDate.set(key, [keep])
+      notesByDate.set(key, keep)
+    }
+  } else {
+    const dupDays = [...notesByDate.values()].filter((l) => l.length > 1).length
+    if (dupDays > 0) {
+      console.log(`ℹ️  ${dupDays} 个日期存在多条随笔；默认不删除任何文档。确需清理完全相同的副本请加 --force-dedupe 重跑`)
     }
   }
 

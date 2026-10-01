@@ -49,9 +49,13 @@ const describeApiError = (error: unknown): string => {
     if (error.status === 401) return '登录已过期，请重新登录（本地草稿未丢失）'
     if (error.status === 403) return '无操作权限，请确认当前账号是否已授权（内容仍在本地）'
     if (error.status === 429) return '操作过于频繁，请稍后重试'
-    if (error.status >= 500) return `服务端异常（${error.status}），请稍后重试`
+    // 5xx：不回显状态码/原始信息，统一通用文案
+    if (error.status >= 500) return '操作失败，请稍后重试'
+    // 其余 4xx（含后端 APIError 抛出的中文业务提示）保留展示
+    return error.message
   }
-  return (error as Error).message ?? '未知错误'
+  // 非 Payload 错误（网络抖动等）：通用文案，不把 String(err) 原样抛出
+  return '操作失败，请稍后重试'
 }
 
 export const ComposeView: React.FC<Props> = ({ collection, title }) => {
@@ -92,6 +96,12 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   // 用 state 而非 ref：让下面的自动保存/清理 effect 在拿到 id 后能自动重跑，
   // 从而把 storageKey 从 :new 切换到 :{newId}，防止后续元信息改动仍写到 :new 键。
   const [createdId, setCreatedId] = useState<string | null>(null)
+  // createdId 的同步镜像：新建成功后立即可读，避免同一渲染周期内的并发提交读到旧值而建出两份文档
+  const createdIdRef = useRef<string | null>(null)
+  // 提交互斥锁：存草稿 / 发布 期间为 true，杜绝重复提交（含 Ctrl+S 连击、草稿与发布并发）
+  const submittingRef = useRef(false)
+  // 回填失败错误态（编辑模式拉详情失败时展示，并提供重试）
+  const [loadError, setLoadError] = useState('')
   // 初始内容（自动保存不会覆盖刚回填的内容）
   const initialContentRef = useRef('')
   // 是否已回填完成（自动保存在回填完成前不写入，避免覆盖刚拉回的草稿）
@@ -112,70 +122,76 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   }, [storageKey])
 
   // 回填：编辑模式拉详情；新建模式读取本地草稿
-  useEffect(() => {
+  // 抽成 useCallback，便于回填失败时点「重试」重新拉取。
+  const load = useCallback(async () => {
     // id 还没从 URL 解析出来：先不加载，避免误走「新建」分支把本地草稿填进来
     if (id === undefined) return
     loadedRef.current = false
-    const load = async () => {
-      if (id) {
-        setLoading(true)
-        try {
-          if (collection === 'posts') {
-            const doc = await getDoc<AdminPost>('posts', id)
-            setContent(doc.content ?? '')
-            setMeta({
-              title: doc.title ?? '',
-              description: doc.description ?? '',
-              cover: doc.cover ?? '',
-              categoryIds: idsOf(doc.categories),
-              tagIds: idsOf(doc.tags),
-              sticky: doc.sticky ?? 0,
-            })
-          } else {
-            const doc = await getDoc<AdminNote>('notes', id)
-            setContent(doc.content ?? '')
-            setMeta({
-              title: doc.title ?? '',
-              mood: doc.mood ?? '',
-              date: doc.date ? String(doc.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
-              categoryIds: idsOf(doc.categories),
-              tagIds: idsOf(doc.tags),
-            })
-          }
-          initialContentRef.current = ''
-          dirtyRef.current = false
-        } finally {
-          setLoading(false)
-          loadedRef.current = true
+    setLoadError('')
+    if (id) {
+      setLoading(true)
+      try {
+        if (collection === 'posts') {
+          const doc = await getDoc<AdminPost>('posts', id)
+          setContent(doc.content ?? '')
+          setMeta({
+            title: doc.title ?? '',
+            description: doc.description ?? '',
+            cover: doc.cover ?? '',
+            categoryIds: idsOf(doc.categories),
+            tagIds: idsOf(doc.tags),
+            sticky: doc.sticky ?? 0,
+          })
+        } else {
+          const doc = await getDoc<AdminNote>('notes', id)
+          setContent(doc.content ?? '')
+          setMeta({
+            title: doc.title ?? '',
+            mood: doc.mood ?? '',
+            date: doc.date ? String(doc.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+            categoryIds: idsOf(doc.categories),
+            tagIds: idsOf(doc.tags),
+          })
         }
-      } else {
-        // 新建：读取本地草稿（包含正文 + 元信息）
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY(collection, 'new'))
-          if (raw) {
-            const bundle = JSON.parse(raw) as {
-              content?: string
-              meta?: Partial<PublishMeta>
-            }
-            if (bundle.content) {
-              setContent(bundle.content)
-              // 恢复的草稿即新的「初始内容」，否则清空正文会被误判为无改动，旧草稿永远留在本地
-              initialContentRef.current = bundle.content
-              setSaveTip('已恢复本地草稿')
-              setTimeout(() => setSaveTip(''), 2500)
-            }
-            if (bundle.meta) setMeta(bundle.meta)
-          }
-        } catch {
-          // 忽略 localStorage / JSON 解析异常
-        }
+        initialContentRef.current = ''
+        dirtyRef.current = false
+      } catch (error) {
+        // 回填失败（401/404/5xx 等）：给出可见错误态 + 重试，不再静默留白
+        setLoadError(describeApiError(error))
+      } finally {
+        setLoading(false)
         loadedRef.current = true
       }
+    } else {
+      // 新建：读取本地草稿（包含正文 + 元信息）
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY(collection, 'new'))
+        if (raw) {
+          const bundle = JSON.parse(raw) as {
+            content?: string
+            meta?: Partial<PublishMeta>
+          }
+          if (bundle.content) {
+            setContent(bundle.content)
+            // 恢复的草稿即新的「初始内容」，否则清空正文会被误判为无改动，旧草稿永远留在本地
+            initialContentRef.current = bundle.content
+            setSaveTip('已恢复本地草稿')
+            setTimeout(() => setSaveTip(''), 2500)
+          }
+          if (bundle.meta) setMeta(bundle.meta)
+        }
+      } catch {
+        // 忽略 localStorage / JSON 解析异常
+      }
+      loadedRef.current = true
     }
+  }, [id, collection])
+
+  useEffect(() => {
     void load()
     dirtyRef.current = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, collection])
+  }, [load])
 
   // 自动保存：内容/元信息变化 1 秒防抖写 localStorage（整包保存，防止刷新丢元信息）
   useEffect(() => {
@@ -249,6 +265,9 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
     }
     setModal(null)
     setMeta(m)
+    // 提交互斥：防止连击 / Ctrl+S 与「存草稿 + 发布」并发，导致新建分支建出两份文档
+    if (submittingRef.current) return
+    submittingRef.current = true
     setLoading(true)
     try {
       // 标题为空时自动命名（新建草稿才生成，编辑保留原标题为空则自动生成一次）
@@ -265,11 +284,14 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
         content,
         status: 'draft',
       })
-      if (currentId) {
-        await updateDoc(collection, currentId, payload)
+      // 用 ref 取「当前 id」：新建成功后同步可读，避免同周期内二次提交又走新建分支
+      const docId = id || createdIdRef.current
+      if (docId) {
+        await updateDoc(collection, docId, payload)
         setSaveTip('草稿已更新')
       } else {
         const created = await createDoc<{ id: number }>(collection, payload)
+        createdIdRef.current = String(created.id)
         setCreatedId(String(created.id))
         setSaveTip('已保存到草稿箱')
       }
@@ -294,6 +316,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
       setSaveTip(`保存失败：${describeApiError(error)}`)
     } finally {
       setLoading(false)
+      submittingRef.current = false
     }
   }, [collection, content, meta, currentId, clearLocal, id])
 
@@ -303,6 +326,9 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
 
   // 发布：提交 status=published，成功后跳转对应管理列表
   const publish = async (m: PublishMeta) => {
+    // 与存草稿共用同一把互斥锁，避免「发布」与「存草稿/Ctrl+S」并发建出两份文档
+    if (submittingRef.current) return
+    submittingRef.current = true
     setPublishSaving(true)
     // 先把弹窗里的元信息并回 meta：发布失败时（例如后台校验不过）用户接着「存草稿」
     // 不应该因为 categoryIds 仍为空又被要求重选一次
@@ -320,17 +346,21 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
         content,
         status: 'published',
       })
-      if (currentId) {
-        await updateDoc(collection, currentId, payload)
+      // 用 ref 取「当前 id」：新建成功后同步可读，二次提交走更新而非再建一份
+      const docId = id || createdIdRef.current
+      if (docId) {
+        await updateDoc(collection, docId, payload)
       } else {
-        await createDoc(collection, payload)
+        const created = await createDoc<{ id: number }>(collection, payload)
+        createdIdRef.current = String(created.id)
       }
       clearLocal()
       dirtyRef.current = false
       setModal(null)
-      // 整页跳转到管理列表，保证列表数据刷新
+      // 整页跳转到管理列表，保证列表数据刷新（成功即离开，无需释放提交锁）
       window.location.assign(`${adminRoute}/collections/${collection}`)
     } catch (error) {
+      submittingRef.current = false
       setPublishSaving(false)
       // 与 saveDraft 保持同一套错误文案映射（401/403 等认证类错误明确提示）
       alert(`发布失败：${describeApiError(error)}`)
@@ -361,10 +391,21 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
       />
 
       <div className="compose__body">
+        {loadError && (
+          <div className="compose__error" role="alert">
+            <span>加载内容失败：{loadError}</span>
+            <button type="button" className="compose__btn" onClick={() => void load()} disabled={loading}>
+              重试
+            </button>
+          </div>
+        )}
         {collection === 'posts' && (
           <div className="compose__meta">
-            <label className="compose__meta-label">标题</label>
+            <label className="compose__meta-label" htmlFor="compose-title-input">
+              标题
+            </label>
             <input
+              id="compose-title-input"
               type="text"
               className="compose__meta-title"
               placeholder="文章标题（留空保存时自动命名草稿）"

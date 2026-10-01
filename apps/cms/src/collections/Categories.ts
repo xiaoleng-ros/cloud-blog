@@ -68,8 +68,14 @@ export const Categories: CollectionConfig = {
     ],
     beforeDelete: [
       // categories_id 在 posts/notes 上是 NOT NULL 列，而外键写的是 ON DELETE set null
-      // （见 20260926 迁移）——删除仍被引用的分类会撞约束、直接 500。
+      // （已在 20260926_000000_remove_posts_slug_add_categories 迁移与 schema 中核实：
+      //   ADD COLUMN → 回填 → SET NOT NULL，FK 为 ON DELETE set null）。
+      // 删除仍被引用的分类时 FK 试图把 NOT NULL 列置 NULL，直接撞约束 500。
       // 这里提前拦截并给出可读报错，把「数据库冲突」变成「后台可理解的提示」。
+      //
+      // 计数必须带 trash:true：回收站里的文章/随笔只是打了 deletedAt 标记，
+      // 行还在、FK 也还在 —— 默认查询会把它们漏掉，导致「计数为 0 放行删除 → 撞约束」。
+      // 含回收站后本钩子覆盖所有引用来源，SET NULL 分支不会再被触发，约束冲突即消除。
       async ({ id, req }) => {
         const children = await req.payload.count({
           collection: 'categories',
@@ -85,17 +91,19 @@ export const Categories: CollectionConfig = {
         const posts = await req.payload.count({
           collection: 'posts',
           where: { categories: { equals: id } },
+          trash: true,
           req,
         })
         const notes = await req.payload.count({
           collection: 'notes',
           where: { categories: { equals: id } },
+          trash: true,
           req,
         })
         const inUse = posts.totalDocs + notes.totalDocs
         if (inUse > 0) {
           throw new APIError(
-            `该分类下还有 ${inUse} 篇内容，请先把它们移到其它分类，再删除这个分类。`,
+            `该分类已被 ${inUse} 篇内容引用（含回收站中的文章/随笔，它们仍占用该分类），请先彻底删除或移走这些内容，再删除这个分类。`,
             400,
           )
         }

@@ -17,6 +17,8 @@ import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import { createHighlighter } from 'shiki'
 
@@ -26,6 +28,10 @@ import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.m
 import { createRehypeImgAttrs } from 'cloud-blog/shared/rehype-img-attrs.mjs'
 // href 协议白名单 + 关于页正文净化：与前台共用同一份实现（escapeAttr 只挡引号，挡不住 javascript:）
 import { safeHref, sanitizeInlineHtml } from 'cloud-blog/shared/html-safety'
+// 正文净化白名单：与 Astro 构建链共用同一份 schema（默认值来自本 app 依赖，shared 层不带裸包 import）
+import { buildMdSanitizeSchema } from 'cloud-blog/shared/md-sanitize-schema.mjs'
+
+const mdSanitizeSchema = buildMdSanitizeSchema(defaultSchema)
 
 import {
   type MdEntry,
@@ -53,6 +59,7 @@ import {
   getPostsByCategory,
   getPostsByTag,
   groupPostsByYear,
+  toShanghaiParts,
 } from 'cloud-blog/shared/post-utils'
 
 // 站点默认值（后台 SiteSettings 缺失时兜底）。原 site.config.json 已移除，统一在此维护。
@@ -94,6 +101,9 @@ const escapeAttr = escapeHtml
 
 const toDate = (value?: unknown): Date | undefined =>
   value ? new Date(String(value)) : undefined
+
+/** 当前年份（Asia/Shanghai），与前台 Astro 模板同口径，避免运行机 TZ 造成跨年一天错位 */
+const currentYearShanghai = () => Number(toShanghaiParts(new Date())?.year)
 
 // ---------------------------------------------------------------------------
 // 站点设置 / Hero / 社交 / 页脚（与前台 site-settings.ts 逻辑一致）
@@ -385,9 +395,11 @@ async function renderMarkdown(md: string, altMap: Map<string, string>): Promise<
     .use(remarkLegacyShortcodes)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeLegacyShortcodes)
+    .use(rehypeRaw)
+    .use(rehypeSanitize, mdSanitizeSchema)
     .use(createRehypeImgAttrs(altMap))
     .use(() => collectHeadings)
-    .use(rehypeStringify, { allowDangerousHtml: true })
+    .use(rehypeStringify)
     .process(md)
 
   const html = await highlightCodeBlocks(String(file))
@@ -405,8 +417,8 @@ function renderPostSummary(
 ): string {
   const { hideYear = false, compact = false } = opts
   const date = toDate(post.data.date)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const monthDay = date ? `${pad(date.getMonth() + 1)}·${pad(date.getDate())}` : ''
+  const parts = toShanghaiParts(date)
+  const monthDay = parts ? `${parts.month}·${parts.day}` : ''
   const excerpt = compact ? undefined : getPostExcerpt(post)
   const category = getPostCategory(post)
 
@@ -419,7 +431,7 @@ function renderPostSummary(
     ${
       date
         ? `<time class="post-row__date" datetime="${date.toISOString()}"><span class="post-row__md">${monthDay}</span>${
-            !hideYear ? `<span class="post-row__yy">${date.getFullYear()}</span>` : ''
+            !hideYear ? `<span class="post-row__yy">${parts?.year ?? ''}</span>` : ''
           }</time>`
         : ''
     }
@@ -833,7 +845,7 @@ async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): P
 
   const byYear: { year: string; notes: MdEntry[] }[] = []
   for (const note of sorted) {
-    const year = String(toDate(note.data.date)?.getFullYear() ?? '')
+    const year = toShanghaiParts(toDate(note.data.date))?.year ?? ''
     const group = byYear.find((g) => g.year === year)
     if (group) group.notes.push(note)
     else byYear.push({ year, notes: [note] })
@@ -842,9 +854,10 @@ async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): P
   const monthAnchor = new Map<string, string>()
   const seenMonth = new Set<string>()
   for (const note of sorted) {
-    const d = toDate(note.data.date)
-    if (!d) continue
-    const key = `${d.getFullYear()}-${d.getMonth() + 1}`
+    const parts = toShanghaiParts(toDate(note.data.date))
+    if (!parts) continue
+    // 月份保持不补零（t-2026-3），与 notes.astro 构建期生成的锚点 id 一致
+    const key = `${parts.year}-${Number(parts.month)}`
     if (!seenMonth.has(key)) {
       seenMonth.add(key)
       monthAnchor.set(note.id, `t-${key}`)
@@ -856,7 +869,7 @@ async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): P
     months: group.notes
       .filter((n) => monthAnchor.has(n.id))
       .map((n) => ({
-        label: `${toDate(n.data.date)!.getMonth() + 1}月`,
+        label: `${Number(toShanghaiParts(toDate(n.data.date))!.month)}月`,
         anchor: monthAnchor.get(n.id)!,
       })),
   }))
@@ -1119,15 +1132,28 @@ function renderProject(item: ProjectEntry): string {
 </article>`
 }
 
+/**
+ * 分组名 → 合法 HTML id，与 about.astro 的 groupDomId 严格一致：
+ * 运行时同步会整块替换 aboutProjects，两侧 id 不同会让 aria-labelledby 指向失效。
+ * 纯中文/空格分组名会被 slug 清空，用分组序号兜底保证 id 唯一且非空。
+ */
+const projectGroupDomId = (title: string, index: number) => {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return `proj-${index}${slug ? `-${slug}` : ''}`
+}
+
 /** 关于页项目区（按分组聚合，与 about.astro 结构一致） */
 function renderAboutProjects(projects: ProjectEntry[]): string {
   const groups = groupProjects(projects)
   const sections = groups
     .map(
-      (group) => group.items.length > 0
-        ? `<section class="proj-section" aria-labelledby="${escapeAttr(group.title)}-heading">
+      (group, index) => group.items.length > 0
+        ? `<section class="proj-section" aria-labelledby="${projectGroupDomId(group.title, index)}">
   <div class="proj-section__head">
-    <h2 class="proj-section__label" id="${escapeAttr(group.title)}-heading">${escapeHtml(group.title)}</h2>
+    <h2 class="proj-section__label" id="${projectGroupDomId(group.title, index)}">${escapeHtml(group.title)}</h2>
     <p class="proj-section__desc">${escapeHtml(group.description)}</p>
   </div>
   <div class="proj-grid">${group.items.map(renderProject).join('')}</div>
@@ -1173,7 +1199,7 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/'),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     heroCard: renderHeroCard({ ...hero, bio: heroBio }, socials),
     heroPicks: renderHeroPicks(heroPicks),
     latestPosts: latest.map((p) => renderPostSummary(p)).join(''),
@@ -1211,7 +1237,7 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     // 标题保持原始文本（未转义）：客户端直接赋给 document.title，
     // 服务端注入 <title> 时再统一做一次 HTML 转义。
     pageTitle: `${post.data.title} - ${siteName}`,
@@ -1233,7 +1259,7 @@ async function archiveBlocks(ctx: SyncData): Promise<Record<string, string | nul
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/archive/'),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     archiveHeader: renderArchiveHeader(posts.length),
     archiveSummary: renderArchiveSummary(getCategories(posts), getTags(posts)),
     archiveYears: renderArchiveYears(years),
@@ -1250,7 +1276,7 @@ async function notesBlocks(ctx: SyncData): Promise<Record<string, string | null>
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/notes/'),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     notesFeed: feed,
     notesAside: aside,
   }
@@ -1275,7 +1301,7 @@ async function termBlocks(
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     termSwitcher: renderTermSwitcher(terms, term, kind),
     termPostList: renderPostList(posts, true),
     termCount:
@@ -1290,9 +1316,9 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
   const posts = sortPosts(ctx.posts)
   const postCount = posts.length
   const firstYear = posts.reduce((min, post) => {
-    const year = toDate(post.data.date)?.getFullYear()
+    const year = Number(toShanghaiParts(toDate(post.data.date))?.year ?? NaN)
     return year && year < min ? year : min
-  }, new Date().getFullYear())
+  }, currentYearShanghai())
   const about = getAboutData(ctx.settings)
   const settings = ctx.settings
   const siteName = settings?.siteName ?? site.name
@@ -1301,7 +1327,7 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/about/'),
     footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, new Date().getFullYear()),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     aboutProfile: renderAboutProfile(about, postCount, firstYear),
     aboutSkills: renderAboutSkills(about.skills),
     aboutProjects: renderAboutProjects(ctx.projects),

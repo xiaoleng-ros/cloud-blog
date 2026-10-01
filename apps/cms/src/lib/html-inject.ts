@@ -130,13 +130,13 @@ function collectAnchors(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const loc = (node as any).sourceCodeLocation
       if (loc && loc.startTag) {
-        // parse5 v7: startTag.endOffset 是起始标签最后一个字符（`>`）的 0-based 索引
-        // 所以 innerStart = startTag.endOffset + 1
+        // parse5 v7: startTag.endOffset 是开区间（`>` 之后一位），即 innerHTML 首字符索引
+        // 因此 openEnd（闭区间末位，含 `>`）= endOffset - 1，innerStart = endOffset。
         // 对于未闭合标签，parse5 不给 endTag，但会给 endOffset 指向解析终点。
         // 用 `endTag.startOffset ?? endOffset` 兜底，避免合法但残缺的 HTML 被漏注入。
         const tagStart: number = loc.startTag.startOffset
         const openEnd: number = loc.startTag.endOffset - 1
-        const innerStart: number = loc.startTag.endOffset + 1
+        const innerStart: number = loc.startTag.endOffset
         const innerEnd: number = loc.endTag
           ? loc.endTag.startOffset
           : loc.endOffset

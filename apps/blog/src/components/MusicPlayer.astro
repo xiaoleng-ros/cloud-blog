@@ -14,22 +14,26 @@ import speakerSlashIcon from '@phosphor-icons/core/assets/regular/speaker-slash.
 import waveformIcon from '@phosphor-icons/core/assets/regular/waveform.svg?raw';
 import xIcon from '@phosphor-icons/core/assets/regular/x.svg?raw';
 
-// 歌单 ID：后台站点设置（SiteSettings）优先 → 环境变量兜底 → 默认值
+// 歌单 ID：后台站点设置（SiteSettings.neteasePlaylistId）优先 → 环境变量兜底
+// 后台字段由 CMS SiteSettings 维护（无对应硬编码默认值），前台不再自带模板歌单 ID：
+// 两处都拿不到合法纯数字 ID 时整块不渲染，避免导向一个模板残留的不存在歌单。
 import { getSiteSettings } from '../lib/site-settings';
 
 const settings = await getSiteSettings();
 // 后台站点设置的歌单 ID 只在「纯数字」时才采用：
-// 历史上这个字段被填过 "NaN"，会把播放器导向一个不存在的歌单，比兜底值更糟。
+// 历史上这个字段被填过 "NaN"，会把播放器导向一个不存在的歌单，比没有播放器更糟。
 const rawPlaylistId = String(
   settings?.neteasePlaylistId ?? import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID ?? '',
 ).trim();
-const playlistId = /^\d+$/.test(rawPlaylistId) ? rawPlaylistId : '8792942606';
+const playlistId = /^\d+$/.test(rawPlaylistId) ? rawPlaylistId : '';
+
 const apiBase =
   String(import.meta.env.PUBLIC_MUSIC_API ?? 'https://meting.mikus.ink/api').trim() ||
   'https://meting.mikus.ink/api';
 const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(playlistId)}`;
 ---
 
+{playlistId && (
 <div
   class="music-player"
   transition:name="music-player"
@@ -177,6 +181,7 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
 
   <audio data-music-audio preload="none"></audio>
 </div>
+)}
 
 <style is:global>
   .music-player {
@@ -1866,7 +1871,7 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
       const list = root.querySelector('[data-music-list]');
       const cover = root.querySelector('[data-music-cover]');
       const dockCover = root.querySelector('[data-music-dock-cover]');
-      const playlistId = root.dataset.playlistId || '8792942606';
+      const playlistId = root.dataset.playlistId || '';
       const apiBase = root.dataset.apiBase || 'https://meting.mikus.ink/api';
       const storageKey = `blog-music-player:${playlistId}`;
 

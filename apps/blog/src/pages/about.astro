@@ -3,13 +3,14 @@ import { getCollection, type CollectionEntry } from 'astro:content';
 import Icon from '../components/Icon.astro';
 import SkillRing from '../components/SkillRing.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { sortPosts } from '../lib/posts';
+import { sortPosts, toShanghaiParts } from '../lib/posts';
 import { getAboutContent, getSiteSettings } from '../lib/site-settings';
 
 const posts = sortPosts(await getCollection('posts'));
 const postCount = posts.length;
+// 年份按 Asia/Shanghai 定格（与 formatDate/归档页一致），避免构建机 TZ 影响「写于 X 年」
 const firstYear = posts.reduce((min, post) => {
-  const year = post.data.date?.getFullYear();
+  const year = Number(toShanghaiParts(post.data.date)?.year);
   return year && year < min ? year : min;
 }, new Date().getFullYear());
 
@@ -24,6 +25,16 @@ const authorName = settings?.siteAuthor ?? '我';
 // loader 已按 sortOrder 升序写入 store，分组时保持该顺序
 const projects = await getCollection('projects');
 
+// 分组名 → 合法 HTML id：小写、非字母数字连续段转单个 -、去首尾 -。
+// 纯中文/空格类分组名会被清空，用分组序号兜底保证 id 唯一且非空。
+const groupDomId = (title: string, index: number) => {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `proj-${index}${slug ? `-${slug}` : ''}`;
+};
+
 // 分组聚合：镜像后台 blog-render.tsx 的 groupProjects()——
 // 保留首次出现的分组描述，组内顺序即 sortOrder 顺序
 const projectGroups = (() => {
@@ -36,9 +47,14 @@ const projectGroups = (() => {
     }
     byGroup.get(p.data.group)!.items.push(p);
   }
-  return order.map((title) => {
+  return order.map((title, index) => {
     const g = byGroup.get(title)!;
-    return { title, description: g.description, items: g.items.map((entry) => entry.data) };
+    return {
+      id: groupDomId(title, index),
+      title,
+      description: g.description,
+      items: g.items.map((entry) => entry.data),
+    };
   });
 })();
 
@@ -97,9 +113,9 @@ const STAR_FILL_SVG =
     <div data-sync-block="aboutProjects" style="display: contents">
       {projectGroups.map((section) =>
         section.items.length > 0 ? (
-          <section class="proj-section" aria-labelledby={`${section.title}-heading`}>
+          <section class="proj-section" aria-labelledby={section.id}>
             <div class="proj-section__head">
-              <h2 class="proj-section__label" id={`${section.title}-heading`}>{section.title}</h2>
+              <h2 class="proj-section__label" id={section.id}>{section.title}</h2>
               <p class="proj-section__desc">{section.description}</p>
             </div>
 

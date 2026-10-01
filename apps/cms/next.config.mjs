@@ -14,6 +14,25 @@ const nextConfig = {
   // cloud-blog/shared/* 是仓库内的 TS 源码（file: 依赖），必须交给 SWC 转译，
   // 否则 Next 默认跳过 node_modules 会导致构建期无法解析 .ts 源码。
   transpilePackages: ['cloud-blog'],
+  // 安全响应头：对全部路由（含 Payload 后台 /admin 与 /api）统一加，均为无副作用基线项：
+  //   - nosniff：禁止 MIME 嗅探；Payload 各资源都带正确 Content-Type，不会被误判拦截。
+  //   - Referrer-Policy：跨源只发 origin，收敛引用方信息泄露。
+  //   - X-Frame-Options SAMEORIGIN：只允许同源页面把后台嵌进 iframe（防点击劫持）；
+  //     后台与前台同源，不影响 Payload admin 自身的同页布局。
+  // 说明：暂不强上 CSP —— 后台（vditor/lexical/内联样式与脚本）内联内容多，贸然加会碎掉界面；
+  //       建议后续单独做 CSP 基线并按 nonce 方案灰度验证后再启用。
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        ],
+      },
+    ]
+  },
   // 注意：不需要 rewrites，静态博客文件由 src/app/[[...path]]/route.ts 提供
 }
 

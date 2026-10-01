@@ -4,7 +4,7 @@ import CommentsBox from '../components/CommentsBox.astro';
 import Icon from '../components/Icon.astro';
 import QuoteComment from '../components/QuoteComment.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { formatDate } from '../lib/posts';
+import { formatDate, toShanghaiParts } from '../lib/posts';
 
 const all = (await getCollection('notes')).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime(),
@@ -16,10 +16,11 @@ const entries = await Promise.all(
 );
 
 // Group by year (entries already sorted newest-first).
+// 年/月一律按 Asia/Shanghai 定格，避免构建机 TZ 与展示层（formatDate）不一致。
 type Entry = (typeof entries)[number];
 const byYear: { year: string; items: Entry[] }[] = [];
 for (const entry of entries) {
-  const year = String(entry.note.data.date.getFullYear());
+  const year = toShanghaiParts(entry.note.data.date)?.year ?? '未注明日期';
   const group = byYear.find((g) => g.year === year);
   if (group) {
     group.items.push(entry);
@@ -32,8 +33,9 @@ for (const entry of entries) {
 const monthAnchor = new Map<string, string>();
 const seenMonth = new Set<string>();
 for (const { note } of entries) {
-  const d = note.data.date;
-  const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+  const parts = toShanghaiParts(note.data.date);
+  if (!parts) continue;
+  const key = `${parts.year}-${Number(parts.month)}`;
   if (!seenMonth.has(key)) {
     seenMonth.add(key);
     monthAnchor.set(note.id, `t-${key}`);
@@ -45,7 +47,7 @@ const timeIndex = byYear.map((group) => ({
   months: group.items
     .filter((entry) => monthAnchor.has(entry.note.id))
     .map((entry) => ({
-      label: `${entry.note.data.date.getMonth() + 1}月`,
+      label: `${Number(toShanghaiParts(entry.note.data.date)?.month) || ''}月`,
       anchor: monthAnchor.get(entry.note.id)!,
     })),
 }));
@@ -158,4 +160,100 @@ const moodIcon = (mood?: string) => {
     <CommentsBox title="留言" />
   </section>
   <QuoteComment selector=".note__body" />
+
+  <script is:inline data-astro-rerun>
+    (() => {
+      // 随笔列表「加载更多」：纯前端分批展开（默认只露出最近 20 条）。
+      // 兼容运行时同步——notesFeed 区块被后台 HTML 整块替换后，
+      // blog:sync-updated 事件会触发重新分批；不改动服务端渲染的完整内容。
+      window.__blogNotesMoreCleanup?.();
+      const PAGE = 20;
+      const feed = document.querySelector('[data-sync-block="notesFeed"]');
+      if (!feed) return;
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'notes-more';
+      button.textContent = '加载更多';
+      button.setAttribute('aria-label', '加载更多随笔');
+      feed.after(button);
+
+      let shown = PAGE;
+
+      const apply = () => {
+        const notes = [...feed.querySelectorAll('.note')];
+        notes.forEach((el, i) => {
+          el.style.display = i < shown ? '' : 'none';
+          if (i < shown) {
+            // 新展开的条目直接标记已显现，跳过滚动动画的隐藏态
+            el.classList.add('is-revealed');
+            el.dataset.revealed = '1';
+          }
+        });
+        // 整年都藏在折叠线之后时连年份分组一起隐藏，避免只剩空标题
+        feed.querySelectorAll('.notes-year').forEach((section) => {
+          const items = [...section.querySelectorAll('.note')];
+          section.style.display =
+            items.length > 0 && items.every((el) => el.style.display === 'none') ? 'none' : '';
+        });
+        button.hidden = notes.length <= shown;
+      };
+
+      button.addEventListener('click', () => {
+        shown += PAGE;
+        apply();
+      });
+
+      // 时间索引跳转到被折叠的月份锚点前先全部展开
+      const aside = document.querySelector('[data-sync-block="notesAside"]');
+      const expandAll = () => {
+        shown = feed.querySelectorAll('.note').length;
+        apply();
+      };
+      aside?.addEventListener('click', (event) => {
+        const link = event.target?.closest?.('a[href^="#"]');
+        if (link) expandAll();
+      });
+      const onHashChange = () => {
+        const id = decodeURIComponent(window.location.hash.slice(1));
+        const target = id && document.getElementById(id);
+        if (target?.closest('.note')?.style.display === 'none') expandAll();
+      };
+      window.addEventListener('hashchange', onHashChange);
+
+      const onSync = () => apply();
+      document.addEventListener('blog:sync-updated', onSync);
+      apply();
+
+      window.__blogNotesMoreCleanup = () => {
+        document.removeEventListener('blog:sync-updated', onSync);
+        window.removeEventListener('hashchange', onHashChange);
+        button.remove();
+      };
+    })();
+  </script>
 </BaseLayout>
+
+<style is:global>
+  /* 「加载更多」按钮由页面脚本动态创建，模板作用域样式够不到，需全局样式 */
+  .notes-more {
+    display: block;
+    margin: 1.5rem auto 0;
+    padding: 0.55rem 1.6rem;
+    border: 2px solid var(--ink, #2b2620);
+    border-radius: 255px 15px 255px 15px / 15px 255px 15px 255px;
+    background: var(--surface, #fffdf6);
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .notes-more:hover {
+    background: var(--brand-soft, #f6efdd);
+  }
+
+  .notes-more[hidden] {
+    display: none;
+  }
+</style>

@@ -26,6 +26,8 @@ interface Props {
   /** 规范链接路径（如 /posts/{分类名}/{id}/）。同一篇文章存在旧地址时由页面传入，
    *  让旧地址那份产物把 canonical / og:url 指向新形态，避免搜索结果里两份重复内容 */
   canonicalPath?: string;
+  /** 指示搜索引擎不要收录本页（旧 URL 形态的整页副本用 true，配合 canonical 去重） */
+  noindex?: boolean;
 }
 
 // 站点信息：优先后台站点设置（SiteSettings），后台不可用时回退本地配置
@@ -45,6 +47,7 @@ const {
   jsonLd,
   articleMeta,
   canonicalPath,
+  noindex = false,
 } = Astro.props;
 
 const pageTitle = title === defaultInfo.name ? title : `${title} - ${defaultInfo.name}`;
@@ -123,6 +126,7 @@ const routeMotion = {
     />
     <title>{pageTitle}</title>
     <link rel="canonical" href={canonicalUrl} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
     <link
       rel="alternate"
       type="application/rss+xml"
@@ -692,6 +696,32 @@ const routeMotion = {
           '.about__intro > *', '.note',
         ].join(', ');
 
+        // 客户端兜底净化：区块 HTML 已在服务端渲染链（blog-render + rehype-sanitize）白名单净化过，
+        // 这里再走一遍 DOM 级清洗，防「服务端净化被绕过 / API 响应被篡改」两类残余风险。
+        // 只删不清洗：移除可执行元素、on* 属性、javascript:/vbscript: URL（data: 仅放行内联图片）。
+        const DROP_TAGS = 'script,object,embed,frame,link,meta,base,form,foreignObject,foreignobject';
+        const URL_ATTRS = ['href', 'src', 'xlink:href', 'action', 'formaction', 'data'];
+        const stripDangerous = (html) => {
+          const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+          const root = doc.body;
+          root.querySelectorAll(DROP_TAGS).forEach((n) => n.remove());
+          root.querySelectorAll('*').forEach((n) => {
+            for (const attr of Array.from(n.attributes)) {
+              const name = attr.name.toLowerCase();
+              const raw = attr.value || '';
+              // 与浏览器一致：先剥控制字符/空白再判协议（`\tjavascript:` 这类伪装）
+              const compact = raw.replace(/[\u0000-\u0020]/g, '').toLowerCase();
+              if (name.startsWith('on')) { n.removeAttribute(attr.name); continue; }
+              if (!URL_ATTRS.includes(name)) continue;
+              const isInlineImage = name === 'src' && n.tagName === 'IMG' && /^data:image\/(png|jpe?g|gif|webp|avif);base64,/.test(compact);
+              if (!isInlineImage && (/^(javascript|vbscript|livescript|mocha):/.test(compact) || compact.startsWith('data:'))) {
+                n.removeAttribute(attr.name);
+              }
+            }
+          });
+          return root.innerHTML;
+        };
+
         // 更新某个锚点的内容；找不到锚点或内容为空则跳过，返回是否更新成功
         const applyBlock = (id, html, version) => {
           if (html == null || html === '') return false;
@@ -700,11 +730,12 @@ const routeMotion = {
           // 服务端在返回 HTML 时已经用**同一版本号**注入过这一块 → 直接跳过。
           // 否则首次同步会把刚渲染好的同一份内容再重写一遍，白白的闪烁 + 重排。
           if (version && el.dataset.syncVersion === version) return false;
-          if (el.innerHTML === html) {
+          const safeHtml = stripDangerous(html);
+          if (el.innerHTML === safeHtml) {
             if (version) el.dataset.syncVersion = version;
             return false; // 内容相同无需重写
           }
-          el.innerHTML = html;
+          el.innerHTML = safeHtml;
           if (version) el.dataset.syncVersion = version;
           // 新内容补 reveal 类，避免被「未显现隐藏」规则遮住
           el.querySelectorAll(REVEAL_SEL).forEach((node) => {

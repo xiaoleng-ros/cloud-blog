@@ -216,3 +216,12 @@ export function idsOf(
   if (typeof refs === 'object') return [Number(refs.id)]
   return [Number(refs)]
 }
+/** 读取全局配置单例（globals 的 REST 前缀是 /api/globals，与集合不同） */
+export async function fetchGlobal<T>(slug: string): Promise<T> {
+  return request<T>('GET', `/api/globals/${slug}`)
+}
+
+/** 保存全局配置单例 */
+export async function updateGlobal<T>(slug: string, data: Record<string, unknown>): Promise<T> {
+  return request<T>('PATCH', `/api/globals/${slug}`, data)
+}

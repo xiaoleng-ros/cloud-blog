@@ -9,13 +9,16 @@
  * - 底部快捷操作：写文章 / 写随笔 / 站点设置
  *
  * 数据来源（Payload REST API，同源相对路径）：
- * - GET /api/posts?limit=0&depth=0            → 文章总数（totalDocs）
- * - GET /api/notes?limit=0&depth=0             → 随笔总数
- * - GET /api/categories?limit=0&depth=0        → 分类总数
- * - GET /api/tags?limit=0&depth=0              → 标签总数
- * - GET /api/media?limit=0&depth=0             → 图片总数
- * - GET /api/posts?sort=-date&limit=5&depth=0  → 最近文章
- * - GET /api/notes?sort=-date&limit=5&depth=0  → 最近随笔
+ * - 注意：Payload REST 的 limit=0 不是「只取总数」，而是「取消上限、返回全表」
+ *   （见 db 适配层注释），会把所有文档（含正文）拉回来。统计卡片只需要 totalDocs，
+ *   因此计数一律用 limit=1，只读 totalDocs，避免全表回传。
+ * - GET /api/posts?limit=1&depth=0     → 文章总数（totalDocs）
+ * - GET /api/notes?limit=1&depth=0     → 随笔总数
+ * - GET /api/categories?limit=1&depth=0 → 分类总数
+ * - GET /api/tags?limit=1&depth=0      → 标签总数
+ * - GET /api/media?limit=1&depth=0     → 图片总数
+ * - GET /api/posts?sort=-createdAt&limit=5&depth=0  → 最近文章（消费 docs）
+ * - GET /api/notes?sort=-date&limit=5&depth=0       → 最近随笔（消费 docs）
  */
 import { Link, useConfig } from '@payloadcms/ui'
 import React, { useEffect, useState } from 'react'
@@ -79,6 +82,8 @@ export const DashboardView = () => {
 
   // 是否正在加载
   const [loading, setLoading] = useState(true)
+  // 加载是否失败（未登录 / 5xx / 网络异常时展示错误占位，而非静默显示 0）
+  const [error, setError] = useState(false)
   // 各集合总数
   const [stats, setStats] = useState<Record<string, number>>({})
   // 最近文章列表
@@ -89,7 +94,9 @@ export const DashboardView = () => {
   useEffect(() => {
     /**
      * 并发拉取统计数据与最近内容
-     * 说明：limit=0 表示不取文档只取 totalDocs；depth=0 不展开关联数据，减少响应体积
+     * 说明：计数一律用 limit=1（只读 totalDocs，不消费 docs），limit=0 在 Payload REST 里
+     *      是「取消上限、返回全表」而非「只取总数」，会把所有文档含正文拉回来；
+     *      depth=0 不展开关联，进一步减小响应体积。
      */
     const load = async () => {
       try {
@@ -102,22 +109,20 @@ export const DashboardView = () => {
           latestPostsRes,
           latestNotesRes,
         ] = await Promise.all([
-          fetch('/api/posts?limit=0&depth=0'),
-          fetch('/api/notes?limit=0&depth=0'),
-          fetch('/api/categories?limit=0&depth=0'),
-          fetch('/api/tags?limit=0&depth=0'),
-          fetch('/api/media?limit=0&depth=0'),
+          fetch('/api/posts?limit=1&depth=0'),
+          fetch('/api/notes?limit=1&depth=0'),
+          fetch('/api/categories?limit=1&depth=0'),
+          fetch('/api/tags?limit=1&depth=0'),
+          fetch('/api/media?limit=1&depth=0'),
           fetch('/api/posts?sort=-createdAt&limit=5&depth=0'),
           fetch('/api/notes?sort=-date&limit=5&depth=0'),
         ])
 
-        // 解析列表响应（失败时返回空对象，保持页面可用）
+        // 解析列表响应：非 2xx（未登录 401/403、服务端 5xx）时抛错，交由下方 catch 统一置错误态，
+        // 不再静默回落到 0，避免「统计全 0」被误读成「还没有内容」。
         const toJson = async <T,>(res: Response): Promise<ListResponse<T>> => {
-          try {
-            return (await res.json()) as ListResponse<T>
-          } catch {
-            return { docs: [], totalDocs: 0 }
-          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          return (await res.json()) as ListResponse<T>
         }
 
         const [posts, notes, cates, tags, media, latestPosts, latestNotes] = await Promise.all([
@@ -139,6 +144,9 @@ export const DashboardView = () => {
         })
         setRecentPosts(latestPosts.docs)
         setRecentNotes(latestNotes.docs)
+        setError(false)
+      } catch {
+        setError(true)
       } finally {
         setLoading(false)
       }
@@ -169,9 +177,11 @@ export const DashboardView = () => {
       <section className="dashboard__stats" aria-label="内容统计">
         {statCards.map((card) => (
           <Link key={card.label} href={card.href} prefetch={false} className={`dashboard__stat dashboard__stat--${card.color}`}>
-            <span className="dashboard__stat-value">{loading ? '…' : card.value}</span>
+            <span className="dashboard__stat-value">
+              {loading ? '…' : error ? '—' : card.value}
+            </span>
             <span className="dashboard__stat-label">
-              {card.label}（{card.unit}）
+              {error && !loading ? '加载失败' : `${card.label}（${card.unit}）`}
             </span>
           </Link>
         ))}
@@ -189,6 +199,8 @@ export const DashboardView = () => {
           </div>
           {loading ? (
             <p className="dashboard__empty">加载中…</p>
+          ) : error ? (
+            <p className="dashboard__empty">加载失败，请刷新页面重试。</p>
           ) : recentPosts.length === 0 ? (
             <p className="dashboard__empty">还没有文章，去创作第一篇吧！</p>
           ) : (
@@ -215,6 +227,8 @@ export const DashboardView = () => {
           </div>
           {loading ? (
             <p className="dashboard__empty">加载中…</p>
+          ) : error ? (
+            <p className="dashboard__empty">加载失败，请刷新页面重试。</p>
           ) : recentNotes.length === 0 ? (
             <p className="dashboard__empty">还没有随笔，随手记一条？</p>
           ) : (

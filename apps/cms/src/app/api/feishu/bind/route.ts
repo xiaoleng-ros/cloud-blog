@@ -24,6 +24,23 @@ export const dynamic = 'force-dynamic'
 /** 飞书 open_id 形态：ou_ + 字母数字 */
 const OPEN_ID_RE = /^ou_[A-Za-z0-9]{10,64}$/
 
+/**
+ * 是否 Postgres 唯一约束冲突（SQLSTATE 23505）。
+ * count→update 之间存在并发窗口，最终由迁移
+ * 20261002_000000_add_users_feishu_open_id_unique 的部分唯一索引兜底；
+ * 错误对象可能被 Payload 包装多层，沿 cause 链向下找。
+ */
+function isUniqueViolation(err: unknown): boolean {
+  let current: unknown = err
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const e = current as { code?: unknown; message?: unknown; cause?: unknown }
+    if (e.code === '23505') return true
+    if (typeof e.message === 'string' && /duplicate key value/i.test(e.message)) return true
+    current = e.cause
+  }
+  return false
+}
+
 type FeishuBinding = {
   openId?: string | null
   unionId?: string | null
@@ -92,7 +109,9 @@ export async function POST(request: Request) {
     )
   }
 
-  // 一个 open_id 只能属于一个账号，否则两个账号互为提权入口
+  // 一个 open_id 只能属于一个账号，否则两个账号互为提权入口。
+  // count→update 不是原子的：这里的查重复只是给出更早、更友好的提示，
+  // 真正的并发兜底是 users.feishu_open_id 的部分唯一索引（见 20261002 迁移）。
   const { totalDocs } = await payload.count({
     collection: 'users',
     where: { 'feishu.openId': { equals: openId } },
@@ -101,18 +120,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '该飞书账号已绑定到其他用户' }, { status: 409 })
   }
 
-  await payload.update({
-    collection: 'users',
-    id: user!.id,
-    data: {
-      feishu: {
-        openId,
-        unionId: (body.unionId ?? '').trim() || undefined,
-        name: (body.name ?? '').trim() || undefined,
-        avatar: (body.avatar ?? '').trim() || undefined,
-      },
-    } as never,
-  })
+  try {
+    await payload.update({
+      collection: 'users',
+      id: user!.id,
+      data: {
+        feishu: {
+          openId,
+          unionId: (body.unionId ?? '').trim() || undefined,
+          name: (body.name ?? '').trim() || undefined,
+          avatar: (body.avatar ?? '').trim() || undefined,
+        },
+      } as never,
+    })
+  } catch (err) {
+    // 并发窗口撞了唯一索引：转成可读的 400，不回显原始数据库错误
+    if (isUniqueViolation(err)) {
+      return NextResponse.json(
+        { error: '该飞书账号刚刚已被其他用户绑定，请勿重复绑定' },
+        { status: 400 },
+      )
+    }
+    throw err
+  }
 
   return NextResponse.json({ bound: true, openId }, { headers: { 'Cache-Control': 'no-store' } })
 }

@@ -7,8 +7,9 @@
  * 3. 提供数据版本号（posts/notes/projects/site-settings/navigation 的最大 updatedAt），
  *    供前台客户端轮询/SSE 检测「后台数据变化 → 自动同步」
  *
- * 性能：版本号直接从一次全量查询的结果里计算（取各文档 updatedAt 的最大值），
- * 不再为版本号单独再查一遍库；全量数据本身被 sync-cache 快照缓存，无变化时零查库。
+ * 性能：版本号不再走全量查询 —— /api/blog-sync?digest=1 / ?version=1 探测路径调用
+ * getSyncProbe()，只用「count + 单行 max updatedAt」的精简查询（status 过滤在 DB 层），
+ * 结果带独立 TTL 缓存；全量数据本身被 sync-cache 快照缓存，无变化时零查库。
  */
 import { getPayload } from 'payload'
 import config from '@payload-config'
@@ -158,7 +159,7 @@ export async function fetchMediaAltMap(): Promise<MediaAltStats> {
   return { map, count, updatedAt }
 }
 
-/** 拉取全部已发布文章，按 slug 作为 id（与前台路径一致） */
+/** 拉取全部已发布文章，按数字 id 作为条目 id（与前台路径一致） */
 export async function fetchPosts(): Promise<MdEntry[]> {
   const payload = await getDb()
   const { docs } = await payload.find({
@@ -166,54 +167,83 @@ export async function fetchPosts(): Promise<MdEntry[]> {
     depth: 1,
     limit: 0,
     sort: '-sticky,-createdAt',
+    // status 过滤下沉到 DB 层：limit:0 配合 JS 过滤时，草稿的整篇正文也会被拖进内存
+    where: { status: { equals: 'published' } },
+    // select 只取渲染所需列（实测 select 对 categories/tags 关系仍会正常 populate 出 name）
+    select: {
+      title: true,
+      description: true,
+      cover: true,
+      categories: true,
+      tags: true,
+      keywords: true,
+      ai: true,
+      sticky: true,
+      content: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   })
 
-  return docs
-    .filter((doc: any) => doc.status === 'published')
-    .map((doc: any) => ({
-      // id 使用数字主键：前台用「分类 + 数字 ID」拼路径
+  return docs.map((doc: any) => ({
+    // id 使用数字主键：前台用「分类 + 数字 ID」拼路径
+    id: String(doc.id),
+    data: {
+      title: doc.title,
+      description: doc.description ?? undefined,
+      date: String(doc.createdAt),
+      cover: doc.cover ?? undefined,
+      // 数字 ID 挂在 data.id 上，postBlocks 用它从 URL 里精确匹配
       id: String(doc.id),
+      categories: namesOf(doc.categories),
+      tags: namesOf(doc.tags),
+      keywords: linesOf(doc.keywords),
+      ai: linesOf(doc.ai),
+      sticky: doc.sticky ?? undefined,
+    },
+    body: doc.content ?? '',
+    updatedAt: doc.updatedAt,
+  }))
+}
+
+/**
+ * 拉取全部已发布随笔。
+ * id = 「日期前 10 位 + 后台文档 id」：只用日期时同一天的多条随笔会共用同一个 id，
+ * 后进 store 的会静默覆盖前一条；apps/blog 侧 payload-api.ts 已改用同一方案，两侧保持一致。
+ */
+export async function fetchNotes(): Promise<MdEntry[]> {
+  const payload = await getDb()
+  const { docs } = await payload.find({
+    collection: 'notes',
+    depth: 1,
+    limit: 0,
+    sort: 'date',
+    where: { status: { equals: 'published' } },
+    select: {
+      date: true,
+      title: true,
+      mood: true,
+      tags: true,
+      content: true,
+      updatedAt: true,
+    },
+  })
+
+  return docs.map((doc: any) => {
+    // date 字段本地 API 返回 ISO 字符串；兜底处理 Date 对象，保证取到 ISO 日期前缀
+    const dateStr = doc.date instanceof Date ? doc.date.toISOString() : String(doc.date)
+    return {
+      id: `${dateStr.slice(0, 10)}-${doc.id}`,
       data: {
-        title: doc.title,
-        description: doc.description ?? undefined,
-        date: String(doc.createdAt),
-        cover: doc.cover ?? undefined,
-        // 数字 ID 挂在 data.id 上，postBlocks 用它从 URL 里精确匹配
-        id: String(doc.id),
-        categories: namesOf(doc.categories),
+        date: doc.date,
+        title: doc.title ?? undefined,
+        mood: doc.mood ?? undefined,
         tags: namesOf(doc.tags),
-        keywords: linesOf(doc.keywords),
-        ai: linesOf(doc.ai),
-        sticky: doc.sticky ?? undefined,
       },
       body: doc.content ?? '',
       updatedAt: doc.updatedAt,
-    }))
-  }
-
-/** 拉取全部已发布随笔（以本地时区日期作为 id，与前台一致） */
-export async function fetchNotes(): Promise<MdEntry[]> {
-  const payload = await getDb()
-  const { docs } = await payload.find({ collection: 'notes', depth: 1, limit: 0, sort: 'date' })
-
-  return docs
-    .filter((doc: any) => doc.status === 'published')
-    .map((doc: any) => {
-      const d = new Date(doc.date)
-      const mm = String(d.getMonth() + 1).padStart(2, '0')
-      const dd = String(d.getDate()).padStart(2, '0')
-      return {
-        id: `${d.getFullYear()}-${mm}-${dd}`,
-        data: {
-          date: doc.date,
-          title: doc.title ?? undefined,
-          mood: doc.mood ?? undefined,
-          tags: namesOf(doc.tags),
-        },
-        body: doc.content ?? '',
-        updatedAt: doc.updatedAt,
-      }
-    })
+    }
+  })
 }
 
 /** 拉取全部已发布项目（关于页项目区，按 sortOrder 升序） */
@@ -223,25 +253,38 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
     collection: 'projects',
     limit: 0,
     sort: 'sortOrder',
+    where: { status: { equals: 'published' } },
+    select: {
+      group: true,
+      groupDescription: true,
+      title: true,
+      owner: true,
+      description: true,
+      icon: true,
+      href: true,
+      articleHref: true,
+      stars: true,
+      tags: true,
+      sortOrder: true,
+      updatedAt: true,
+    },
   })
 
-  return docs
-    .filter((doc: any) => doc.status === 'published')
-    .map((doc: any) => ({
-      id: String(doc.id),
-      group: doc.group,
-      groupDescription: doc.groupDescription ?? undefined,
-      title: doc.title,
-      owner: doc.owner ?? undefined,
-      description: doc.description ?? undefined,
-      icon: doc.icon ?? 'github',
-      href: doc.href ?? undefined,
-      articleHref: doc.articleHref ?? undefined,
-      stars: Number(doc.stars ?? 0),
-      tags: linesOf(doc.tags),
-      sortOrder: Number(doc.sortOrder ?? 0),
-      updatedAt: doc.updatedAt,
-    }))
+  return docs.map((doc: any) => ({
+    id: String(doc.id),
+    group: doc.group,
+    groupDescription: doc.groupDescription ?? undefined,
+    title: doc.title,
+    owner: doc.owner ?? undefined,
+    description: doc.description ?? undefined,
+    icon: doc.icon ?? 'github',
+    href: doc.href ?? undefined,
+    articleHref: doc.articleHref ?? undefined,
+    stars: Number(doc.stars ?? 0),
+    tags: linesOf(doc.tags),
+    sortOrder: Number(doc.sortOrder ?? 0),
+    updatedAt: doc.updatedAt,
+  }))
 }
 
 /** 站点设置（SiteSettings Global 单例，扁平字段）；不可用时返回 null */
@@ -415,6 +458,7 @@ export async function getSyncData(): Promise<SyncSnapshot> {
 
   const data = await fetchAllData()
   const version = computeVersion(data)
+  const digests = computeSourceDigests(data)
   const snapshot: SyncSnapshot = {
     posts: data.posts,
     notes: data.notes,
@@ -424,10 +468,103 @@ export async function getSyncData(): Promise<SyncSnapshot> {
     navUpdatedAt: data.navUpdatedAt,
     mediaAltMap: data.mediaAltMap,
     // 随快照一起缓存：?digest=1 命中缓存时零重算，直接回给前台
-    digests: computeSourceDigests(data),
+    digests,
     version,
     ts: Date.now(),
   }
   setSnapshot(snapshot)
+  // 全量数据刚查完，顺手回填探测缓存：digest 路径接下来无需再查库即可给出一致指纹
+  writeProbeCache({ version, digests })
   return snapshot
+}
+
+// ---------------------------------------------------------------------------
+// 轻量探测（/api/blog-sync?digest=1 / ?version=1）
+//
+// 前台 loader 每 3s 拉一次 digest；此前该路径复用 getSyncData()，快照一过期
+// 就触发「limit:0 全表全正文」的六路全量查询，探测本身成了最大的查库来源。
+// 这里改为只查指纹所需的最小数据：每源一个 count + 单行 max updatedAt
+// （status 过滤在 DB 层 where 里做，不在 JS 侧过滤），并带独立 TTL 缓存。
+// 输出与全量快照的 computeVersion/computeSourceDigests 完全同构（同格式、同语义），
+// 保证前台比较 version/digests 字符串时两条路径可互换。
+// ---------------------------------------------------------------------------
+
+export interface SyncProbe {
+  version: string
+  digests: Record<string, string>
+}
+
+/**
+ * 探测缓存独立于 sync-cache（后者文件不在本次改动范围）：
+ * 同样必须挂 globalThis —— Next 按路由分包，blog-sync 路由里的 blog-sync 模块
+ * 与钩子所在实例不是同一份内存，模块级变量会导致缓存各自为政。
+ */
+const PROBE_STATE_KEY = '__cloudBlogSyncProbeState'
+type ProbeCacheState = { probe: SyncProbe | null; ts: number }
+const probeGlobal = globalThis as typeof globalThis & { [PROBE_STATE_KEY]?: ProbeCacheState }
+
+function getProbeState(): ProbeCacheState {
+  if (!probeGlobal[PROBE_STATE_KEY]) probeGlobal[PROBE_STATE_KEY] = { probe: null, ts: 0 }
+  return probeGlobal[PROBE_STATE_KEY]
+}
+
+/** TTL 与快照一致：生产 5s（限流 3s 轮询），dev 放宽避免跨公网反复重查 */
+const PROBE_TTL_MS = process.env.NODE_ENV === 'production' ? 5_000 : 60_000
+
+function writeProbeCache(probe: SyncProbe): void {
+  const st = getProbeState()
+  st.probe = probe
+  st.ts = Date.now()
+}
+
+/** 单指纹串的格式化：与 computeSourceDigests 的 stampOf 同构（条数:最大 updatedAt） */
+const digestStamp = (count: number, updatedAt?: string): string =>
+  `${count}:${maxStamp([updatedAt]) ?? 0}`
+
+async function fetchSyncProbe(): Promise<SyncProbe> {
+  const payload = await getDb()
+  const publishedWhere = { status: { equals: 'published' } }
+  const [posts, notes, projects, media, settings, navGlobal] = await Promise.all([
+    payload.find({ collection: 'posts', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
+    payload.find({ collection: 'notes', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
+    payload.find({ collection: 'projects', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
+    // Media 直接复用 fetchMediaAltMap：只查 url/alt/updatedAt 三个小列（无正文类大字段），
+    // 且「配了 alt 的条数 + 全表最大 updatedAt」口径与快照路径逐字一致 ——
+    // url 是 upload 集合的读时派生列，SQL where 无法精确复现其语义，
+    // 宁可多扫几行小列，也要保证 digest 路径与全量路径的指纹永远相等（否则前台每轮都会误判变化重拉全量）。
+    fetchMediaAltMap(),
+    payload.findGlobal({ slug: 'site-settings', select: { updatedAt: true } }),
+    payload.findGlobal({ slug: 'navigation', select: { updatedAt: true } }),
+  ])
+
+  const digests = {
+    posts: digestStamp(posts.totalDocs, posts.docs[0]?.updatedAt),
+    notes: digestStamp(notes.totalDocs, notes.docs[0]?.updatedAt),
+    projects: digestStamp(projects.totalDocs, projects.docs[0]?.updatedAt),
+    settings: `${maxStamp([(settings as { updatedAt?: string })?.updatedAt]) ?? 0}`,
+    nav: `${maxStamp([(navGlobal as { updatedAt?: string })?.updatedAt]) ?? 0}`,
+    media: digestStamp(media.count, media.updatedAt),
+  }
+
+  // 与 computeVersion 完全同构：总 max + 各源指纹拼接（无任何数据时退回当前时间，保持旧行为）
+  const max = maxStamp([
+    posts.docs[0]?.updatedAt,
+    notes.docs[0]?.updatedAt,
+    projects.docs[0]?.updatedAt,
+    (settings as { updatedAt?: string })?.updatedAt,
+    (navGlobal as { updatedAt?: string })?.updatedAt,
+    media.updatedAt,
+  ])
+  const stamp = max === undefined ? Date.now() : max
+  const version = `${stamp}:${digests.posts}|${digests.notes}|${digests.projects}|${digests.settings}|${digests.nav}|${digests.media}`
+  return { version, digests }
+}
+
+/** 带 TTL 的探测数据：3s 轮询下绝大多数请求零查库直接命中 */
+export async function getSyncProbe(): Promise<SyncProbe> {
+  const st = getProbeState()
+  if (st.probe && Date.now() - st.ts <= PROBE_TTL_MS) return st.probe
+  const probe = await fetchSyncProbe()
+  writeProbeCache(probe)
+  return probe
 }

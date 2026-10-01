@@ -19,6 +19,7 @@ import { Link, useConfig } from '@payloadcms/ui'
 import { PageHeader } from '../../components/PageHeader'
 import { clip, extractNames, fmt, tagPill } from '../lib/format'
 import {
+  ApiError,
   createDoc,
   createTerm,
   fetchTerms,
@@ -83,6 +84,16 @@ const COLLECTION_META: Record<
 
 const PAGE_SIZE = 10
 
+/**
+ * 把后端错误映射成给用户看的文案
+ * - Payload 的 4xx 业务错误（含 APIError 抛出的中文提示，如分类被引用、无权限）保留原文展示
+ * - 5xx 或非 Payload（网络）错误统一为通用文案，避免把 String(err) 原样弹给用户
+ */
+const friendlyError = (error: unknown, fallback = '操作失败，请稍后重试'): string => {
+  if (error instanceof ApiError && error.status < 500) return error.message
+  return fallback
+}
+
 export const ManageViewInner = ({ collection }: { collection: Collection }) => {
   const { config } = useConfig()
   const adminRoute = config.routes.admin
@@ -109,6 +120,8 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
 
   const [exportOpen, setExportOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // 列表请求序号：快速切换筛选时，只采用最新一次请求的响应，丢弃过期响应（防竞态覆盖）
+  const reqSeq = useRef(0)
 
   // 输入停顿 400ms 后才发起查询，避免每敲一个字打一次 API
   useEffect(() => {
@@ -137,9 +150,12 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
   }, [keyword, catFilter, tagFilter, from, to, meta.dateField])
 
   const load = useCallback(async () => {
+    const myReq = ++reqSeq.current
     setLoading(true)
     try {
       const res = await listDocs<AdminPost | AdminNote>(collection, buildWhere(), page, PAGE_SIZE, '-createdAt')
+      // 已有更新的请求发出：丢弃这次的响应，避免旧筛选结果覆盖新结果
+      if (myReq !== reqSeq.current) return
       setTotal(res.totalDocs)
       setRows(
         res.docs.map((d) => {
@@ -163,10 +179,12 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
       )
       setSelected(new Set())
     } catch {
+      if (myReq !== reqSeq.current) return
       setRows([])
       setTotal(0)
     } finally {
-      setLoading(false)
+      // 只有最新请求才收敛 loading，过期请求不再改动 loading 态
+      if (myReq === reqSeq.current) setLoading(false)
     }
   }, [collection, buildWhere, page])
 
@@ -202,18 +220,16 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
     })
   }
 
-  /** 确认删除：逐条软删除移入回收站 */
+  /** 确认删除：软删除移入回收站（各条独立，并行提交消除 N+1 串行等待） */
   const confirmDelete = async () => {
     if (!confirmIds || confirmIds.length === 0) return
     setBusy(true)
     try {
-      for (const id of confirmIds) {
-        await trashDoc(collection, id)
-      }
+      await Promise.all(confirmIds.map((id) => trashDoc(collection, id)))
       setConfirmIds(null)
       await load()
     } catch (error) {
-      alert(`删除失败：${(error as Error).message}`)
+      alert(`删除失败：${friendlyError(error)}`)
       setConfirmIds(null)
     } finally {
       setBusy(false)

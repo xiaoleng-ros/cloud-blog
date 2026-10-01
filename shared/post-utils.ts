@@ -41,14 +41,37 @@ const getTime = (date?: Date | string) => {
   return date instanceof Date ? date.getTime() : new Date(date).getTime();
 };
 
-/** 本地时区格式化为 yyyy-MM-dd */
-export const formatDate = (date?: Date | string) => {
-  if (!date) return '';
+/**
+ * 固定 Asia/Shanghai 时区的日期部件（年/月/日，均为字符串，月日为两位补零）。
+ *
+ * 背景：formatDate / groupPostsByYear 原先按「运行机本地时区」取日/年，
+ * 而 createdAt 是 UTC ISO 串——构建机 TZ 一变，归档年份和展示日期就会漂移。
+ * 统一改走本函数后，输出与构建机/运行机时区完全无关。
+ * 非法或缺失日期返回 undefined，调用方决定兜底文案。
+ */
+const SHANGHAI_DATE_TIME = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+export const toShanghaiParts = (
+  date?: Date | string,
+): { year: string; month: string; day: string } | undefined => {
+  if (!date) return undefined;
   const d = date instanceof Date ? date : new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  if (isNaN(d.getTime())) return undefined;
+  const parts = SHANGHAI_DATE_TIME.formatToParts(d);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '';
+  return { year: pick('year'), month: pick('month'), day: pick('day') };
+};
+
+/** 格式化为 yyyy-MM-dd（固定 Asia/Shanghai 时区，与构建机 TZ 无关；签名保持兼容） */
+export const formatDate = (date?: Date | string) => {
+  const parts = toShanghaiParts(date);
+  return parts ? `${parts.year}-${parts.month}-${parts.day}` : '';
 };
 
 /** 置顶优先 → 日期倒序 → 标题升序 */
@@ -156,17 +179,15 @@ export const getPostUpdatedDate = <T extends PostEntry>(
   return raw instanceof Date ? raw : new Date(raw);
 };
 
-/** 按年份归档分组 */
+/** 按年份归档分组（年份按 Asia/Shanghai 取，与构建机 TZ 无关） */
 export const groupPostsByYear = <T extends PostEntry>(
   posts: T[],
 ): Array<{ year: string; posts: T[] }> => {
   const groups = new Map<string, T[]>();
   for (const post of sortPosts(posts)) {
     const raw = getPostDate(post);
-    // 无日期字段时直接归入「未注明日期」，避免 new Date(undefined) 产生 Invalid Date
-    const d = raw ? (raw instanceof Date ? raw : new Date(raw)) : undefined;
-    const year =
-      d && !isNaN(d.getTime()) ? d.getFullYear().toString() : '未注明日期';
+    // 无日期字段/非法日期时直接归入「未注明日期」，避免 new Date(undefined) 产生 Invalid Date
+    const year = toShanghaiParts(raw ?? undefined)?.year ?? '未注明日期';
     groups.set(year, [...(groups.get(year) ?? []), post]);
   }
   return [...groups.entries()].map(([year, yearPosts]) => ({
