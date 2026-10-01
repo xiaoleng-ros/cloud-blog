@@ -5,7 +5,8 @@ import { ManageListView as ManageListView_73e62e78b473461b8f71e9dc8c2a32e4 } fro
 import { CategoriesListView as CategoriesListView_04455d182a2a787ecb77abe09ca9dee3 } from '../../../../src/admin/views/categories/CategoriesListView.tsx'
 import { TagsListView as TagsListView_3d89435d3501d2d917eb5ad710f3d99f } from '../../../../src/admin/views/tags/TagsListView.tsx'
 import { SocialLinksField as SocialLinksField_1abbff97fa1db6a0b8127a2e95003282 } from '../../../../src/admin/components/SocialLinksField.tsx'
-import { NavItemsField as NavItemsField_d447d1ca34b268f715fc3ad3605eae28 } from '../../../../src/admin/components/NavItemsField.tsx'
+import { SettingsEditView as SettingsEditView_a0483073a84181b706dc6515a5f5484a } from '../../../../src/admin/views/settings/SettingsEditView.tsx'
+import { NavigationEditView as NavigationEditView_1a7ae34319671bedacdee41f2e6db9aa } from '../../../../src/admin/views/navigation/NavigationEditView.tsx'
 import { CustomNav as CustomNav_c3cf622793693287a4c5a05434793407 } from '../../../../src/admin/components/CustomNav.tsx'
 import { CloudLogo as CloudLogo_d06fa95a4848ce56f762457715ce74a8 } from '../../../../src/admin/components/CloudGraphics.tsx'
 import { FeishuLoginLink as FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593 } from '../../../../src/admin/components/FeishuLoginLink.tsx'
@@ -27,7 +28,8 @@ export const importMap = {
   "/src/admin/views/categories/CategoriesListView.tsx#CategoriesListView": CategoriesListView_04455d182a2a787ecb77abe09ca9dee3,
   "/src/admin/views/tags/TagsListView.tsx#TagsListView": TagsListView_3d89435d3501d2d917eb5ad710f3d99f,
   "/src/admin/components/SocialLinksField.tsx#SocialLinksField": SocialLinksField_1abbff97fa1db6a0b8127a2e95003282,
-  "/src/admin/components/NavItemsField.tsx#NavItemsField": NavItemsField_d447d1ca34b268f715fc3ad3605eae28,
+  "/src/admin/views/settings/SettingsEditView.tsx#SettingsEditView": SettingsEditView_a0483073a84181b706dc6515a5f5484a,
+  "/src/admin/views/navigation/NavigationEditView.tsx#NavigationEditView": NavigationEditView_1a7ae34319671bedacdee41f2e6db9aa,
   "/src/admin/components/CustomNav.tsx#CustomNav": CustomNav_c3cf622793693287a4c5a05434793407,
   "/src/admin/components/CloudGraphics.tsx#CloudLogo": CloudLogo_d06fa95a4848ce56f762457715ce74a8,
   "/src/admin/components/FeishuLoginLink.tsx#FeishuLoginLink": FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593,

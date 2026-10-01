@@ -13,7 +13,7 @@ import { FieldLabel, useField } from '@payloadcms/ui'
 import React, { useCallback, useMemo } from 'react'
 
 /** 支持的社交平台（与前台 socialIconMap 保持一致） */
-const PLATFORM_OPTIONS = [
+export const PLATFORM_OPTIONS = [
   { value: 'bilibili', label: 'Bilibili', color: '#fb7299' },
   { value: 'douyin', label: '抖音', color: '#000000' },
   { value: 'youtube', label: 'YouTube', color: '#ff0000' },
@@ -22,10 +22,10 @@ const PLATFORM_OPTIONS = [
 ] as const
 
 /** 平台类型 */
-type Platform = (typeof PLATFORM_OPTIONS)[number]['value']
+export type Platform = (typeof PLATFORM_OPTIONS)[number]['value']
 
 /** 单条社交链接 */
-interface SocialItem {
+export interface SocialItem {
   /** 平台标识 */
   platform: Platform
   /** 链接地址 */
@@ -40,7 +40,7 @@ interface SocialItem {
  * @param raw 每行「平台 链接」的字符串
  * @returns 结构化社交链接数组
  */
-function parseSocials(raw?: string | null): SocialItem[] {
+export function parseSocials(raw?: string | null): SocialItem[] {
   if (!raw) return []
   const out: SocialItem[] = []
   for (const line of raw.split('\n')) {
@@ -65,7 +65,7 @@ function parseSocials(raw?: string | null): SocialItem[] {
  * @param items 社交链接数组
  * @returns 每行「平台 链接」的字符串
  */
-function stringifySocials(items: SocialItem[]): string {
+export function stringifySocials(items: SocialItem[]): string {
   return items
     .filter((item) => item.platform)
     .map((item) => (item.href.trim() ? `${item.platform} ${item.href.trim()}` : item.platform))

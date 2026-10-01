@@ -15,6 +15,16 @@ export const SiteSettings: GlobalConfig = {
   },
   admin: {
     description: '管理站点基本信息、首页 Hero 与社交链接。导航请到「导航管理」。',
+    components: {
+      views: {
+        edit: {
+          // root：整页替换内置编辑视图（含标题/保存栏），左侧配置菜单 + 右侧内容面板
+          root: {
+            Component: '/src/admin/views/settings/SettingsEditView.tsx#SettingsEditView',
+          },
+        },
+      },
+    },
   },
   fields: [
     {

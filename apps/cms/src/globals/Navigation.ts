@@ -15,6 +15,16 @@ export const Navigation: GlobalConfig = {
   },
   admin: {
     description: '配置前台顶部导航菜单（支持增删、排序）。',
+    components: {
+      views: {
+        edit: {
+          // root：整页替换内置编辑视图，与站点设置共用「卡片 + 底部保存」版式
+          root: {
+            Component: '/src/admin/views/navigation/NavigationEditView.tsx#NavigationEditView',
+          },
+        },
+      },
+    },
   },
   fields: [
     {
@@ -25,10 +35,6 @@ export const Navigation: GlobalConfig = {
       admin: {
         rows: 6,
         description: '每条一个「文字 链接」，一行一项，按从上到下顺序在前台顶部导航展示。',
-        components: {
-          // 使用可视化卡片列表替代纯文本 textarea
-          Field: '/src/admin/components/NavItemsField.tsx#NavItemsField',
-        },
       },
     },
   ],

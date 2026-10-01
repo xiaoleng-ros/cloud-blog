@@ -452,14 +452,14 @@ textarea.el-textarea__inner {
 }
 
 .btn--style-primary {
-  background: var(--theme-elevation-900);
-  border: 1px solid var(--theme-elevation-900);
+  background: var(--green);
+  border: 1px solid var(--green);
   color: #fff;
 }
 
 .btn--style-primary:hover {
-  background: var(--theme-elevation-700);
-  border-color: var(--theme-elevation-700);
+  background: var(--green-hover);
+  border-color: var(--green-hover);
 }
 
 .btn--style-secondary,
@@ -1077,12 +1077,44 @@ img.gravatar-account {
   background: var(--theme-elevation-0);
   border: 1px solid var(--theme-elevation-200);
   border-radius: 8px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.nav-items-field__label {
+.nav-items-field__row:hover {
+  border-color: var(--theme-elevation-300);
+  box-shadow: var(--ring);
+}
+
+.nav-items-field__index {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green-text);
   font-size: 12px;
-  color: var(--theme-elevation-500);
+  font-weight: 600;
+}
+
+.nav-items-field__text {
+  flex: 0 0 220px;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 6px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-text);
+  box-sizing: border-box;
+}
+
+.nav-items-field__text:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: var(--ring);
 }
 
 .nav-items-field__input {
@@ -1103,10 +1135,38 @@ img.gravatar-account {
   box-shadow: var(--ring);
 }
 
-.nav-items-field__remove {
+.nav-items-field__ops {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-items-field__move {
+  padding: 5px 8px;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--theme-elevation-500);
+  cursor: pointer;
+}
+
+.nav-items-field__move:hover:not(:disabled) {
+  color: var(--green-text);
+  background: var(--green-soft);
+}
+
+.nav-items-field__move:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.nav-items-field__remove {
   padding: 5px 10px;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
@@ -1141,69 +1201,9 @@ img.gravatar-account {
   color: var(--theme-elevation-400);
 }
 
-/* ---------- 14. 账号设置页（AccountView） ---------- */
-.account-view {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 2rem 2rem 2.5rem;
-  max-width: 720px;
-}
-
-.account-view__tabs {
-  display: flex;
-  gap: 6px;
-}
-
-.account-view__tab {
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--theme-elevation-600);
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.account-view__tab:hover {
-  background: var(--theme-elevation-100);
-  color: var(--theme-elevation-900);
-}
-
-.account-view__tab--active {
-  background: var(--green-soft);
-  color: var(--green-text);
-  font-weight: 600;
-}
-
-.account-view__card {
-  background: var(--theme-elevation-0);
-  border: 1px solid var(--theme-elevation-200);
-  border-radius: 10px;
-  padding: 18px 20px;
-}
-
-.account-view__card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.account-view__card-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--theme-elevation-900);
-}
-
-.account-view__card-tag {
-  font-size: 11.5px;
-  color: var(--theme-elevation-400);
-}
-
+/* ---------- 14. 账号设置页（AccountView） ----------
+   版式复用站点设置的 .settings / .settings__layout / .settings__panel，
+   此处仅保留账号页独有的身份卡与提示条样式。 */
 .account-view__identity {
   display: flex;
   align-items: center;
@@ -1242,74 +1242,10 @@ img.gravatar-account {
   color: var(--theme-elevation-500);
 }
 
-.account-view__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.account-view__label {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--theme-elevation-600);
-}
-
-.account-view__input {
-  padding: 8px 12px;
-  font-size: 14px;
-  color: var(--theme-text);
-  background: var(--theme-elevation-0);
-  border: 1px solid var(--theme-elevation-250);
-  border-radius: 6px;
-  box-sizing: border-box;
-  width: 100%;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
-}
-
-.account-view__input:focus {
-  outline: none;
-  border-color: var(--green);
-  box-shadow: var(--ring);
-}
-
 .account-view__hint {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--theme-elevation-400);
-}
-
-.account-view__actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.account-view__btn {
-  padding: 8px 18px;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 6px;
-  border: 1px solid var(--theme-elevation-250);
-  background: var(--theme-elevation-0);
-  color: var(--theme-elevation-700);
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-
-.account-view__btn--primary {
-  background: var(--theme-elevation-900);
-  border-color: var(--theme-elevation-900);
-  color: #fff;
-}
-
-.account-view__btn--primary:hover {
-  background: var(--theme-elevation-700);
-  border-color: var(--theme-elevation-700);
-}
-
-.account-view__btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .account-view__notice {
@@ -2783,6 +2719,244 @@ img.gravatar-account {
 
 .tag__cancel:hover {
   color: var(--theme-elevation-800);
+}
+
+/* ---------- 18.9 站点设置（SettingsEditView）：一张大卡片，左菜单 + 右面板 ---------- */
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  /* root 自定义视图不带模板内边距，自己补齐，避免内容贴死侧栏 */
+  padding: 2.5rem var(--gutter-h) 3rem;
+}
+
+.settings__layout {
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  width: 100%;
+  max-width: 1060px;
+  margin-inline: auto;
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 10px;
+  align-items: stretch;
+}
+
+/* 单栏变体（导航管理）：无左侧目录菜单，只有一张居中的窄卡片 */
+.settings__layout--single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 760px;
+}
+
+.settings__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px;
+  background: var(--theme-elevation-100);
+  border-right: 1px solid var(--theme-elevation-200);
+  border-radius: 10px 0 0 10px;
+}
+
+.settings__menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.settings__menu-item:hover {
+  background: rgb(255 255 255 / 0.65);
+}
+
+.settings__menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-500);
+}
+
+.settings__menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings__menu-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--theme-elevation-900);
+}
+
+.settings__menu-desc {
+  font-size: 11.5px;
+  color: var(--theme-elevation-400);
+}
+
+.settings__menu-item--active {
+  background: var(--theme-elevation-0);
+  box-shadow: inset 3px 0 0 var(--green), 0 1px 3px rgb(17 26 21 / 0.07);
+}
+
+.settings__menu-item--active .settings__menu-icon {
+  background: var(--green-soft);
+  color: var(--green-text);
+}
+
+.settings__menu-item--active .settings__menu-title {
+  color: var(--green-text);
+}
+
+.settings__menu-dot {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.settings__panel {
+  padding: 22px 26px 26px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .settings__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings__menu {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--theme-elevation-200);
+    border-radius: 10px 10px 0 0;
+  }
+
+  .settings__menu-item {
+    flex: 1 1 220px;
+  }
+}
+
+.settings__panel-title {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--theme-elevation-900);
+}
+
+.settings__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+}
+
+@media (max-width: 720px) {
+  .settings__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings__field--full {
+  grid-column: 1 / -1;
+}
+
+.settings__field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-elevation-700);
+}
+
+.settings__field-req {
+  font-style: normal;
+  color: var(--danger);
+  margin-left: 2px;
+}
+
+.settings__field input,
+.settings__field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13.5px;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 8px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-text);
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.settings__field input:focus,
+.settings__field textarea:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: var(--ring);
+}
+
+.settings__field-hint {
+  font-size: 11.5px;
+  color: var(--theme-elevation-400);
+  line-height: 1.5;
+}
+
+.settings__error {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.settings__submit {
+  display: block;
+  width: 100%;
+  margin-top: 20px;
+  padding: 10px 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--green);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.settings__submit:hover:not(:disabled) {
+  background: var(--green-hover);
+}
+
+.settings__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings__socials {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 
