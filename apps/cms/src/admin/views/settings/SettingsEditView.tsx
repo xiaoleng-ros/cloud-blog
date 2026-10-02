@@ -234,11 +234,7 @@ export const SettingsEditView = () => {
 
   return (
     <div className="settings">
-      <PageHeader
-        eyebrow="Site Settings"
-        title="站点设置"
-        desc="管理站点基本信息、首页 Hero 与社交链接。导航请到「导航管理」。"
-      />
+      <PageHeader title="站点设置" />
 
       <div className="settings__layout">
         <nav className="settings__menu" aria-label="配置分区">

@@ -259,30 +259,15 @@ export const MarkdownEditor: React.FC<{
 
   return (
     <div className="markdown-editor">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '8px',
-        }}
-      >
-        {label ? <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span> : null}
-        <div style={{ display: 'flex', gap: '4px' }}>
+      <div className="markdown-editor__head">
+        {label ? <span className="markdown-editor__label">{label}</span> : null}
+        <div className="markdown-editor__tabs">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
+              className={`markdown-editor__tab${mode === tab.key ? ' markdown-editor__tab--active' : ''}`}
               onClick={() => setMode(tab.key)}
-              style={{
-                padding: '4px 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--theme-elevation-150, #ccc)',
-                background: mode === tab.key ? '#1c3b27' : 'transparent',
-                color: mode === tab.key ? '#fff' : 'inherit',
-                cursor: 'pointer',
-                fontSize: '12px',
-              }}
             >
               {tab.label}
             </button>

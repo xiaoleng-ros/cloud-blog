@@ -49,9 +49,7 @@ interface ManageRow {
 const COLLECTION_META: Record<
   Collection,
   {
-    eyebrow: string
     title: string
-    desc: string
     writePath: string
     writeLabel: string
     /** 日期范围过滤与「日期」列使用的字段：文章按 createdAt，随笔按 date */
@@ -61,9 +59,7 @@ const COLLECTION_META: Record<
   }
 > = {
   posts: {
-    eyebrow: 'Posts',
     title: '文章管理',
-    desc: '全部文章（含草稿），可筛选、导出、导入与批量管理。',
     writePath: 'write-post',
     writeLabel: '写文章',
     dateField: 'createdAt',
@@ -71,9 +67,7 @@ const COLLECTION_META: Record<
     emptyText: '暂无文章，点击右上角「写文章」开始创作',
   },
   notes: {
-    eyebrow: 'Notes',
     title: '随笔管理',
-    desc: '全部随笔（含草稿），可筛选、导出、导入与批量管理。',
     writePath: 'write-note',
     writeLabel: '写随笔',
     dateField: 'date',
@@ -407,9 +401,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
   return (
     <div className="drafts manage">
       <PageHeader
-        eyebrow={meta.eyebrow}
         title={meta.title}
-        desc={meta.desc}
         actions={
           <Link href={`${adminRoute}/${meta.writePath}`} prefetch={false} className="manage__create">
             + {meta.writeLabel}

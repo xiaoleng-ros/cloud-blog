@@ -151,11 +151,7 @@ export const TrashViewInner = () => {
 
   return (
     <div className="drafts trash">
-      <PageHeader
-        eyebrow="Trash"
-        title="回收站"
-        desc="已删除的文章与随笔会先进入这里，可恢复或彻底删除。"
-      />
+      <PageHeader title="回收站" />
 
       <div className="drafts__tabs" role="tablist">
         <button

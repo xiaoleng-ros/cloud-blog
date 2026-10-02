@@ -106,7 +106,7 @@ export const TagsViewInner = () => {
 
   return (
     <div className="drafts tag">
-      <PageHeader eyebrow="Tags" title="标签管理" />
+      <PageHeader title="标签管理" />
 
       <div className="tag__layout">
         {/* 左：全部标签 */}

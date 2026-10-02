@@ -370,7 +370,6 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   return (
     <div className="compose">
       <PageHeader
-        eyebrow={collection === 'posts' ? 'Post' : 'Note'}
         title={title}
         actions={
           <>
@@ -397,31 +396,6 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
             <button type="button" className="compose__btn" onClick={() => void load()} disabled={loading}>
               重试
             </button>
-          </div>
-        )}
-        {collection === 'posts' && (
-          <div className="compose__meta">
-            <label className="compose__meta-label" htmlFor="compose-title-input">
-              标题
-            </label>
-            <input
-              id="compose-title-input"
-              type="text"
-              className="compose__meta-title"
-              placeholder="文章标题（留空保存时自动命名草稿）"
-              value={meta.title ?? ''}
-              onChange={(e) => setMeta((prev) => ({ ...prev, title: e.target.value }))}
-            />
-            <p className="compose__meta-hint">
-              文章分类请在下方「发布」弹窗里选择（必填，决定文章链接）
-            </p>
-          </div>
-        )}
-        {collection === 'notes' && (
-          <div className="compose__meta">
-            <p className="compose__meta-hint">
-              随笔分类与标签请在下方「发布」弹窗里选择（分类必填，决定随笔链接）
-            </p>
           </div>
         )}
         <MarkdownEditor value={content} onChange={setContent} label="正文内容（Markdown）" />

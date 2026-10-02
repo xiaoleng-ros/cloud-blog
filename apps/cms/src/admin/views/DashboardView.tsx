@@ -167,11 +167,7 @@ export const DashboardView = () => {
   return (
     <div className="dashboard">
       {/* 页头 */}
-      <PageHeader
-        eyebrow="Dashboard"
-        title="数据概览"
-        desc="站点内容一览，点击卡片可跳转对应管理页面。"
-      />
+      <PageHeader title="数据概览" />
 
       {/* 统计卡片 */}
       <section className="dashboard__stats" aria-label="内容统计">

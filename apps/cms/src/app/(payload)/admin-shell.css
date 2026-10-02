@@ -1,0 +1,1011 @@
+/* ====================================================================================
+   后台壳子层（Shell）：悬浮卡片侧栏 + sticky 毛玻璃顶栏 + 多标签 + 双主题
+   ------------------------------------------------------------------------------------
+   本文件在 admin-theme.css 之后加载，同特异性下后者优先级更高，可覆盖组件层的旧规则。
+   结构：1 度量与渐变令牌 / 2 暗色灰阶反转 / 3 登录页强制浅色 / 4 侧栏卡片
+        5 顶栏·标签·用户卡·命令面板 / 6 内容偏移协调 / 7 移动端
+   暗色说明：Payload 原生用 html[data-theme='dark']（admin.theme='all' 时由 cookie 决定，
+   服务端渲染所以不闪白）。我们只要把整套灰阶在 dark 下「反向」重定义，
+   组件层那几百条 var(--theme-elevation-*) 规则就自动跟随，无需逐条写暗色版本。
+   ==================================================================================== */
+
+/* ---------- 1. 度量与渐变令牌（亮色） ---------- */
+
+/* 基准字号：Payload 默认 html{font-size:13px}，且在 ≤1024px 视口降到 12px。
+   壳子层与组件层几乎全用 rem，等于被整体压小 25%，观感就是「挤、小、不够舒展」。
+   这里在最后一个样式文件里把基准钉回 15px（媒体查询不加权重，靠源码顺序覆盖），
+   Payload 自带的控件高度/内边距会跟着一起放大。 */
+html {
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+:root {
+  /* 侧栏宽度：Payload 的 grid 列与 .nav 宽度都吃这个变量，改一处全站跟随。
+     列宽 − 左侧 --gutter 留白 = 侧栏卡片宽度，卡片右边缘正好落在内容列起点上。 */
+  --nav-width: 274px;
+
+  /* 顶栏行内控件（标签页 / 搜索入口 / 汉堡）共用的一个高度，
+     不再各写各的 2.3rem，避免改一处漏三处。主题开关是滑块，比它矮一档。 */
+  --shell-row-h: 2.3rem;
+  /* 卡片高度 = 行控件高 + 上下对称呼吸 + 两条描边。
+     以前是「行贴底 + 顶部留一大块空」，量出来标签上沿离卡片顶 27px、下沿只剩 10px，
+     读起来就是上下间距不对；现在居中，上下都是 --shell-header-pad-y。 */
+  --shell-header-pad-y: 0.7rem;
+  --shell-header-h: calc(var(--shell-row-h) + var(--shell-header-pad-y) * 2 + 2px);
+  /* 标签行在「卡片内容线」基础上再右移的光学补偿量 */
+  --shell-row-x: 10px;
+  /* 壳子卡片到屏幕边缘、到侧栏、以及顶栏卡到下方内容之间的统一留白。
+     直接跟随内容栅格（--gutter），顶栏卡就悬浮在与其他卡片同宽的空隙里，
+     四面（上/左/右/下）读出来是同一个数。 */
+  --shell-gap: var(--gutter);
+  /* 内容列从多高开始：顶栏卡自身的留白 + 卡高，再加同样宽的一道间隙。
+     内容列 padding、sticky 保存条、移动端导航开关三处共用这一个数。 */
+  --shell-content-top: calc(var(--shell-header-h) + var(--shell-gap) + var(--shell-gap));
+  --shell-radius: 1rem;
+  --shell-radius-sm: 0.6rem;
+  --shell-line: rgb(20 27 38 / 0.09);
+  --shell-line-strong: rgb(20 27 38 / 0.16);
+  --shell-surface: #ffffff;
+  --shell-shadow: 0 12px 28px -14px rgb(20 27 38 / 0.22), 0 2px 6px rgb(20 27 38 / 0.05);
+  --shell-blur: saturate(1.5) blur(18px);
+  /* 壳子浮层（用户卡菜单、⌘K 面板）的层级：要压过顶栏卡(19)、移动端抽屉
+     (--z-nav: 20) 和 Payload 弹层 (--z-modal: 30)。此前这个变量没定义，
+     引用它的 z-index 整条失效，面板会被顶栏卡盖住。 */
+  --z-popup: 60;
+
+  /* 多段径向渐变：暖白底 + 淡蓝高光，卡片与顶栏的「毛玻璃」质感来源 */
+  --shell-gradient:
+    radial-gradient(115% 90% at 0% 0%, #eaf2ff 0%, rgb(234 242 255 / 0) 58%),
+    radial-gradient(92% 82% at 100% 0%, #dcebfe 0%, rgb(220 235 254 / 0) 52%),
+    radial-gradient(120% 120% at 55% 100%, #f7fafd 0%, rgb(247 250 253 / 0) 62%),
+    linear-gradient(#ffffff, #ffffff);
+}
+
+/* ---------- 2. 暗色：灰阶整体反转 ---------- */
+html[data-theme='dark'] {
+  /* 0=卡片面、50=画布、1000=最亮墨；组件层的语义（面/底/线/ muted 文字/深文字）随之翻转 */
+  --theme-elevation-0: #121a26;
+  --theme-elevation-50: #0b0f14;
+  --theme-elevation-100: #16202e;
+  --theme-elevation-150: #1d2a3b;
+  --theme-elevation-200: #243448;
+  --theme-elevation-250: #2d3f57;
+  --theme-elevation-300: #3b5270;
+  --theme-elevation-350: #4f6887;
+  --theme-elevation-400: #6b85a5;
+  --theme-elevation-450: #7f98b6;
+  --theme-elevation-500: #93abc7;
+  --theme-elevation-600: #a8bdd6;
+  --theme-elevation-700: #bdcfe3;
+  --theme-elevation-800: #d2dfed;
+  --theme-elevation-850: #dfe9f3;
+  --theme-elevation-900: #eaf1f8;
+  --theme-elevation-950: #f2f6fb;
+
+  --color-base-0: #121a26;
+  --color-base-50: #0b0f14;
+  --color-base-100: #16202e;
+  --color-base-150: #1d2a3b;
+  --color-base-200: #243448;
+  --color-base-250: #2d3f57;
+  --color-base-300: #3b5270;
+  --color-base-350: #4f6887;
+  --color-base-400: #6b85a5;
+  --color-base-450: #7f98b6;
+  --color-base-500: #93abc7;
+  --color-base-600: #a8bdd6;
+  --color-base-700: #bdcfe3;
+  --color-base-800: #d2dfed;
+  --color-base-850: #dfe9f3;
+  --color-base-900: #eaf1f8;
+  --color-base-950: #f2f6fb;
+  --color-base-1000: #f8fbff;
+
+  --theme-text: #c3d2e6;
+  --theme-input-bg: #0f1722;
+  --theme-bg: #0b0f14;
+
+  --accent: #4f93f5;
+  --accent-hover: #6aa8ff;
+  --accent-soft: #16283f;
+  --accent-text: #8dc0ff;
+  --info: #3bb6da;
+  --info-hover: #5cc6e6;
+  --info-soft: #102a38;
+  --danger: #ef6a6a;
+  --danger-soft: #2a1618;
+  --theme-success-500: #4f93f5;
+
+  --shell-line: rgb(190 214 240 / 0.14);
+  --shell-line-strong: rgb(190 214 240 / 0.26);
+  --shell-surface: #121a26;
+  --shell-shadow: 0 16px 32px -16px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
+  --shadow-overlay: 0 4px 18px -4px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-popup: 0 12px 36px -8px rgb(0 0 0 / 0.65), 0 2px 6px rgb(0 0 0 / 0.45);
+  --ring: 0 0 0 3px rgb(79 147 245 / 0.32);
+
+  --shell-gradient:
+    radial-gradient(115% 90% at 0% 0%, #182740 0%, rgb(24 39 64 / 0) 60%),
+    radial-gradient(92% 82% at 100% 0%, #12213a 0%, rgb(18 33 58 / 0) 55%),
+    linear-gradient(#0f1723, #0f1723);
+
+  color-scheme: dark;
+}
+
+html[data-theme='dark'] body {
+  background: var(--theme-elevation-50);
+  color: var(--theme-text);
+}
+
+/* 原生控件、滚动条、日期选择跟随暗色 */
+html[data-theme='dark'] ::selection {
+  background: rgb(79 147 245 / 0.35);
+  color: var(--theme-elevation-950);
+}
+
+/* ---------- 3. 登录页强制浅色：产品决定「登录前不进入暗色」 ----------
+   data-theme 挂在 html 上是全局的，所以这里在登录模板子树内把令牌重新指回亮色。 */
+html[data-theme='dark'] .template-minimal,
+html[data-theme='dark'] .template-minimal__wrap {
+  --theme-elevation-0: #ffffff;
+  --theme-elevation-50: #f4f6f9;
+  --theme-elevation-100: #eef1f6;
+  --theme-elevation-150: #e5eaf1;
+  --theme-elevation-200: #dbe2ec;
+  --theme-elevation-250: #ccd6e3;
+  --theme-elevation-300: #b7c3d4;
+  --theme-elevation-350: #99a8bd;
+  --theme-elevation-400: #7c8ba3;
+  --theme-elevation-500: #5c6b82;
+  --theme-elevation-600: #425066;
+  --theme-elevation-700: #2f3a4d;
+  --theme-elevation-800: #212a3a;
+  --theme-elevation-850: #1b2330;
+  --theme-elevation-900: #141b26;
+  --theme-elevation-950: #0f141d;
+  --theme-text: #141b26;
+  --theme-input-bg: #ffffff;
+  --accent: #3d82e8;
+  --accent-soft: #e8f1fd;
+  --accent-text: #1c5cbf;
+  --shell-line: rgb(20 27 38 / 0.09);
+  background: linear-gradient(160deg, #f2f7ff 0%, #f7fafd 45%, #eef4fd 100%);
+  color: var(--theme-text);
+}
+
+/* ---------- 4. 侧边栏：贴边面板 → 悬浮圆角卡片 ---------- */
+.nav {
+  background: transparent !important;
+  border-right: 0 !important;
+  /* 卡片四周留白与内容栅格同一把尺子（--gutter）：左边缘与内容卡同列，
+     顶边与顶栏卡齐平，底部留白对称 */
+  padding: var(--shell-gap) 0 var(--shell-gap) var(--gutter);
+  width: var(--nav-width);
+}
+
+.nav__scroll {
+  height: 100%;
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius);
+  background: var(--shell-gradient);
+  backdrop-filter: var(--shell-blur);
+  -webkit-backdrop-filter: var(--shell-blur);
+  box-shadow: var(--shell-shadow);
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+/* 卡片内部再滚动，滚动条藏起来（与 ThriveX 的 no-scrollbar 同效果）。
+   这里**不能有 padding-bottom**：sticky 的子元素被约束在父内容盒里，
+   留 0.5rem 就等于把用户卡往上顶 7.5px，那条缝里滚过去的目录会直接露出来（用户截图点名的穿帮）。 */
+.nav__wrap {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  align-items: stretch;
+}
+
+.nav__wrap::-webkit-scrollbar {
+  display: none;
+}
+
+/* 钉在卡内上/下沿的两条（品牌、用户卡）要用「和卡片一模一样」的底去盖住滚过去的目录。
+   半透明 + 磨砂在这里靠不住：祖先 `.nav__scroll` 自己带 backdrop-filter，
+   子元素的 backdrop-filter 在 Chrome 里会被忽略，目录文字就从用户卡底下穿出来了。
+   做法是把卡片那套渐变按卡片的真实尺寸画到这两条上，再各取它该在的那一段
+   （上条取顶、下条取底），于是亮暗两套主题下都和卡片严丝合缝，而且完全不透明。 */
+.nav__brand,
+.nav__controls {
+  background-image: var(--shell-gradient);
+  background-repeat: no-repeat;
+  background-size: 100% calc(100vh - var(--shell-gap) * 2 - 2px);
+}
+
+.nav__brand {
+  background-position: top;
+}
+
+.nav__controls {
+  background-position: bottom;
+}
+
+/* 品牌区：卡片顶部一行，必须 sticky 钉住。它和目录同在 `.nav__wrap` 这个滚动容器里，
+   不钉住的话往下滑品牌会跟着滚出卡片——用户要的是「品牌固定、只有目录上下滚」。 */
+.nav__brand {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 1.25rem 1.1rem 1.1rem;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.nav__brand-logo {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 8px;
+}
+
+.nav__brand-title {
+  font-size: 1.1rem;
+}
+
+.nav__brand-sub {
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  color: var(--theme-elevation-450);
+}
+
+/* 分组标题 */
+.nav-group__toggle {
+  width: calc(100% - 1.5rem);
+  margin: 1.2rem 0.75rem 0.4rem;
+  color: var(--theme-elevation-450);
+}
+
+.nav-group__toggle:hover {
+  color: var(--accent-text);
+}
+
+/* 菜单项：图标 + 文字，激活态用淡蓝底 + 左侧指示条 */
+.nav__link {
+  margin: 0 0.75rem;
+  padding: 0.62rem 0.75rem;
+  gap: 0.65rem;
+  border-radius: var(--shell-radius-sm);
+  color: var(--theme-elevation-600);
+  font-size: 0.93rem;
+}
+
+.nav__link:hover {
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-900);
+  box-shadow: 0 1px 3px rgb(20 27 38 / 0.05);
+}
+
+.nav__link--active {
+  background: var(--accent-soft) !important;
+  color: var(--accent-text) !important;
+}
+
+/* 图标尺寸交给根字号而不是 JSX 里的 16px 属性，放大基准后才不会显小 */
+.nav__link .shell-icon {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  opacity: 0.85;
+}
+
+.nav__link--active .shell-icon {
+  opacity: 1;
+}
+
+.nav__link-indicator {
+  background: var(--accent);
+  top: 26%;
+  bottom: 26%;
+}
+
+/* 底部：UserCard 取代孤立登出按钮。
+   必须 sticky 钉在滚动条底部：`.nav__wrap` 是卡内滚动容器，目录项一多，
+   用户卡就落到滚动内容的最下面，想退出登录得先把侧栏滚到底（用户明确否掉了这个交互）。
+   不透明底见上面 `.nav__brand, .nav__controls` 那条。 */
+.nav__controls {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding: 0.8rem;
+  border-top: 1px solid var(--shell-line);
+}
+
+/* 云字标识是深色图，暗底上几乎看不见；按线性图标的方式反白 */
+html[data-theme='dark'] .nav__brand-logo,
+html[data-theme='dark'] .shell-header__brand img {
+  filter: invert(1) brightness(0.92);
+}
+
+.usercard {
+  position: relative;
+  width: 100%;
+}
+
+.usercard__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius-sm);
+  background: var(--shell-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.usercard__trigger:hover,
+.usercard--open .usercard__trigger {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.usercard__avatar {
+  display: grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #60a5fa 0%, #2f6ed0 100%);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.usercard__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.usercard__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.usercard__name {
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: var(--theme-elevation-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usercard__sub {
+  font-size: 0.8rem;
+  color: var(--theme-elevation-450);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usercard__chevron {
+  margin-left: auto;
+  color: var(--theme-elevation-400);
+  transition: transform 150ms ease;
+}
+
+.usercard--open .usercard__chevron {
+  transform: rotate(180deg);
+}
+
+.usercard__menu {
+  position: fixed;
+  padding: 0.3rem;
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius-sm);
+  background: var(--shell-surface);
+  box-shadow: var(--shadow-popup);
+  z-index: var(--z-popup);
+}
+
+.usercard__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-700);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.usercard__item:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.usercard__item--danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ---------- 5. 顶栏：悬浮毛玻璃卡片 + 多标签 ---------- */
+/* 顶栏卡与下面内容卡的左右边缘完全重合（同占内容列、吃同一道 --gutter 留白），
+   与侧栏、屏幕的间隙也都等于 --shell-gap —— 四面间距一致。
+   行内容垂直居中，卡片高度由行高算出（见 --shell-header-h）。 */
+.shell-header {
+  position: fixed;
+  top: var(--shell-gap);
+  /* 默认按「侧栏展开」画：首帧还没有 data-shell-nav，若默认铺满整幅就会
+     在刷新瞬间盖住侧栏卡片。收起态由下面 html[data-shell-nav='closed'] 收回。 */
+  left: calc(var(--nav-width) + var(--shell-gap));
+  right: var(--shell-gap);
+  height: var(--shell-header-h);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  /* 两卡边缘重合、描边同线：标签行缩进卡片自身的内边距就落在内容起始线上，
+     左侧再叠 --shell-row-x 的光学补偿，右侧保持与内容右边缘对齐。 */
+  padding: var(--shell-header-pad-y) var(--card-pad-x) var(--shell-header-pad-y)
+    calc(var(--card-pad-x) + var(--shell-row-x));
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius);
+  background: var(--shell-gradient);
+  backdrop-filter: var(--shell-blur);
+  -webkit-backdrop-filter: var(--shell-blur);
+  box-shadow: var(--shell-shadow);
+  /* 低于 --z-nav(20)：移动端抽屉要能盖住顶栏 */
+  z-index: 19;
+  transition: left var(--nav-trans-time) linear;
+}
+
+/* 顶栏的「壳子带」：顶栏卡悬浮在四周 22.5px 的留白里，页面内容上滚时会从这道缝
+   （尤其卡片上方那条）穿出来，标签条就成了压在正文中间的一块，读不出「页面顶部」。
+   挡板把 0 → --shell-content-top 整条刷成画布色，内容只能从卡片下缘消失。
+   左边界与顶栏卡同步（见第 6 节的收起态与窄屏规则）。 */
+.shell-header__band {
+  position: fixed;
+  top: 0;
+  left: var(--nav-width);
+  right: 0;
+  height: var(--shell-content-top);
+  background: var(--theme-elevation-50);
+  /* 顶栏卡是 19，挡板压在它下面、内容上面 */
+  z-index: 18;
+  transition: left var(--nav-trans-time) linear;
+}
+
+.shell-header__burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--shell-row-h);
+  height: var(--shell-row-h);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius-sm);
+  background: var(--shell-surface);
+  color: var(--theme-elevation-600);
+  cursor: pointer;
+}
+
+.shell-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-right: 0.6rem;
+  margin-right: 0.15rem;
+  border-right: 1px solid var(--shell-line);
+  color: var(--theme-elevation-900);
+  font-size: 0.93rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shell-header__brand img {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
+/* 侧栏展开时品牌已经在卡片顶部出现过一次，顶栏不再重复；
+   默认隐藏、只在收起态显示，避免等 JS 打 data 属性造成闪烁 */
+@media (min-width: 1025px) {
+  .shell-header__brand {
+    display: none;
+  }
+
+  html[data-shell-nav='closed'] .shell-header__brand {
+    display: flex;
+  }
+}
+
+.shell-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+/* 主题切换：滑块开关。亮色圆钮在左内嵌太阳、暗色滑到右内嵌月亮；
+   轨道比卡片面深一档、圆钮用卡片面色，与参考稿同一层关系。 */
+.shell-themetoggle {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 3.2rem;
+  height: 1.8rem;
+  padding: 2px;
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  background: var(--theme-elevation-100);
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.shell-themetoggle__knob {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--shell-surface);
+  color: var(--theme-elevation-600);
+  box-shadow: 0 1px 3px rgb(20 27 38 / 0.18);
+  transition: transform 180ms ease;
+}
+
+html[data-theme='dark'] .shell-themetoggle {
+  background: var(--theme-elevation-200);
+}
+
+/* 轨道内宽正好是两个圆钮，所以 translateX(100%) 就是贴右 */
+html[data-theme='dark'] .shell-themetoggle__knob {
+  transform: translateX(100%);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+
+/* 搜索入口：胶囊形，文案 + 快捷键徽标 */
+.shell-cmdentry {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: var(--shell-row-h);
+  padding: 0 0.6rem;
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  background: var(--shell-surface);
+  box-shadow: 0 1px 2px rgb(20 27 38 / 0.06);
+  color: var(--theme-elevation-600);
+  font: inherit;
+  font-size: 0.87rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+
+.shell-cmdentry:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.shell-cmdentry kbd {
+  padding: 2px 6px;
+  border-radius: 0.4rem;
+  background: var(--theme-elevation-100);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: var(--theme-elevation-500);
+}
+
+html[data-theme='dark'] .shell-cmdentry kbd {
+  background: var(--theme-elevation-150);
+}
+
+/* PageTab 标签条：标签之间的间隙（0.4rem）与标签内部各元素的间隙同尺，
+   避免出现「条目比自己的部件还挤」的倒挂节奏 */
+.pagetab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding: 0;
+}
+
+.pagetab::-webkit-scrollbar {
+  display: none;
+}
+
+.pagetab__tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  max-width: 12.5rem;
+  height: var(--shell-row-h);
+  padding: 0 0.45rem 0 0.65rem;
+  border: 1px solid transparent;
+  border-radius: var(--shell-radius-sm);
+  background: transparent;
+  color: var(--theme-elevation-500);
+  font-size: 0.87rem;
+  text-decoration: none;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.pagetab__tab:hover {
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-800);
+  border-color: var(--shell-line);
+}
+
+.pagetab__tab--active {
+  background: var(--accent-soft);
+  border-color: rgb(61 130 232 / 0.32);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+html[data-theme='dark'] .pagetab__tab--active {
+  border-color: rgb(79 147 245 / 0.42);
+}
+
+.pagetab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagetab__close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pagetab__tab:hover .pagetab__close {
+  opacity: 0.85;
+}
+
+.pagetab__close:hover {
+  background: var(--danger);
+  color: #fff;
+  opacity: 1;
+}
+
+.pagetab__menu {
+  position: fixed;
+  min-width: 10.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--shell-line);
+  border-radius: var(--shell-radius-sm);
+  background: var(--shell-surface);
+  box-shadow: var(--shadow-popup);
+  z-index: 70;
+}
+
+.pagetab__menu button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-700);
+  font: inherit;
+  font-size: 0.93rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pagetab__menu button:hover {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+/* 命令面板：卡片留白 + 带图标的圆角搜索盒 + 宽松行距 + 右下角快捷键徽标 */
+.palette {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popup);
+  display: grid;
+  justify-items: center;
+  padding-top: 12vh;
+  background: var(--theme-overlay, rgb(5 5 5 / 0.45));
+  backdrop-filter: blur(2px);
+}
+
+.palette__panel {
+  width: min(40rem, calc(100vw - 2rem));
+  max-height: 66vh;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.25rem 0.8rem;
+  border-radius: 1.4rem;
+  background: var(--shell-surface);
+  box-shadow: var(--shadow-popup);
+  overflow: hidden;
+}
+
+.palette__search {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+  height: 2.9rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--shell-line-strong);
+  border-radius: 0.85rem;
+  color: var(--theme-elevation-400);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.palette__search:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.palette__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.palette__list {
+  margin: 0;
+  padding: 0.5rem 0 0.15rem;
+  list-style: none;
+  overflow-y: auto;
+  /* 与侧栏、标签条同一处理：卡内滚动但不出滚动条 */
+  scrollbar-width: none;
+}
+
+.palette__list::-webkit-scrollbar {
+  display: none;
+}
+
+.palette__group {
+  padding: 0.55rem 0.8rem 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--theme-elevation-400);
+}
+
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.7rem;
+  color: var(--theme-elevation-700);
+  font-size: 0.98rem;
+  cursor: pointer;
+}
+
+.palette__item--selected {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.palette__hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding: 0.7rem 0.2rem 0.15rem;
+  border-top: 1px solid var(--shell-line);
+  font-size: 0.82rem;
+  color: var(--theme-elevation-400);
+}
+
+.palette__hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.palette__hint kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.25rem;
+  border-radius: 0.35rem;
+  background: var(--theme-elevation-100);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  color: var(--theme-elevation-500);
+}
+
+html[data-theme='dark'] .palette__hint kbd {
+  background: var(--theme-elevation-150);
+}
+
+/* ---------- 6. 内容区偏移：给悬浮顶栏让出高度与间隙 ---------- */
+/* .template-default__wrap 是 grid 的第二列（内容列），由 .nav 那列撑开左边距。
+   左右留白也放这里（而不是每个视图各写一份），内容列里所有卡片（含顶栏卡）
+   的左右边缘就天然对齐。 */
+.template-default__wrap {
+  padding: var(--shell-content-top) var(--gutter) 0;
+}
+
+/* Payload 给内容树根节点写了 isolation: isolate，整棵 .template-default 因此自成
+   一个层叠上下文：视图里自写的弹窗遮罩（z-index: 1000）只能在这棵树内部比大小，
+   压不到树外的顶栏卡(19)与挡板带(18)，于是弹窗开着、顶栏还亮着还能点。
+   拆掉隔离后遮罩按 z-index 正常盖住壳子；树内除已被 display:none 的 .app-header(z30)
+   之外没有别的元素 z ≥ 19，所以唯一的副作用就是「弹窗终于盖住了顶栏」。 */
+.template-default {
+  isolation: auto;
+}
+
+/* 侧栏收起时顶栏才铺满整幅（.shell-header 默认已让出侧栏列宽） */
+html[data-shell-nav='closed'] .shell-header {
+  left: var(--shell-gap);
+}
+
+/* 挡板带跟着铺满：收起态左侧没有侧栏卡片，让出来的那 274px 也要挡住穿出的内容 */
+html[data-shell-nav='closed'] .shell-header__band {
+  left: 0;
+}
+
+/* Payload 自己粘在 top:0 的两条控件带要跟着下移，否则会被顶栏压住 */
+.doc-controls {
+  top: var(--shell-content-top) !important;
+}
+
+.template-default__nav-toggler-wrapper {
+  top: var(--shell-content-top) !important;
+}
+
+@media (max-width: 1024px) {
+  .shell-header__burger {
+    display: inline-flex;
+  }
+
+  /* 窄屏侧栏变抽屉（覆盖在内容上），顶栏横向铺满、只保留悬浮缝隙 */
+  html[data-shell-nav] .shell-header,
+  .shell-header {
+    left: var(--shell-gap);
+  }
+
+  html[data-shell-nav] .shell-header__band,
+  .shell-header__band {
+    left: 0;
+  }
+}
+
+/* 手机宽度：整把尺子收窄，顶栏与内容列同时跟随，对齐关系不变 */
+@media (max-width: 640px) {
+  :root {
+    --gutter: 1rem;
+  }
+}
+
+/* ---------- 7. 减少动效 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .shell-header,
+  .shell-header__band,
+  .pagetab__tab,
+  .nav__link,
+  .usercard {
+    transition: none;
+  }
+}
+
+/* ---------- 8. 组件层残留硬编码色的暗色补丁 ----------
+   绝大多数规则走 var(--theme-elevation-*)，灰阶反转后自动适配；
+   这里是当年为「淡彩层次」直接写死 hex 的少数几处，只能逐条覆盖。 */
+
+/* 仪表盘五张统计卡：亮色是淡彩渐变，暗色改为同色相的低透明度描边卡 */
+html[data-theme='dark'] .dashboard__stat--yellow {
+  background: linear-gradient(135deg, rgb(79 147 245 / 0.16) 0%, rgb(79 147 245 / 0.04) 100%);
+  border-color: rgb(79 147 245 / 0.34);
+}
+
+html[data-theme='dark'] .dashboard__stat--cyan {
+  background: linear-gradient(135deg, rgb(59 182 218 / 0.16) 0%, rgb(59 182 218 / 0.04) 100%);
+  border-color: rgb(59 182 218 / 0.32);
+}
+
+html[data-theme='dark'] .dashboard__stat--pink {
+  background: linear-gradient(135deg, rgb(120 170 240 / 0.14) 0%, rgb(120 170 240 / 0.03) 100%);
+  border-color: rgb(120 170 240 / 0.3);
+}
+
+html[data-theme='dark'] .dashboard__stat--purple {
+  background: linear-gradient(135deg, rgb(139 124 235 / 0.18) 0%, rgb(139 124 235 / 0.05) 100%);
+  border-color: rgb(139 124 235 / 0.36);
+}
+
+html[data-theme='dark'] .dashboard__stat--green {
+  background: linear-gradient(135deg, rgb(233 116 152 / 0.16) 0%, rgb(233 116 152 / 0.04) 100%);
+  border-color: rgb(233 116 152 / 0.32);
+}
+
+/* 卡内数字：原来的深色字在暗底上会糊掉，改为提亮版本 */
+html[data-theme='dark'] .dashboard__stat--yellow .dashboard__stat-value {
+  color: #8dc0ff;
+}
+
+html[data-theme='dark'] .dashboard__stat--cyan .dashboard__stat-value {
+  color: #6ad0e8;
+}
+
+html[data-theme='dark'] .dashboard__stat--purple .dashboard__stat-value {
+  color: #a898f0;
+}
+
+html[data-theme='dark'] .dashboard__stat--green .dashboard__stat-value {
+  color: #f39ab8;
+}
+
+/* 快捷入口（淡蓝底按钮） */
+html[data-theme='dark'] .dashboard__action--yellow {
+  border-color: rgb(79 147 245 / 0.34);
+}
+
+html[data-theme='dark'] .dashboard__action--yellow:hover {
+  background: rgb(79 147 245 / 0.22);
+  border-color: rgb(79 147 245 / 0.5);
+}
+
+/* 危险态描边：原亮色的 #fecaca/#fca5a5 在暗底上过亮 */
+html[data-theme='dark'] .drafts__op--danger,
+html[data-theme='dark'] .manage__action--danger,
+html[data-theme='dark'] .cover-uploader__clear:hover:not(:disabled) {
+  border-color: rgb(239 106 106 / 0.45);
+}
+
+html[data-theme='dark'] .drafts__op--danger:hover,
+html[data-theme='dark'] .manage__action--danger:hover:not(:disabled) {
+  border-color: rgb(239 106 106 / 0.7);
+}
+
+html[data-theme='dark'] .account-view__notice--error {
+  border-color: rgb(239 106 106 / 0.45);
+  color: #f3a3a3;
+}
+
+/* Chrome 自动填充会把输入框刷成 #fff，暗色下改回卡片底色 */
+html[data-theme='dark'] input:-webkit-autofill,
+html[data-theme='dark'] input:-webkit-autofill:hover,
+html[data-theme='dark'] input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--theme-input-bg) inset;
+  box-shadow: 0 0 0 1000px var(--theme-input-bg) inset;
+  -webkit-text-fill-color: var(--theme-text);
+}

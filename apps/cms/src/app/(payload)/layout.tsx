@@ -1,7 +1,8 @@
 /* 由 Payload 生成的后台根布局，不要手动修改被标注的区块 */
 import config from '@payload-config'
 import '@payloadcms/next/css'
-import './admin-theme.css' // 现代极简主题（中性灰 + 玫粉点缀）
+import './admin-theme.css' // 组件层（蓝色系令牌 + Payload 控件与自定义视图样式）
+import './admin-shell.css' // 壳子层（悬浮卡片侧栏 / 固定顶栏 / 多标签 / 暗色），需在后
 import type { ServerFunctionClient } from 'payload'
 import { handleServerFunctions, RootLayout } from '@payloadcms/next/layouts'
 import React from 'react'

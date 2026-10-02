@@ -320,6 +320,9 @@ const db =
 export default buildConfig({
   admin: {
     user: Users.slug, // 后台登录使用 users 集合
+    // 明暗双主题：交给 Payload 内置 ThemeProvider（cookie + html[data-theme]）
+    // 'all' = 允许切换；服务端读 cookie，首屏即为正确主题，不会闪白
+    theme: 'all',
     importMap: {
       // 以项目根为基准计算 importMap 相对路径（组件路径为 /src/... 的形式）
       baseDir: path.resolve(dirname, '..'),
@@ -335,7 +338,11 @@ export default buildConfig({
         Logo: '/src/admin/components/CloudGraphics.tsx#CloudLogo',
       },
       // 登录页注入器（品牌文案 / 密码显隐 / 飞书入口归位 / 提交过渡态）
-      providers: ['/src/admin/components/LoginBrand.tsx#LoginBrand'],
+      // AdminShell：全局壳子（固定顶栏 + 多标签 + 命令面板 + 明暗切换）
+      providers: [
+        '/src/admin/components/LoginBrand.tsx#LoginBrand',
+        '/src/admin/shell/AdminShell.tsx#AdminShell',
+      ],
       views: {
         // 自定义仪表盘：统计卡片 + 最近内容（数据来自 Payload REST API）
         dashboard: {

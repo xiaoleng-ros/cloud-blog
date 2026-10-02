@@ -113,11 +113,7 @@ export const NavigationEditView = () => {
 
   return (
     <div className="settings">
-      <PageHeader
-        eyebrow="Navigation"
-        title="导航管理"
-        desc="配置前台顶部导航菜单（支持增删、排序）。"
-      />
+      <PageHeader title="导航管理" />
 
       <div className="settings__layout settings__layout--single">
         <section className="settings__panel">

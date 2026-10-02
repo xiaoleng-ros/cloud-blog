@@ -158,7 +158,6 @@ export const CategoriesViewInner = () => {
   return (
     <div className="drafts cat">
       <PageHeader
-        eyebrow="Categories"
         title="分类管理"
         actions={
           <button type="button" className="manage__create" onClick={() => setModal({ mode: 'create' })}>

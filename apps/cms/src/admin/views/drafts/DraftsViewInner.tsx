@@ -130,11 +130,7 @@ export const DraftsViewInner = () => {
 
   return (
     <div className="drafts">
-      <PageHeader
-        eyebrow="Draft Box"
-        title="草稿箱"
-        desc="未发布的文章与随笔草稿，可编辑后发布或删除。"
-      />
+      <PageHeader title="草稿箱" />
 
       <div className="drafts__tabs" role="tablist">
         <button

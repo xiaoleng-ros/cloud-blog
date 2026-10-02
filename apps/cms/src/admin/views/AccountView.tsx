@@ -241,11 +241,7 @@ export const AccountView = () => {
       {notice && <div className={`account-view__notice account-view__notice--${notice.type}`}>{notice.text}</div>}
 
       {/* 页头 */}
-      <PageHeader
-        eyebrow="Account"
-        title="账号设置"
-        desc="管理登录账号的昵称、邮箱与密码。"
-      />
+      <PageHeader title="账号设置" />
 
       <div className="settings__layout">
         {/* 左侧目录 */}
