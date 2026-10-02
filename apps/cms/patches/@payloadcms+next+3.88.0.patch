@@ -1,0 +1,13 @@
+diff --git a/node_modules/@payloadcms/next/dist/layouts/Root/index.js b/node_modules/@payloadcms/next/dist/layouts/Root/index.js
+index b8fbbe1..d319384 100644
+--- a/node_modules/@payloadcms/next/dist/layouts/Root/index.js
++++ b/node_modules/@payloadcms/next/dist/layouts/Root/index.js
+@@ -123,7 +123,7 @@ const RootLayoutContent = async ({
+         theme: theme,
+         translations: req.i18n.translations,
+         user: req.user,
+-        children: [/*#__PURE__*/_jsx(ProgressBar, {}), Array.isArray(config.admin?.components?.providers) && config.admin?.components?.providers.length > 0 ? /*#__PURE__*/_jsx(NestProviders, {
++        children: [Array.isArray(config.admin?.components?.providers) && config.admin?.components?.providers.length > 0 ? /*#__PURE__*/_jsx(NestProviders, {
+           importMap: req.payload.importMap,
+           providers: config.admin?.components?.providers,
+           serverProps: {

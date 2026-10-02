@@ -23,7 +23,7 @@ html {
 :root {
   /* 侧栏宽度：Payload 的 grid 列与 .nav 宽度都吃这个变量，改一处全站跟随。
      列宽 − 左侧 --gutter 留白 = 侧栏卡片宽度，卡片右边缘正好落在内容列起点上。 */
-  --nav-width: 274px;
+  --nav-width: 232px;
 
   /* 顶栏行内控件（标签页 / 搜索入口 / 汉堡）共用的一个高度，
      不再各写各的 2.3rem，避免改一处漏三处。主题开关是滑块，比它矮一档。 */
@@ -269,10 +269,12 @@ html[data-theme='dark'] .template-minimal__wrap {
   color: var(--accent-text);
 }
 
-/* 菜单项：图标 + 文字，激活态用淡蓝底 + 左侧指示条 */
+/* 菜单项：图标 + 文字，激活态用淡蓝底 + 左侧指示条。
+   左内边距刻意比分组标题深一档（标题落在 ~1.25rem，图标落在 ~2.5rem），
+   参考 Thrive X 的两级缩进：分组标题靠左、子项整体右移，层级一眼可读。 */
 .nav__link {
   margin: 0 0.75rem;
-  padding: 0.62rem 0.75rem;
+  padding: 0.62rem 0.75rem 0.62rem 1.75rem;
   gap: 0.65rem;
   border-radius: var(--shell-radius-sm);
   color: var(--theme-elevation-600);
@@ -912,7 +914,7 @@ html[data-shell-nav='closed'] .shell-header__band {
 /* 手机宽度：整把尺子收窄，顶栏与内容列同时跟随，对齐关系不变 */
 @media (max-width: 640px) {
   :root {
-    --gutter: 1rem;
+    --gutter: 0.5rem;
   }
 }
 

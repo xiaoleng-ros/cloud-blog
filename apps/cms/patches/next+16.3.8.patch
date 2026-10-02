@@ -1,0 +1,26 @@
+diff --git a/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js b/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js
+index c59b28f..94cbeb8 100644
+--- a/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js
++++ b/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js
+@@ -29963,7 +29963,7 @@
+       HostContextNamespaceMath = 2,
+       eventsEnabled = null,
+       selectionInformation = null,
+-      didWarnScriptTags = !1,
++      didWarnScriptTags = !0, /* qoder-patch: silence dev-only script-tag warning */
+       warnedUnknownTags = { dialog: !0, webview: !0 },
+       currentPopstateTransitionEvent = null,
+       schedulerEvent = void 0,
+diff --git a/node_modules/next/dist/compiled/react-dom/cjs/react-dom-profiling.development.js b/node_modules/next/dist/compiled/react-dom/cjs/react-dom-profiling.development.js
+index ca70d27..a2ee6be 100644
+--- a/node_modules/next/dist/compiled/react-dom/cjs/react-dom-profiling.development.js
++++ b/node_modules/next/dist/compiled/react-dom/cjs/react-dom-profiling.development.js
+@@ -30021,7 +30021,7 @@
+       HostContextNamespaceMath = 2,
+       eventsEnabled = null,
+       selectionInformation = null,
+-      didWarnScriptTags = !1,
++      didWarnScriptTags = !0, /* qoder-patch: silence dev-only script-tag warning */
+       warnedUnknownTags = { dialog: !0, webview: !0 },
+       currentPopstateTransitionEvent = null,
+       schedulerEvent = void 0,

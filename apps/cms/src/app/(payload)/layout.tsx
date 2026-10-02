@@ -23,6 +23,13 @@ type Args = {
  * 于是 OS 深色首访必然「先亮后暗」闪一下。此脚本在首绘前按客户端终态同一顺序
  * （cookie `payload-theme` 命中 light/dark，否则 matchMedia 判 dark）提前写好 data-theme，
  * 让服务端 CSSOM 默认态 = 客户端终态。无外部依赖、整体 try/catch 兜底。
+ *
+ * dev 噪音的处置：react-dom 在客户端渲染任何可执行 <script> 节点都会 console.error
+ * （"Encountered a script tag…"），Next 16 dev 浮层会把它弹成错误。已排除的路：
+ * hidden-div + dangerouslySetInnerHTML 会被 React 19 Fizz 在 SSR 时剥掉 script（防闪
+ * 失效）；type 属性绕不过（可执行类型一律警告）；Next 16 的 logging 配置无 filter。
+ * 最终用 patches/next+16.3.8.patch 把 dev 构建里的 didWarnScriptTags 初始值改为 true
+ * （仅 react-dom-*.development.js，生产构建不含该代码）。勿删此脚本。
  */
 const THEME_INIT_SCRIPT = `(function(){try{var d=document.documentElement;var m=document.cookie.match(/(?:^|;)\\s*payload-theme=(light|dark)/);var t=m?m[1]:(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');d.setAttribute('data-theme',t);}catch(e){}})();`
 

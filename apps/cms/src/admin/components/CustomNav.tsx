@@ -10,11 +10,20 @@
  */
 import { Hamburger, Link, useConfig, useNav } from '@payloadcms/ui'
 import { usePathname } from 'next/navigation'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 import { ShellIcon } from '../shell/icons'
 import { buildAdminHref, navSections, resolveNavEntry } from '../shell/nav-config'
 import { UserCard } from '../shell/UserCard'
+
+/**
+ * 侧栏滚动位置的跨挂载记忆。
+ * Payload 每次后台路由切换都会重渲染服务端模板，CustomNav 被整块重挂载，
+ * DOM 上的 scrollTop 随之归零——于是点靠下的菜单后目录跳回顶部。
+ * 但跳转是 SPA（JS 上下文不销毁），故把位置存在模块作用域：SPA 跳转保留、
+ * 真正整页刷新才清零，正好符合「导航后还在原位、刷新才回顶」的直觉。
+ */
+let persistedScrollTop = 0
 
 export const CustomNav = () => {
   const { navOpen, setNavOpen, navRef, hydrated, shouldAnimate } = useNav()
@@ -23,6 +32,12 @@ export const CustomNav = () => {
   const adminRoute = config.routes.admin
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const wrapRef = useRef<HTMLElement>(null)
+
+  // 重挂载后把滚动位置写回去；此时目录项已同步渲染，可直接赋值
+  useEffect(() => {
+    if (wrapRef.current) wrapRef.current.scrollTop = persistedScrollTop
+  }, [])
 
   // 当前应高亮的菜单项（与标签页共用同一套匹配规则）
   const activeItem = resolveNavEntry(pathname, adminRoute)
@@ -35,7 +50,13 @@ export const CustomNav = () => {
   return (
     <aside className={asideClasses} inert={!navOpen ? true : undefined}>
       <div className="nav__scroll" ref={navRef}>
-        <nav className="nav__wrap">
+        <nav
+          className="nav__wrap"
+          onScroll={(event) => {
+            persistedScrollTop = event.currentTarget.scrollTop
+          }}
+          ref={wrapRef}
+        >
           <div className="nav__brand">
             <img alt="" className="nav__brand-logo" src="/cloud-icons/cloud-dark.png" />
             <span className="nav__brand-text">

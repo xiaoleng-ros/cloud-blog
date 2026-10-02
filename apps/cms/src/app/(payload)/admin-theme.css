@@ -76,7 +76,7 @@
   /* 内容栅格：顶栏标签条与页面里的每张卡片共用同一左右留白，
      于是「标签条 / 页头卡 / 内容卡」上下边缘严格对齐，整列看起来是一张网格。
      --gutter 同时被 admin-shell.css 的 .shell-header 引用来定顶栏内边距。 */
-  --gutter: 1.5rem;
+  --gutter: 0.75rem;
   --card-gap: 1rem;
   --card-radius: 12px;
   --card-pad: 1.15rem var(--card-pad-x);
@@ -2727,6 +2727,15 @@ img.gravatar-account {
 /* ---------- 18.9 站点设置（SettingsEditView）：左目录卡 + 右内容卡，两张独立卡片 ---------- */
 .settings {
   gap: var(--card-gap);
+  /* 撑满视口剩余高度：内容短时卡片底边落到「视口底 − 一道 --gutter」，
+     与左侧大侧栏卡的底部留白齐平，不再让卡片半路截断、下面空一块画布 */
+  min-height: calc(100vh - var(--shell-content-top));
+}
+
+/* 两栏（或单栏）布局吃掉 .settings 里除页头卡外的全部剩余高度；
+   网格本身 align-items: stretch，左目录卡与右内容卡会被一起拉齐 */
+.settings__layout {
+  flex: 1;
 }
 
 .settings__layout {

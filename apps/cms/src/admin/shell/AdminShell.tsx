@@ -7,8 +7,12 @@
  * - 渲染固定顶栏（含多标签）与命令面板
  * - ⌘K / Ctrl+K 唤起命令面板
  * - 未登录（登录/登出/重置密码等页面 user 为空）时整套壳子不出现，登录页保持原样浅色
+ * - 登录成功瞬间 Payload 先 setUser 再 router.push('/admin')（SPA 跳转，见 ui/forms/Form），
+ *   中间有一小段「user 已就绪但路由还停在 /admin/login」的窗口；若只看 user，顶栏会先扣在
+ *   登录页上闪一下才进后台。故再按路径排除登录/登出页，让壳子与后台内容同帧出现。
  */
 import { useAuth, useConfig, useNav } from '@payloadcms/ui'
+import { usePathname } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 
 import { CommandPalette } from './CommandPalette'
@@ -85,10 +89,18 @@ const ShellHeader = () => {
 
 export const AdminShell = ({ children }: Props) => {
   const { user } = useAuth()
+  const { config } = useConfig()
+  const pathname = usePathname()
+  // 登录/登出属于认证流程，不套壳子：
+  // - /login：登录成功的 setUser 与 router.push('/admin') 之间（SPA 跳转），user 已非空
+  //   但路由还停在登录页，这一帧若渲染顶栏就是「壳子先扣在登录页上再进后台」的闪现。
+  // - /logout：确认退出前 user 仍非空，退出页同样不该出现整套后台壳子。
+  const authRoutes = ['/login', '/logout']
+  const onAuthPage = authRoutes.some((route) => pathname === `${config.routes.admin}${route}`)
 
   return (
     <>
-      {user ? <ShellHeader /> : null}
+      {user && !onAuthPage ? <ShellHeader /> : null}
       {children}
     </>
   )

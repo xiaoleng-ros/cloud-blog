@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "postinstall": "patch-package",
     "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev -p 9527",
     "pg:start": "node scripts/pg.mjs start",
     "pg:stop": "node scripts/pg.mjs stop",
@@ -56,6 +57,7 @@
     "@types/react": "19.2.0",
     "@types/react-dom": "19.2.0",
     "gray-matter": "^4.0.3",
+    "patch-package": "8.0.1",
     "tsx": "^4.23.12",
     "typescript": "^5.7.2"
   },
