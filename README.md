@@ -4,8 +4,8 @@
 
 **一个「前台 + 后台」双应用的 Monorepo** — 用 Astro 🌠 做站点，用 Payload CMS 💼 管内容。
 
-![Astro](https://img.shields.io/badge/Astro-7.0-orange?logo=astro&logoColor=ff5d01)
-![Payload](https://img.shields.io/badge/Payload-3.9-gray?logo=payload&logoColor=ffffff)
+![Astro](https://img.shields.io/badge/Astro-7.2-orange?logo=astro&logoColor=ff5d01)
+![Payload](https://img.shields.io/badge/Payload-3.88-gray?logo=payload&logoColor=ffffff)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?logo=opensourceinitiative&logoColor=white)
@@ -51,13 +51,17 @@ cloud/
 │       ├── src/app/api/                        # blog-sync（版本探测+全量区块）/ blog-sync/stream（SSE）
 │       ├── src/migrations/                     # Postgres 迁移（含 projects 集合）
 │       ├── next.config.mjs
-│       ├── scripts/                            # copy-blog-to-public / warmup 等
+│       ├── scripts/                            # copy-blog-to-public / pg 启停 / warmup 等
 │       ├── package.json                        # 独立依赖 + lockfile
 │       └── tsconfig.json
-├── 📄 package.json                # 根编排脚本（私有，无第三方依赖）
+├── 📦 shared/                       # 跨应用共享模块（html-safety / post-utils / remark-rehype 插件等）
+├── 📄 package.json                # 根编排脚本（私有，无第三方依赖），exports 暴露 ./shared/*
 ├── 📌 .gitignore
 └── 📜 LICENSE
 ```
+
+> `shared/` 的接线方式：两个应用都在各自 `package.json` 里声明依赖 `"cloud-blog": "file:../.."`
+> （指回根包），再通过根包 `exports` 的 `./shared/*` 子路径导入，如 `import { ... } from 'cloud-blog/shared/html-safety'`。
 
 ---
 
@@ -100,8 +104,8 @@ npm run setup
 # 🖥️ 终端 1：博客前端 → http://localhost:4321
 npm run dev:blog
 
-# 🗄️ 终端 2：内容后台 → http://localhost:9527  （默认 SQLite，零配置）
-npm run dev:cms
+# 🗄️ 终端 2：内容后台 → http://localhost:9527  （本地默认连 postgres，需先启动 D:\pglocal 绿色版 PG）
+npm run dev:cms          # 或 npm run dev:local --prefix apps/cms —— 自动按需启动本地 PG 再拉起后台
 ```
 
 - 📡 前端构建/开发时从后台 API（`PUBLIC_PAYLOAD_URL`，默认 `http://localhost:9527`）拉取内容；**后台未运行时文章/随笔/项目为空**，但页面仍可正常访问（站点默认值兜底）。
@@ -122,12 +126,12 @@ npm run dev:cms
 
 > 前台取数地址的优先级：`PUBLIC_PAYLOAD_URL` → `SITE_URL`（一体化部署前后台同域）→ `http://localhost:9527`。
 
-`apps/cms` 生产环境变量（本地 SQLite 无需配置）：
+`apps/cms` 环境变量（复制 `apps/cms/.env.example` 为 `.env`；本地开发同样默认 postgres，指向 `D:\pglocal` 绿色版 PG，用 `npm run pg:start` / `pg:stop` / `pg:status` 按需启停、零常驻）：
 
 | 🎛️ 变量 | 💡 用途 |
 | --- | --- |
-| `DATABASE_DRIVER` | `sqlite`（默认）/ `postgres` |
-| `POSTGRES_URL` | `postgres` 时的连接串（如 Neon） |
+| `DATABASE_DRIVER` | `postgres`（默认，本地与生产一致）/ `sqlite`（保留的历史分支，迁移是 Postgres 方言，不推荐） |
+| `POSTGRES_URL` | 连接串：本地 `postgresql://postgres@127.0.0.1:5433/blog_dev`；生产填托管库（如 Supabase / Neon） |
 | `PAYLOAD_SECRET` | Payload 加密密钥（生产必填） |
 | `PAYLOAD_FORCE_PUSH=1` | 首次向线上库非交互建表 |
 
@@ -162,7 +166,7 @@ npm run dev:cms
 >   会退化成「模板默认文案 + 0 篇文章」，并且**不会生成任何文章详情页**（`/posts/*` 全部 404）。
 >   构建日志里会打印明确的 `[payload-loader] ⚠️` 提示。
 > - 首次部署（站点还没上线时）构建必然拉不到数据，属正常；上线后在控制台填好域名重新部署一次即可。
-> - **Serverless 无持久磁盘，CMS 的 SQLite 单文件只适合本地开发；线上必须用 `postgres` 托管库**（项目已内置 `@payloadcms/db-postgres`，并带 `projects` 集合的迁移）。
+> - **Serverless 无持久磁盘，线上必须用 `postgres` 托管库**（项目已内置 `@payloadcms/db-postgres`，并带 `projects` 集合的迁移）。SQLite 分支仅作保留：`migrations/` 是 Postgres 方言，用它无法复用线上迁移，不推荐。
 > - CMS 依赖 Node 运行时与 `sharp`，请在 Makers 中选择支持 Node/Next SSR 的方案（而非纯边缘函数）。
 > - **运行时常量**：SSE 与内存缓存均为单实例级；EdgeOne 多实例时靠 5s TTL 快照 + 前台轮询兜底，最终一致。
 > - `apps/blog/patches/astro+7.2.0.patch` 由 `patch-package` 在 `npm install` 的 postinstall 阶段自动应用（修复中文路径 301 跳转的 Location 头编码），本地 dev 与构建均生效。

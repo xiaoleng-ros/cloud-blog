@@ -3,9 +3,14 @@ import Footer from '../components/Footer.astro';
 import MusicPlayer from '../components/MusicPlayer.astro';
 import Nav from '../components/Nav.astro';
 import { ClientRouter } from 'astro:transitions';
+import { defaultSchema } from 'rehype-sanitize';
+import { getMdSanitizeLists } from 'cloud-blog/shared/md-sanitize-schema.mjs';
 import { absoluteUrl, site } from '../lib/posts';
 import { getSiteSettings } from '../lib/site-settings';
 import '../styles/global.css';
+
+// 客户端兜底净化的白名单与净化器共用同一份派生（shared/md-sanitize-schema），构建期序列化为 JSON
+const mdSanitizeLists = getMdSanitizeLists(defaultSchema);
 
 // 文章专属 OG 元数据（article:* 系列），仅文章页传入
 interface ArticleMeta {
@@ -664,6 +669,8 @@ const routeMotion = {
         sync();
       })();
     </script>
+    <!-- 客户端净化白名单数据：与服务端净化链同源（shared/md-sanitize-schema），走 set:html 注入（同 JSON-LD 用法），内联脚本里不能写模板表达式 -->
+    <script is:inline data-astro-rerun set:html={`window.__mdSanitizeLists=${JSON.stringify(mdSanitizeLists).replace(/</g, '\\u003c')};`}></script>
     <script is:inline data-astro-rerun>
       (() => {
         // 后台数据实时同步：SSE 为主通道（近实时推送），轮询为兜底（30s 间隔）。
@@ -697,32 +704,88 @@ const routeMotion = {
         ].join(', ');
 
         // 客户端兜底净化：区块 HTML 已在服务端渲染链（blog-render + rehype-sanitize）白名单净化过，
-        // 这里再走一遍 DOM 级清洗，防「服务端净化被绕过 / API 响应被篡改」两类残余风险。
-        // 只删不清洗：移除可执行元素、on* 属性、javascript:/vbscript: URL（data: 仅放行内联图片）。
-        const DROP_TAGS = 'script,object,embed,frame,link,meta,base,form,foreignObject,foreignobject';
-        const URL_ATTRS = ['href', 'src', 'xlink:href', 'action', 'formaction', 'data'];
-        const stripDangerous = (html) => {
-          const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
-          const root = doc.body;
-          root.querySelectorAll(DROP_TAGS).forEach((n) => n.remove());
-          root.querySelectorAll('*').forEach((n) => {
-            for (const attr of Array.from(n.attributes)) {
-              const name = attr.name.toLowerCase();
-              const raw = attr.value || '';
-              // 与浏览器一致：先剥控制字符/空白再判协议（`\tjavascript:` 这类伪装）
-              const compact = raw.replace(/[\u0000-\u0020]/g, '').toLowerCase();
-              if (name.startsWith('on')) { n.removeAttribute(attr.name); continue; }
-              if (!URL_ATTRS.includes(name)) continue;
-              const isInlineImage = name === 'src' && n.tagName === 'IMG' && /^data:image\/(png|jpe?g|gif|webp|avif);base64,/.test(compact);
-              if (!isInlineImage && (/^(javascript|vbscript|livescript|mocha):/.test(compact) || compact.startsWith('data:'))) {
-                n.removeAttribute(attr.name);
-              }
+        // 这里只挡「服务端净化被绕过 / API 响应被篡改」两类残余风险，故改为白名单逐节点过滤：
+        // tags/attrs/URL 属性/协议集合由 shared/md-sanitize-schema 与净化器同源派生、构建期注入。
+        // DOMParser 只负责解析输入字符串；输出经 createElement/importNode 挂回文档片段，
+        // 不再 innerHTML 二次序列化，收窄 mXSS（解析器差异利用）面。
+        const SAN = window.__mdSanitizeLists ?? {};
+        const TAGS = new Set(SAN.tags);
+        // 这些标签即便不在白名单也整棵子树丢弃（unwrap 会把脚本内容变成可见文本节点）
+        const DROP_SUBTREE = new Set(['script', 'style', 'object', 'embed', 'frame', 'form', 'template', 'noscript', 'svg', 'math']);
+        const URL_ATTRS = new Set(SAN.urlAttributes);
+        const HREF_PROTOCOLS = new Set(SAN.protocols?.href ?? []);
+        const SRC_PROTOCOLS = new Set(SAN.protocols?.src ?? []);
+        const IFRAME_HOSTS = (SAN.iframeHosts ?? []).map((h) => String(h).toLowerCase());
+        const ATTR_SETS = new Map(Object.entries(SAN.attributes ?? {}).map(([t, names]) => [t, new Set(names)]));
+        const attrAllowed = (tag, name) =>
+          ATTR_SETS.get(tag)?.has(name) || ATTR_SETS.get('*')?.has(name) || /^data-[\w.-]+$/.test(name);
+
+        const compactUrl = (raw) => String(raw).replace(/[\u0000-\u0020]/g, '');
+        const urlOk = (raw, attr) => {
+          const compact = compactUrl(raw);
+          if (!compact) return true;
+          // 协议相对 //host 与反斜杠伪装（\\host）一律拒绝（与 shared/html-safety 红线一致），只放行单斜杠/普通相对路径
+          if (compact.startsWith('//') || compact.includes('\\')) return false;
+          if (attr === 'srcset') {
+            return compact.split(',').every((candidate) => urlOk(candidate.trim().split(/\s+/)[0] ?? '', attr));
+          }
+          const scheme = compact.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+          if (!scheme) return true;
+          return (attr === 'href' ? HREF_PROTOCOLS : SRC_PROTOCOLS).has(scheme[1].toLowerCase());
+        };
+        const iframeSrcOk = (raw) => {
+          let host = '';
+          try {
+            host = new URL(compactUrl(raw)).hostname.toLowerCase();
+          } catch {
+            return false;
+          }
+          return IFRAME_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+        };
+
+        // 白名单递归过滤：非白名单标签 unwrap 保留子内容；输出直接建在主文档上（无需 importNode 跨文档）
+        const cleanChildren = (source) => {
+          const frag = document.createDocumentFragment();
+          for (const child of Array.from(source.childNodes)) {
+            if (child.nodeType === Node.TEXT_NODE) {
+              frag.appendChild(document.importNode(child, false));
+              continue;
             }
-          });
-          return root.innerHTML;
+            if (child.nodeType !== Node.ELEMENT_NODE) continue; // 注释/其它节点：丢弃
+            const tag = child.tagName.toLowerCase();
+            if (DROP_SUBTREE.has(tag)) continue;
+            if (tag === 'iframe') {
+              const src = child.getAttribute('src') ?? '';
+              // 非白名单 host 的 iframe 整节点丢弃（服务端 schema 此时已剥 src，这里兜住篡改后的响应）
+              if (!urlOk(src, 'src') || !iframeSrcOk(src)) continue;
+            }
+            if (!TAGS.has(tag)) {
+              frag.appendChild(cleanChildren(child));
+              continue;
+            }
+            const el = document.createElement(tag);
+            for (const attr of Array.from(child.attributes)) {
+              const name = attr.name.toLowerCase();
+              if (name.startsWith('on')) continue;
+              if (!attrAllowed(tag, name)) continue;
+              if (URL_ATTRS.has(name) && !urlOk(attr.value, name)) continue;
+              // style 不再全放行：url()/expression/behavior 这类可外联或可执行的写法整体丢弃该属性
+              if (name === 'style' && /url\s*\(|expression\s*\(|javascript:|behavior\s*:/i.test(compactUrl(attr.value))) continue;
+              el.setAttribute(attr.name, attr.value);
+            }
+            el.appendChild(cleanChildren(child));
+            frag.appendChild(el);
+          }
+          return frag;
+        };
+        const sanitizeBlock = (html) => {
+          const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+          return cleanChildren(doc.body);
         };
 
         // 更新某个锚点的内容；找不到锚点或内容为空则跳过，返回是否更新成功
+        // 用原始 HTML 字符串做「这块真变了没」的比较，替代旧的 innerHTML 往返对比（不再需要序列化）
+        const lastAppliedHtml = new WeakMap();
         const applyBlock = (id, html, version) => {
           if (html == null || html === '') return false;
           const el = document.querySelector(`[data-sync-block="${id}"]`);
@@ -730,12 +793,12 @@ const routeMotion = {
           // 服务端在返回 HTML 时已经用**同一版本号**注入过这一块 → 直接跳过。
           // 否则首次同步会把刚渲染好的同一份内容再重写一遍，白白的闪烁 + 重排。
           if (version && el.dataset.syncVersion === version) return false;
-          const safeHtml = stripDangerous(html);
-          if (el.innerHTML === safeHtml) {
+          if (lastAppliedHtml.get(el) === String(html)) {
             if (version) el.dataset.syncVersion = version;
             return false; // 内容相同无需重写
           }
-          el.innerHTML = safeHtml;
+          lastAppliedHtml.set(el, String(html));
+          el.replaceChildren(sanitizeBlock(html));
           if (version) el.dataset.syncVersion = version;
           // 新内容补 reveal 类，避免被「未显现隐藏」规则遮住
           el.querySelectorAll(REVEAL_SEL).forEach((node) => {
@@ -799,6 +862,22 @@ const routeMotion = {
           }
         };
 
+        // ---- update 事件防抖：抖动打散 + 同 tick 合并 ----
+        // 后台一次保存会让所有打开的标签页同时收到 SSE update；不齐步地各自全区块重拉，
+        // 会把瞬时请求放大成 N 个并发慢请求（单用户多标签页也能观察到）。
+        let syncQueued = false;
+        let syncQueueTimer = 0;
+        const scheduleSync = () => {
+          if (syncQueued || document.hidden) return;
+          syncQueued = true;
+          const delay = 300 + Math.random() * 1700;
+          syncQueueTimer = window.setTimeout(() => {
+            syncQueued = false;
+            if (document.hidden) return; // 回可见时由 visibilitychange 立即补一次 sync
+            void sync();
+          }, delay);
+        };
+
         // ---- SSE 主通道 + 轮询兜底 ----
         // 首次加载立即同步一次，确保首屏数据是最新的
         sync();
@@ -824,9 +903,9 @@ const routeMotion = {
           }
         };
 
-        // 启动轮询兜底（SSE 不可用或超时后调用）
+        // 启动轮询兜底（SSE 不可用或超时后调用）；隐藏标签页不轮询，回可见时再恢复
         const startPolling = () => {
-          if (pollTimer) return;
+          if (pollTimer || document.hidden) return;
           pollTimer = window.setInterval(sync, POLL_INTERVAL_MS);
         };
 
@@ -838,9 +917,9 @@ const routeMotion = {
           }
         };
 
-        // 退避重连：服务端会按存活上限主动回收连接，断开是常态而非终点
+        // 退避重连：服务端会按存活上限主动回收连接，断开是常态而非终点；隐藏期间不排重连
         const scheduleReconnect = () => {
-          if (reconnectTimer) return;
+          if (reconnectTimer || document.hidden) return;
           const delay = reconnectDelayMs;
           reconnectDelayMs = Math.min(reconnectDelayMs * 2, SSE_RETRY_MAX_MS);
           reconnectTimer = window.setTimeout(() => {
@@ -884,7 +963,7 @@ const routeMotion = {
           });
 
           source.addEventListener('update', () => {
-            sync();
+            scheduleSync();
           });
 
           source.addEventListener('error', () => {
@@ -900,7 +979,29 @@ const routeMotion = {
         };
 
         connectSse();
+
+        // 隐藏标签页：断开 SSE、停掉轮询与一切重连排程（省后台连接），回可见时立即 sync 并重连。
+        // 重连/退避本身逻辑不变，只是隐藏期间冻结。
+        const onVisibility = () => {
+          if (document.hidden) {
+            window.clearTimeout(syncQueueTimer);
+            syncQueued = false;
+            stopPolling();
+            clearHandshakeTimer();
+            clearReconnectTimer();
+            sseSource?.close();
+            sseSource = null;
+            sseEstablished = false;
+            return;
+          }
+          void sync();
+          connectSse();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+
         signal.addEventListener('abort', () => {
+          document.removeEventListener('visibilitychange', onVisibility);
+          window.clearTimeout(syncQueueTimer);
           clearHandshakeTimer();
           clearReconnectTimer();
           sseSource?.close();

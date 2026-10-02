@@ -7,9 +7,12 @@ import {
   site,
   sortPosts,
 } from '../lib/posts';
+import { getSiteSettings } from '../lib/site-settings';
 
 const escapeXml = (value: string) =>
   value
+    // XML 1.0 非法控制字符（\x08 等）会让整份 feed 解析失败，实体替换前先剥掉
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
@@ -17,7 +20,12 @@ const escapeXml = (value: string) =>
     .replaceAll("'", '&apos;');
 
 export async function GET() {
-  const posts = sortPosts(await getCollection('posts'));
+  // 站点名/作者/描述：构建期取一次后台 SiteSettings，失败（null）回退 SITE_DEFAULTS；RSS 限最近 50 条
+  const settings = await getSiteSettings();
+  const siteName = settings?.siteName ?? site.name;
+  const siteAuthor = settings?.siteAuthor ?? site.author;
+  const siteDescription = settings?.siteDescription ?? site.description;
+  const posts = sortPosts(await getCollection('posts')).slice(0, 50);
   const latestDate = posts
     .map(getPostUpdatedDate)
     .filter(Boolean)
@@ -30,7 +38,7 @@ export async function GET() {
     .map((post) => {
       const url = getPostUrl(post);
       const date = getPostUpdatedDate(post);
-      const postAuthor = post.data.author ?? site.author;
+      const postAuthor = post.data.author ?? siteAuthor;
 
       return `
         <item>
@@ -47,9 +55,9 @@ export async function GET() {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>${escapeXml(site.name)}</title>
+    <title>${escapeXml(siteName)}</title>
     <link>${escapeXml(absoluteUrl('/'))}</link>
-    <description>${escapeXml(site.description)}</description>
+    <description>${escapeXml(siteDescription)}</description>
     <language>zh-CN</language>
     <generator>Astro</generator>
     <ttl>60</ttl>

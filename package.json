@@ -9,7 +9,7 @@
     "./shared/*": "./shared/*"
   },
   "engines": {
-    "node": ">=18.20.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "setup": "npm install --prefix apps/blog && npm install --prefix apps/cms",

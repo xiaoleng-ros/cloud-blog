@@ -266,8 +266,11 @@ export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[
   return docs
     .filter((doc) => doc.status === 'published')
     .map((doc) => {
-      const cover = doc.cover ?? undefined;
-      const coverAlt = cover && altMap ? altMap.get(cover) ?? undefined : undefined;
+      const rawCover = doc.cover ?? undefined;
+      // cover 会进 og:image / JSON-LD / <img>：过一次协议白名单，
+      // 协议相对（//evil.com/x.png）/javascript: 之类的后台脏值回落默认封面
+      const cover = rawCover ? safeHref(rawCover, '/covers/default-cover.svg') : undefined;
+      const coverAlt = cover && altMap ? (rawCover ? altMap.get(rawCover) : undefined) ?? altMap.get(cover) ?? undefined : undefined;
       return {
         // id 使用数字主键：前台路径 /posts/{分类}/{数字ID}/
         id: String(doc.id),

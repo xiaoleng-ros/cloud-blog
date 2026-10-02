@@ -1,3 +1,6 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { withPayload } from '@payloadcms/next/withPayload'
 
 /**
@@ -14,6 +17,9 @@ const nextConfig = {
   // cloud-blog/shared/* 是仓库内的 TS 源码（file: 依赖），必须交给 SWC 转译，
   // 否则 Next 默认跳过 node_modules 会导致构建期无法解析 .ts 源码。
   transpilePackages: ['cloud-blog'],
+  // Next 16 起 next build 默认 Turbopack，其项目根取本目录；cloud-blog 是指向仓库根的
+  // file: 依赖，../../shared/* 落在根外会 module-not-found，必须显式上提根到 monorepo 根。
+  turbopack: { root: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..') },
   // 安全响应头：对全部路由（含 Payload 后台 /admin 与 /api）统一加，均为无副作用基线项：
   //   - nosniff：禁止 MIME 嗅探；Payload 各资源都带正确 Content-Type，不会被误判拦截。
   //   - Referrer-Policy：跨源只发 origin，收敛引用方信息泄露。

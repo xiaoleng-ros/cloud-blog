@@ -32,6 +32,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 把 ApiError 映射成给用户看的中文提示。
+ * 401/403 必须给「重新登录/授权」类明确文案，避免用户误以为数据丢失；
+ * 5xx 与网络抖动统一通用文案，不回显原始状态码。
+ */
+export const describeApiError = (error: unknown): string => {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return '登录已过期，请重新登录后再操作'
+    if (error.status === 403) return '无操作权限，请确认当前账号是否已授权'
+    if (error.status === 429) return '操作过于频繁，请稍后重试'
+    if (error.status >= 500) return '操作失败，请稍后重试'
+    // 其余 4xx（含后端 APIError 抛出的中文业务提示）保留展示
+    return error.message
+  }
+  return '操作失败，请稍后重试'
+}
+
 /** 基础 JSON 请求（支持 GET/POST/PATCH/DELETE） */
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {

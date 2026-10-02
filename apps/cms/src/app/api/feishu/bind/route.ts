@@ -64,8 +64,17 @@ async function authorize(request: Request) {
     } as const
   }
 
+  // 畸形 Origin 头（如非 URL 字符串）不能让 new URL 抛 500：解析失败按跨站处理（同 change-password）
   const originHeader = request.headers.get('origin')
-  if (originHeader && new URL(originHeader).origin !== new URL(request.url).origin) {
+  let sameOrigin = true
+  if (originHeader) {
+    try {
+      sameOrigin = new URL(originHeader).origin === new URL(request.url).origin
+    } catch {
+      sameOrigin = false
+    }
+  }
+  if (!sameOrigin) {
     return {
       payload,
       user: null,

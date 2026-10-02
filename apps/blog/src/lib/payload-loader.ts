@@ -58,17 +58,40 @@ type StampSource = keyof typeof STAMP_KEYS
 
 /**
  * 指纹探测的模块级去重：posts / notes / projects 三个 loader 各挂一个 setInterval，
- * 同一时间窗里会撞出 3 次探测请求；用「在途 Promise + 短 TTL」并成一次。
+ * 同一时间窗里会撞出 3 次探测请求；探测在途时无条件复用同一 Promise，
+ * 且结果在 AUTO_REFRESH_MS（与轮询节奏对齐）内视为新鲜直接复用。
+ * 连续 PROBE_FAILURE_LIMIT 次失败进入退避：暂停所有轮询 PROBE_BACKOFF_MS，
+ * 避免探测超时（8s）≫ 轮询间隔（3s）时 fail-open 退化成每 3s 全量重拉；成功一次即恢复。
  */
-const DIGEST_PROBE_TTL_MS = 1_000
+const PROBE_FAILURE_LIMIT = 3
+const PROBE_BACKOFF_MS = 15_000
 let digestPromise: Promise<Record<string, string> | null> | null = null
-let digestFetchedAt = 0
+let digestResult: { value: Record<string, string> | null; at: number } | null = null
+let probeFailures = 0
+let probeBackoffUntil = 0
 
 function probeDigests(): Promise<Record<string, string> | null> {
   const now = Date.now();
-  if (digestPromise && now - digestFetchedAt < DIGEST_PROBE_TTL_MS) return digestPromise;
-  digestFetchedAt = now;
-  digestPromise = fetchSyncDigest().then((res) => res?.digests ?? null);
+  // 在途：无条件复用（探测超时可达 8s，TTL 比超时短就合并不了并发）
+  if (digestPromise) return digestPromise;
+  if (digestResult && now - digestResult.at < AUTO_REFRESH_MS) return Promise.resolve(digestResult.value);
+  if (now < probeBackoffUntil) return Promise.resolve(digestResult?.value ?? null);
+  digestPromise = fetchSyncDigest()
+    .then((res) => res?.digests ?? null)
+    .catch(() => null)
+    .then((value) => {
+      if (value) {
+        probeFailures = 0;
+        probeBackoffUntil = 0;
+        digestResult = { value, at: Date.now() };
+      } else {
+        probeFailures += 1;
+        if (probeFailures >= PROBE_FAILURE_LIMIT) probeBackoffUntil = Date.now() + PROBE_BACKOFF_MS;
+      }
+      // 结果落缓存之后再清空在途标记，避免两个微任务缝隙里再挤出发重复探测
+      digestPromise = null;
+      return value;
+    });
   return digestPromise;
 }
 
@@ -121,55 +144,56 @@ function commitStamps(
  * 只发起一次 /api/media 请求。轮询时会重新拉取并 setAltMap，供下一次 markdown 渲染使用。
  */
 let mediaAltPromise: Promise<Map<string, string>> | null = null
+/** 当前生效的 altMap 指纹：渲染侧用它判断「本 loader 上次渲染用的 alt 内容是否已过期」 */
+let currentMediaFp = ''
+const fingerprintMediaMap = (m: Map<string, string>) =>
+  JSON.stringify([...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)))
 function loadMediaAltMap(): Promise<Map<string, string>> {
   if (!mediaAltPromise) {
     mediaAltPromise = fetchMediaAltMap().then((m) => {
       setAltMap(m)
+      currentMediaFp = fingerprintMediaMap(m)
       return m
     })
   }
   return mediaAltPromise
 }
 
+/** meta 中保存「本 loader 最近一次渲染实际使用的 media 指纹」的 key */
+const MEDIA_RENDERED_KEY = 'media-rendered-fp'
+
 /** 正在进行的 Media alt 重载：posts 与 notes 同一轮都检测到变化时，只打一次 /api/media */
-let mediaReloadPromise: Promise<boolean> | null = null
+let mediaReloadPromise: Promise<Map<string, string>> | null = null
 
 /**
  * Media alt 变更检测与重载（仅在后台指纹显示 Media 变了时才真正拉数据）。
  *
- * 返回是否变化：变了的话调用方需要重渲染 markdown，才能把新 alt 补进已存的 HTML
- * （<img alt=""> 是渲染时写死的，不换 map 就一直是旧值）。
+ * 返回「本 loader 已渲染内容所用指纹」与「当前 altMap 指纹」是否不一致：
+ * 不一致则调用方需要重渲染 markdown，把新 alt 补进已存的 HTML
+ * （<img alt> 是渲染时写死的，不重渲染就一直是旧值）。
+ * 判定不再依赖「本次 map vs 上次 map」的全局比较——那份比较结果与
+ * commitStamps（全 loader 共享的后台指纹）语义不一致，可能 stamp 已推进而某路
+ * loader 的正文里 alt 仍是旧值，造成永久陈旧。渲染指纹由 storeEntries 逐 loader 落进 ctx.meta。
  */
 async function refreshMediaAltMap(
   ctx: LoaderContext,
   digests: Record<string, string> | null,
 ): Promise<boolean> {
-  if (!stampDiffers(ctx, digests, 'media')) return false;
-
-  const pending = mediaReloadPromise;
-  if (pending) {
-    // 另一个 loader 已经在拉了：等它的结果，本路同样视为「已更新」
-    await pending;
+  if (stampDiffers(ctx, digests, 'media')) {
+    // posts 与 notes 同一轮都检测到变化时，只打一次 /api/media
+    if (!mediaReloadPromise) {
+      mediaReloadPromise = (async () => {
+        mediaAltPromise = null;
+        return loadMediaAltMap();
+      })().finally(() => {
+        mediaReloadPromise = null;
+      });
+    }
+    // 抛错时不落指纹：下一轮仍会重试，不会把「没拉到」记成「没变化」
+    await mediaReloadPromise;
     commitStamps(ctx, digests, ['media']);
-    return true;
   }
-
-  mediaReloadPromise = (async () => {
-    const before = mediaAltPromise ? await mediaAltPromise : new Map<string, string>();
-    mediaAltPromise = null;
-    const after = await loadMediaAltMap();
-    return (
-      before.size !== after.size ||
-      [...before.entries()].some(([k, v]) => after.get(k) !== v)
-    );
-  })().finally(() => {
-    mediaReloadPromise = null;
-  });
-
-  // 抛错时不落指纹：下一轮仍会重试，不会把「没拉到」记成「没变化」
-  const changed = await mediaReloadPromise;
-  commitStamps(ctx, digests, ['media']);
-  return changed;
+  return currentMediaFp !== ctx.meta.get(MEDIA_RENDERED_KEY);
 }
 
 /** 递归收集目录下所有 .md 文件，返回 [id(相对路径去扩展名), 绝对路径] */
@@ -207,6 +231,18 @@ function localEntries(files: Array<{ id: string; file: string }>): MdEntry[] {
  * @param store   数据仓库（posts 与 notes 各用各的）
  * @param entries 条目列表（id + data + body）
  */
+type RenderedMarkdown = Awaited<ReturnType<LoaderContext['renderMarkdown']>>;
+interface RenderCacheEntry {
+  body: string;
+  file?: string;
+  rendered?: RenderedMarkdown;
+}
+interface RenderCache {
+  mediaFp: string;
+  entries: Map<string, RenderCacheEntry>;
+}
+const RENDER_CACHE_KEY = 'render-cache';
+
 async function storeEntries(
   ctx: LoaderContext,
   store: DataStore,
@@ -216,6 +252,12 @@ async function storeEntries(
   // 单条脏数据只该影响它自己：parseData/renderMarkdown 逐条 try-catch，
   // 坏条目跳过并计数告警，绝不让整批拉取失败（进而误降级成本地 markdown 兜底）。
   let skipped = 0;
+
+  // alt 映射会烧进渲染产物：media 指纹一变整个缓存作废；正文/来源文件没变的条目复用上轮 rendered，
+  // 轮询检测到「某一路变了」时不再把所有条目重渲一遍。
+  const cached = ctx.meta.get(RENDER_CACHE_KEY) as RenderCache | undefined;
+  const cache =
+    cached && cached.mediaFp === currentMediaFp ? cached.entries : new Map<string, RenderCacheEntry>();
 
   for (const entry of entries) {
     // 用前台 collection schema 校验/清洗数据
@@ -232,13 +274,29 @@ async function storeEntries(
     const file = fileOf?.(entry.id);
     const fileURL = file ? pathToFileURL(file) : undefined;
 
+    const key = String(entry.id);
+    const prev = cache.get(key);
+    let rendered: RenderedMarkdown | undefined;
+    let renderFailed = false;
     try {
-      const rendered = await ctx.renderMarkdown(entry.body, fileURL ? { fileURL } : undefined);
-      store.set({ id: entry.id, data, body: entry.body, rendered });
+      if (prev && prev.body === entry.body && prev.file === file) {
+        rendered = prev.rendered;
+      }
+      if (!rendered) {
+        rendered = await ctx.renderMarkdown(entry.body, fileURL ? { fileURL } : undefined);
+      }
     } catch (error) {
       // 个别条目渲染失败不阻塞整体，仅告警并保留原始 body
       ctx.logger.warn(`[payload-loader] 渲染失败 ${entry.id}: ${(error as Error).message}`);
+      renderFailed = true;
+    }
+
+    if (renderFailed) {
       store.set({ id: entry.id, data, body: entry.body });
+      cache.delete(key);
+    } else {
+      store.set({ id: entry.id, data, body: entry.body, rendered });
+      cache.set(key, { body: entry.body, file, rendered });
     }
   }
 
@@ -252,8 +310,16 @@ async function storeEntries(
   // 好过让一篇文章因后台一次字段错误而从前台消失。
   const liveIds = new Set(entries.map((e) => String(e.id)));
   for (const id of [...store.keys()]) {
-    if (!liveIds.has(String(id))) store.delete(id);
+    if (!liveIds.has(String(id))) {
+      store.delete(id);
+      cache.delete(String(id));
+    }
   }
+
+  // meta 官方类型只标了 string 值，但运行时就是普通 Map；渲染缓存（含 thenable）必须跨轮询存活，双断言塞回去
+  ctx.meta.set(RENDER_CACHE_KEY, { mediaFp: currentMediaFp, entries: cache } as unknown as string);
+  // 本 loader 的产物此刻确实基于当前 altMap —— 与 refreshMediaAltMap 的判定配对落盘
+  ctx.meta.set(MEDIA_RENDERED_KEY, currentMediaFp);
 }
 
 /** 文章加载器：API 优先，本地 markdown 兜底 */
@@ -424,6 +490,8 @@ function schedulePolling(
   let running = false;
   const poll = async () => {
     if (running) return;
+    // 探测退避期间跳过本轮：否则 fail-open（探测无结果→视为全部变化）会每 AUTO_REFRESH_MS 全量重拉
+    if (Date.now() < probeBackoffUntil) return;
     running = true;
     try {
       const changed = await pollSource(ctx);
@@ -519,8 +587,9 @@ async function pollNotes(ctx: LoaderContext): Promise<boolean> {
   }
   const nextDigest = ctx.generateDigest(JSON.stringify(entries));
   const contentChanged = ctx.meta.get(DIGEST_KEYS.notes) !== nextDigest;
-  ctx.meta.set(DIGEST_KEYS.notes, nextDigest);
   await storeEntries(ctx, ctx.store, entries);
+  // 与 posts 路径对齐：store 写成功后再落 digest，中途抛错下一轮会重拉而不是静默漏同步
+  ctx.meta.set(DIGEST_KEYS.notes, nextDigest);
   commitStamps(ctx, digests, ['notes']);
   return contentChanged || mediaAltChanged;
 }
@@ -532,17 +601,22 @@ async function pollProjects(ctx: LoaderContext): Promise<boolean> {
   const entries = await fetchProjects();
   const nextDigest = ctx.generateDigest(JSON.stringify(entries));
   const contentChanged = ctx.meta.get(DIGEST_KEYS.projects) !== nextDigest;
-  ctx.meta.set(DIGEST_KEYS.projects, nextDigest);
-  ctx.store.clear();
+  // 先全部 parse 完，再 clear + 同步逐条 set：await 不夹在 clear 和 set 之间，
+  // 避免「已清空但新数据还在逐条 await」的空窗期让并发读取拿到空仓库
+  const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = [];
   for (const entry of entries) {
     // 单条脏数据跳过并计数，不让整批轮询失败（同 storeEntries 的策略）
     try {
-      const data = await ctx.parseData({ id: entry.id, data: entry });
-      ctx.store.set({ id: entry.id, data });
+      parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) });
     } catch (error) {
       ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
     }
   }
+  ctx.store.clear();
+  for (const { id, data } of parsed) {
+    ctx.store.set({ id, data });
+  }
+  ctx.meta.set(DIGEST_KEYS.projects, nextDigest);
   commitStamps(ctx, digests, ['projects']);
   return contentChanged;
 }

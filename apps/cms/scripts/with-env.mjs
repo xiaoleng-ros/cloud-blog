@@ -19,7 +19,16 @@ for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
   const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
   if (!m || m[2].trim().startsWith('#')) continue;
   let v = m[2].trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+  if (v.startsWith('"') || v.startsWith("'")) {
+    // 引号值：引号内井号原样保留；仅剥离收尾引号之后的行尾注释（KEY="a#b" # 注释）
+    const close = v.lastIndexOf(v[0]);
+    if (close > 0 && /^\s+#/.test(v.slice(close + 1))) v = v.slice(1, close);
+    else if (v.length > 1 && v.endsWith(v[0])) v = v.slice(1, -1);
+  } else {
+    // 未引号值：` #`（空格+井号）起视为行尾注释
+    const c = v.indexOf(' #');
+    if (c !== -1) v = v.slice(0, c).trimEnd();
+  }
   process.env[m[1]] = v;
 }
 

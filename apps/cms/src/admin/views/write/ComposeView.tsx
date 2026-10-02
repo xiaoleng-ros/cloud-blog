@@ -13,6 +13,7 @@
  * 后台不再有 slug 字段，用户只需选择分类即可。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { formatDate } from 'cloud-blog/shared/post-utils'
 import { MarkdownEditor } from '../../../editor/MarkdownEditor'
 import { PageHeader } from '../../components/PageHeader'
 import {
@@ -148,7 +149,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
           setMeta({
             title: doc.title ?? '',
             mood: doc.mood ?? '',
-            date: doc.date ? String(doc.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+            date: doc.date ? String(doc.date).slice(0, 10) : formatDate(new Date()),
             categoryIds: idsOf(doc.categories),
             tagIds: idsOf(doc.tags),
           })
@@ -278,7 +279,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
         cover: m.cover ?? '',
         sticky: m.sticky ?? 0,
         mood: m.mood ?? '',
-        date: m.date ?? new Date().toISOString().slice(0, 10),
+        date: m.date ?? formatDate(new Date()),
         categoryIds: m.categoryIds ?? [],
         tagIds: m.tagIds ?? [],
         content,
@@ -340,7 +341,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
         cover: m.cover ?? '',
         sticky: m.sticky ?? 0,
         mood: m.mood ?? '',
-        date: m.date ?? new Date().toISOString().slice(0, 10),
+        date: m.date ?? formatDate(new Date()),
         categoryIds: m.categoryIds,
         tagIds: m.tagIds,
         content,

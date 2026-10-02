@@ -2,7 +2,8 @@
 
 /**
  * 全局壳子 provider：
- * - 用 Payload 内置 ThemeProvider 决定 html[data-theme]（cookie 驱动，服务端就确定，不闪白）
+ * - 用 Payload 内置 ThemeProvider 管理 html[data-theme]（cookie + 系统偏好）；
+ *   首屏主题由 layout.tsx 里的阻塞内联脚本按客户端终态提前定稿，服务端回落 light 不再造成闪白
  * - 渲染固定顶栏（含多标签）与命令面板
  * - ⌘K / Ctrl+K 唤起命令面板
  * - 未登录（登录/登出/重置密码等页面 user 为空）时整套壳子不出现，登录页保持原样浅色

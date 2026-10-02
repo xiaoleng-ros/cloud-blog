@@ -9,7 +9,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs';
 import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs';
 import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs';
-import { buildMdSanitizeSchema } from 'cloud-blog/shared/md-sanitize-schema.mjs';
+import { buildMdSanitizeSchema, mdIframeHostGuard } from 'cloud-blog/shared/md-sanitize-schema.mjs';
 
 /**
  * Payload 后台数据 hot-reload：
@@ -22,13 +22,21 @@ function payloadHotReload() {
     name: 'payload-hot-reload',
     hooks: {
       'astro:server:setup'({ server, logger }) {
-        const root = server.config.root?.pathname ?? fileURLToPath(new URL('./', import.meta.url));
-        const marker = path.join(root, '.astro', 'payload-sync-touch');
+        // Vite 8 里 server.config.root 是普通字符串（不是 URL 对象），?.pathname 恒 undefined；
+        // Windows 下 watcher 回调路径是正斜杠、path.join 产出反斜杠，两侧先归一再比较。
+        const rootRaw =
+          typeof server.config.root === 'string'
+            ? server.config.root
+            : fileURLToPath(new URL('./', import.meta.url));
+        const toPosix = (p) => String(p).replace(/\\/g, '/');
+        const marker = toPosix(path.join(rootRaw, '.astro', 'payload-sync-touch'));
 
         logger.info('payload-hot-reload: 已启用「后台数据变化 → 前台自动刷新」');
-        server.watcher.on('change', (file) => {
+        // loader 首次创建 marker 是 add 事件，只监听 change 会漏掉第一轮刷新
+        server.watcher.on('all', (event, file) => {
+          if (event !== 'change' && event !== 'add') return;
           const p = typeof file === 'string' ? file : file?.path;
-          if (p && p === marker && existsSync(p)) {
+          if (p && toPosix(p) === marker && existsSync(p)) {
             server.ws.send({ type: 'full-reload' });
           }
         });
@@ -83,7 +91,7 @@ export default defineConfig({
     remarkPlugins: [remarkLegacyShortcodes],
     // 顺序与 CMS blog-render 完全一致：短代码展开 → raw 解析 → 白名单净化 → 图片属性补齐，
     // 保证构建期与运行期(/api/blog-sync)两条链产出相同的净化结果。
-    rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], rehypeImgAttrs],
+    rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], mdIframeHostGuard, rehypeImgAttrs],
   },
   integrations: [payloadHotReload(), siteUrlGuard()],
   // 把唯一来源的 SITE 注入 import.meta.env.SITE_URL：

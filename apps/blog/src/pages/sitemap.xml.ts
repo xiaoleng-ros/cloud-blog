@@ -22,6 +22,8 @@ const PRIORITY_MAX = 1;
 
 const escapeXml = (value: string) =>
   value
+    // XML 1.0 非法控制字符（\x08 等）会让整份 sitemap 解析失败，实体替换前先剥掉
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')

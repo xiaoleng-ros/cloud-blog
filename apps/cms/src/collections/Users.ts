@@ -30,6 +30,12 @@ export const Users: CollectionConfig = {
   auth: {
     useSessions: true,
     tokenExpiration: 86400, // 24h，配合可吊销会话进一步压缩存活期
+    // Secure 仅生产开（本地产 http 开发不带 Secure，否则 cookie 存不下）；
+    // sameSite=Lax：飞书扫码是顶层跳转需携带，跨站 POST/XHR 不带，顺带挡 CSRF。
+    cookies: {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+    },
   },
   access: {
     // 账号资料含 open_id 等登录凭据，默认只对本人可见；管理员白名单可查看全部
@@ -44,6 +50,17 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
   },
   hooks: {
+    // 永久封死 Payload 内置 POST /api/users/first-register 的匿名建管理员通道：
+    // 该操作经 payload.create(overrideAccess:true) 落库，access.create 挡不住，
+    // 只能在 beforeOperation 拦截。判据用 req.payloadAPI：REST/GraphQL 匿名 create 一律拒绝，
+    // 本地 API（迁移/种子/脚本，payloadAPI='local'）不受误伤。
+    beforeOperation: [
+      ({ operation, req }) => {
+        if (operation === 'create' && !req.user && req.payloadAPI !== 'local') {
+          throw new APIError('不允许匿名创建用户账号', 400)
+        }
+      },
+    ],
     // 服务端密码强度校验（规则与前端共用 src/lib/password.ts，防止绕过前端写入弱密码）。
     // 必须抛 APIError 而非裸 Error：Payload 会把非 APIError 脱敏成「Something went wrong.」，
     // 用户看不到真实原因（这正是之前改密码报 500 时提示无法直达的根源）。

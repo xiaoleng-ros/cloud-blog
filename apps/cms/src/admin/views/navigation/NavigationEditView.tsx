@@ -7,9 +7,9 @@
  * 卡片内为导航项行编辑器（序号 + 文字 + 链接 + 上移/下移/删除），底部整宽绿色保存。
  * 数据 GET/PATCH /api/globals/navigation，底层仍是「文字 链接」逐行文本。
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
-import { fetchGlobal, updateGlobal } from '../lib/api'
+import { describeApiError, fetchGlobal, updateGlobal } from '../lib/api'
 
 /** 单条导航项 */
 interface NavItem {
@@ -51,30 +51,49 @@ function stringifyNavItems(items: NavItem[]): string {
 export const NavigationEditView = () => {
   const [items, setItems] = useState<NavItem[]>([])
   const [loading, setLoading] = useState(true)
+  // 加载失败：items 停在 []，若放行保存会 PATCH navItems:'' 把整份导航清空，必须锁死编辑/保存
+  const [loadFailed, setLoadFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  // 空列表保存需二次确认（第一次点击只置位，按钮文案转为确认态）
+  const [confirmEmpty, setConfirmEmpty] = useState(false)
+  // 用户是否已产生本地编辑：GET 回来后仅在未编辑时才回填，避免吞掉正在输入的内容
+  const dirtyRef = useRef(false)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    let alive = true
-    void (async () => {
-      try {
-        const doc = await fetchGlobal<{ navItems?: string | null }>('navigation')
-        if (alive) setItems(parseNavItems(doc?.navItems))
-      } catch {
-        if (alive) setError('导航配置加载失败，请刷新重试')
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => {
-      alive = false
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadFailed(false)
+    setError('')
+    try {
+      const doc = await fetchGlobal<{ navItems?: string | null }>('navigation')
+      if (!dirtyRef.current) setItems(parseNavItems(doc?.navItems))
+    } catch (e) {
+      setLoadFailed(true)
+      setError(describeApiError(e))
+    } finally {
+      setLoading(false)
     }
   }, [])
 
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // 「已保存 ✓」提示到点自动收起，卸载时清掉未触发的定时器
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    },
+    [],
+  )
+
   const replace = useCallback((next: NavItem[]) => {
-    setItems(next)
+    dirtyRef.current = true
+    setConfirmEmpty(false)
     setSaved(false)
+    setItems(next)
   }, [])
 
   const updateItem = (index: number, item: NavItem) =>
@@ -93,23 +112,36 @@ export const NavigationEditView = () => {
   }
 
   const save = async () => {
+    if (loading || loadFailed) return
     if (items.some((it) => it.label.trim() && !it.href.trim())) {
       setError('存在填写了文字但未填链接的导航项，请补全后再保存')
+      return
+    }
+    // 空列表覆盖既有配置：先置位确认态，用户再点一次才真正落盘
+    if (items.length === 0 && !confirmEmpty) {
+      setConfirmEmpty(true)
       return
     }
     setBusy(true)
     setError('')
     try {
-      await updateGlobal<unknown>('navigation', { navItems: stringifyNavItems(items) })
-      setItems(parseNavItems(stringifyNavItems(items)))
+      const serialized = stringifyNavItems(items)
+      await updateGlobal<unknown>('navigation', { navItems: serialized })
+      dirtyRef.current = false
+      setItems(parseNavItems(serialized))
+      setConfirmEmpty(false)
       setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2500)
     } catch (e) {
-      setError((e as Error).message)
+      setError(describeApiError(e))
     } finally {
       setBusy(false)
     }
   }
+
+  // 加载中或加载失败时整块编辑区不可用（骨架常驻，只换数据区文案）
+  const editingDisabled = loading || loadFailed
 
   return (
     <div className="settings">
@@ -121,6 +153,10 @@ export const NavigationEditView = () => {
 
           {loading ? (
             <p className="drafts__empty">加载中…</p>
+          ) : loadFailed ? (
+            <p className="drafts__empty">
+              未能读取导航配置。为避免误清空现有导航，编辑与保存已暂时禁用。
+            </p>
           ) : (
             <div className="nav-items-field__list">
               {items.length === 0 && (
@@ -181,9 +217,20 @@ export const NavigationEditView = () => {
             </div>
           )}
 
-          <button type="button" onClick={addItem} className="nav-items-field__add">
-            + 添加导航项
-          </button>
+          {loadFailed ? (
+            <button type="button" onClick={() => void load()} className="nav-items-field__add">
+              重新加载
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={addItem}
+              disabled={editingDisabled}
+              className="nav-items-field__add"
+            >
+              + 添加导航项
+            </button>
+          )}
 
           <p className="nav-items-field__hint">
             每条为一个「文字 链接」，用 ↑ ↓ 调整顺序，前台顶部导航按从上到下展示。链接支持相对路径（如{' '}
@@ -195,10 +242,10 @@ export const NavigationEditView = () => {
           <button
             type="button"
             className="settings__submit"
-            disabled={loading || busy}
+            disabled={editingDisabled || busy}
             onClick={() => void save()}
           >
-            {busy ? '保存中…' : saved ? '已保存 ✓' : '保存'}
+            {busy ? '保存中…' : saved ? '已保存 ✓' : confirmEmpty ? '确认清空并保存' : '保存'}
           </button>
         </section>
       </div>

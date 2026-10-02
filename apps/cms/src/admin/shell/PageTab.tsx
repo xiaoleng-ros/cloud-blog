@@ -12,7 +12,7 @@ import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore }
 import { createPortal } from 'react-dom'
 
 import { ShellIcon } from './icons'
-import { buildAdminHref, resolveNavEntry } from './nav-config'
+import { buildAdminHref, flatNavItems, resolveNavEntry } from './nav-config'
 import {
   activateTab,
   closeAllTabs,
@@ -36,8 +36,8 @@ export const PageTab = () => {
   const [ready, setReady] = useState(false)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const hydratedRef = useRef(false)
-  const tabRefs = new Map<string, HTMLDivElement>()
-  const listRef = useRef<HTMLDivElement | null>(null)
+  // tab 节点引用表用 ref 持有：每次 render 重建 Map 会丢掉已挂载的节点，scrollIntoView 就落空
+  const tabRefs = useRef(new Map<string, HTMLDivElement>())
 
   const { tabs, active } = useSyncExternalStore(subscribeTabs, getTabsSnapshot, getServerSnapshot)
 
@@ -46,10 +46,15 @@ export const PageTab = () => {
     if (hydratedRef.current) return
     hydratedRef.current = true
     const entry = resolveNavEntry(pathname, adminRoute)
-    hydrateTabs({
-      path: entry ? buildAdminHref(entry.path, adminRoute) : adminRoute,
-      title: entry?.label ?? '仪表盘',
-    })
+    // 白名单来自 nav-config 的 flat 项（补全为完整后台路径），过滤掉历史里已不存在的 path
+    const allowed = new Set(flatNavItems.map((item) => buildAdminHref(item.path, adminRoute)))
+    hydrateTabs(
+      {
+        path: entry ? buildAdminHref(entry.path, adminRoute) : adminRoute,
+        title: entry?.label ?? '仪表盘',
+      },
+      allowed,
+    )
     setReady(true)
   }, [adminRoute, hydratedRef, pathname])
 
@@ -64,7 +69,7 @@ export const PageTab = () => {
   // 激活标签滚入视口
   useEffect(() => {
     if (!active) return
-    tabRefs.get(active)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    tabRefs.current.get(active)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
   }, [active])
 
   // 右键菜单的收起：点别处 / Esc / 滚动都关掉
@@ -115,7 +120,7 @@ export const PageTab = () => {
 
   return (
     <>
-      <nav aria-label="已打开的页面" className="pagetab" ref={listRef}>
+      <nav aria-label="已打开的页面" className="pagetab">
         {tabs.map((tab) => {
           const entry = resolveNavEntry(tab.path, adminRoute)
           const isActive = tab.path === active
@@ -127,8 +132,8 @@ export const PageTab = () => {
                 setMenu({ path: tab.path, x: event.clientX, y: event.clientY })
               }}
               ref={(node) => {
-                if (node) tabRefs.set(tab.path, node)
-                else tabRefs.delete(tab.path)
+                if (node) tabRefs.current.set(tab.path, node)
+                else tabRefs.current.delete(tab.path)
               }}
               className={`pagetab__tab${isActive ? ' pagetab__tab--active' : ''}`}
             >

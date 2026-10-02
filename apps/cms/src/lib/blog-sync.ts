@@ -451,11 +451,34 @@ export function computeVersion(data: FetchAllResult): string {
 /**
  * 取同步数据快照：命中缓存直接返回（零查库），否则全量拉取并缓存。
  * afterChange 钩子会清除快照，使下一次调用重新查库拿到最新数据。
+ *
+ * in-flight single-flight：快照失效瞬间的并发请求（SSE 广播后前台集中重拉 / 多页面同时注入）
+ * 复用同一个查询 Promise，避免 N 份「limit:0 全表全正文」并发打库。
+ * 挂 globalThis —— 与探针缓存同理：Next 按路由分包，各实例模块变量不互通。
  */
+const INFLIGHT_STATE_KEY = '__cloudBlogSyncDataInflight'
+const inflightGlobal = globalThis as typeof globalThis & {
+  [INFLIGHT_STATE_KEY]?: Promise<SyncSnapshot> | null
+}
+
 export async function getSyncData(): Promise<SyncSnapshot> {
   const cached = getSnapshot()
   if (cached) return cached
 
+  const inflight = inflightGlobal[INFLIGHT_STATE_KEY]
+  if (inflight) return inflight
+
+  const promise = buildSyncSnapshot().finally(() => {
+    // 完成后立即清理；只清自己这一份，防止误清后来者
+    if (inflightGlobal[INFLIGHT_STATE_KEY] === promise) {
+      inflightGlobal[INFLIGHT_STATE_KEY] = null
+    }
+  })
+  inflightGlobal[INFLIGHT_STATE_KEY] = promise
+  return promise
+}
+
+async function buildSyncSnapshot(): Promise<SyncSnapshot> {
   const data = await fetchAllData()
   const version = computeVersion(data)
   const digests = computeSourceDigests(data)

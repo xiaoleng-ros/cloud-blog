@@ -282,6 +282,27 @@ const pgSsl: false | { rejectUnauthorized: boolean } | undefined = PG_IS_LOCAL
     ? { rejectUnauthorized: PG_SSL_STRICT }
     : undefined
 
+/**
+ * 数据库 fail-fast（与 PAYLOAD_SECRET / 对象存储分支同策略）：
+ * 生产必须 DATABASE_DRIVER=postgres + POSTGRES_URL。
+ * 缺配时静默回落 SQLite 会起一个**空库**：零用户状态下 Payload 内置的
+ * POST /api/users/first-register 匿名可达（overrideAccess 绕过 access.create），
+ * 任何人可直接创建管理员账号。空 SQLite + 匿名 bootstrap 是提权入口，必须拒启。
+ */
+if (IS_PRODUCTION && (DATABASE_DRIVER !== 'postgres' || !PG_URL)) {
+  const banner = '='.repeat(64)
+  console.error(`\n${banner}`)
+  console.error('[payload] 生产环境数据库配置不可用，拒绝启动')
+  console.error('[payload]   原因：DATABASE_DRIVER 不是 postgres，或 POSTGRES_URL 未配置。')
+  console.error('[payload]   后果：回落 SQLite 会是一个空库，first-register 匿名接口可直接建管理员。')
+  console.error('[payload]   修复：在部署平台配置 DATABASE_DRIVER=postgres + POSTGRES_URL。')
+  console.error(`${banner}\n`)
+  // 同 PAYLOAD_SECRET 分支：顶层 throw 在 RSC import 上下文可能被 Next 吞成静默白屏，
+  // 下一拍强制退出，保证平台记录到非零退出码与明确原因。
+  setTimeout(() => process.exit(1), 0)
+  throw new Error('[payload] 生产环境必须使用 PostgreSQL（DATABASE_DRIVER=postgres + POSTGRES_URL）')
+}
+
 const db =
   DATABASE_DRIVER === 'postgres'
     ? postgresAdapter({
@@ -309,6 +330,8 @@ const db =
         prodMigrations: migrations,
       })
     : sqliteAdapter({
+        // SQLite 分支仅为本地/开发兜底：feishu_open_id 部分唯一索引迁移只挂 PG（见 20261002 迁移），
+        // 生产已由上方 fail-fast 强制 postgres，不会再走到这里。
         client: {
           url: process.env.DATABASE_URL || 'file:./payload.db',
         },

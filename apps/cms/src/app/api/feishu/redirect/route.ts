@@ -79,12 +79,20 @@ function stateCookie(value: string, secure: boolean) {
   }
 }
 
-/** 是否应给 cookie 加 Secure（本地 http 开发需要关掉） */
+/**
+ * 是否应给 cookie 加 Secure（本地 http 开发需要关掉）。
+ * 与 callback 路由的 cookieSecure 同口径：以浏览器实际入口 origin 判断
+ * （FEISHU_REDIRECT_URI 优先，兜底 request.url）——本地经代理时 request.url
+ * 的协议/域名与浏览器地址不一致，两边判断不同会让写入与清除 cookie 的 Secure 标记错位。
+ */
 function cookieSecure(requestUrl: string): boolean {
   if (process.env.FEISHU_INSECURE_COOKIES === '1') return false
+  const redirectUri = process.env.FEISHU_REDIRECT_URI
   try {
-    return new URL(requestUrl).protocol === 'https:'
+    const origin = redirectUri ? new URL(redirectUri).origin : new URL(requestUrl).origin
+    return origin.startsWith('https://')
   } catch {
+    // 变量格式异常时按 https 处理（同 callback 的兜底倾向：宁可多 Secure 不可少）
     return true
   }
 }

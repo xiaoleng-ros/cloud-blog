@@ -113,5 +113,31 @@ export async function POST(request: Request) {
     depth: 0,
   })
 
+  // 改密即吊销其它会话（兑现 Users.ts auth 注释里「改密码能立即吊销已签发令牌」的承诺；
+  // 飞书找回免旧密分支同样走到这里）。Payload 3.88 的会话不是独立集合，而是用户文档的
+  // sessions 数组（表 users_sessions，元素 { id, createdAt, expiresAt }），
+  // 以下写法对齐 payload/dist/auth/operations/logout.js：db 层直接改写、跳过钩子、不重哈希密码。
+  // 保留调用方自己的 sid，避免刚改完密码就被自己踢下线（体验断裂）。
+  try {
+    const fresh = (await payload.db.findOne({
+      collection: 'users',
+      where: { id: { equals: user.id } },
+    })) as unknown as { sessions?: Array<{ id: string }>; updatedAt?: string | null } | null
+    if (fresh) {
+      fresh.sessions = (fresh.sessions ?? []).filter((s) => s.id === user.sid)
+      // 只动会话不 bump updatedAt（同 logout.js），避免前台同步把它误判为内容变更
+      fresh.updatedAt = null
+      await payload.db.updateOne({
+        id: user.id,
+        collection: 'users',
+        data: fresh as never,
+        returning: false,
+      })
+    }
+  } catch (err) {
+    // 吊销失败不影响改密结果，但必须留痕：其它会话仍存活
+    console.error('[change-password] 吊销其它会话失败:', err)
+  }
+
   return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } })
 }

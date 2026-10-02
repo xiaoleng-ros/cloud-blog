@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { formatDate } from 'cloud-blog/shared/post-utils'
 import { CoverUploader } from '../../components/CoverUploader'
 import { fetchSelectableCategories, fetchTerms, type TermOption } from '../lib/api'
 
@@ -49,7 +50,8 @@ export const PublishModal: React.FC<Props> = ({
   const [tagIds, setTagIds] = useState<number[]>(initial.tagIds ?? [])
   const [sticky, setSticky] = useState<number>(initial.sticky ?? 0)
   const [mood, setMood] = useState(initial.mood ?? '')
-  const [date, setDate] = useState(initial.date ?? new Date().toISOString().slice(0, 10))
+  // 默认日期用 Asia/Shanghai 现成工具，避免上海 00:00–08:00 时 toISOString 仍取 UTC 前一天
+  const [date, setDate] = useState(initial.date ?? formatDate(new Date()))
   // 下拉数据
   const [categories, setCategories] = useState<TermOption[]>([])
   const [tags, setTags] = useState<TermOption[]>([])

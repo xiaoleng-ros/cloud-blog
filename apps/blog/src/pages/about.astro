@@ -12,7 +12,7 @@ const postCount = posts.length;
 const firstYear = posts.reduce((min, post) => {
   const year = Number(toShanghaiParts(post.data.date)?.year);
   return year && year < min ? year : min;
-}, new Date().getFullYear());
+}, Number(toShanghaiParts(new Date())?.year));
 
 // 关于页正文/便签/技能：优先后台站点设置（可随时在后台修改），缺失时回退默认值
 const about = await getAboutContent();

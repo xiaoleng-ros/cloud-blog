@@ -160,6 +160,38 @@ function collectAnchors(
 }
 
 /**
+ * 防御性重叠检测：不同 blockId 的锚点区间 [tagStart, innerEnd) 若在 DOM 上互为嵌套
+ * （外壳模板把 data-sync-block 元素套进了另一个锚点元素里），从尾向前的切片替换会错切。
+ * 当前外壳没有嵌套，这里是纯防御：
+ *   - 完全包含：保留祖先、跳过后代（后代进 dropped，由调用方记为 skipped）；
+ *   - 部分重叠（无法判序，理论上不该出现）：corrupt=true，调用方整体降级不注入。
+ */
+function pruneNestedAnchors(anchors: Map<string, AnchorRegion>): { dropped: string[]; corrupt: boolean } {
+  const ids = [...anchors.keys()]
+  const dropped = new Set<string>()
+  let corrupt = false
+  for (let i = 0; i < ids.length && !corrupt; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const a = anchors.get(ids[i])!
+      const b = anchors.get(ids[j])!
+      if (a.tagStart >= b.innerEnd || b.tagStart >= a.innerEnd) continue // 不相交
+      const aInB = a.tagStart >= b.tagStart && a.innerEnd <= b.innerEnd
+      const bInA = b.tagStart >= a.tagStart && b.innerEnd <= a.innerEnd
+      if (aInB && !bInA) {
+        dropped.add(ids[i])
+      } else if (bInA && !aInB) {
+        dropped.add(ids[j])
+      } else {
+        corrupt = true
+        break
+      }
+    }
+  }
+  for (const id of dropped) anchors.delete(id)
+  return { dropped: [...dropped], corrupt }
+}
+
+/**
  * 在 DOM 里定位 <title> 元素的源字符区段，返回 [start, end) 区间；
  * 找不到或 title 不是有效 ELEMENT 节点时返回 null。
  */
@@ -253,6 +285,17 @@ export function injectSyncBlocks(
   // 3) DOM 遍历收集所有命中的锚点位置
   const anchors = new Map<string, AnchorRegion>()
   collectAnchors(doc, wantedIds, anchors, html)
+
+  // 3.5) 重叠防御：嵌套跳过后代；无法判序的部分重叠整体降级返回原文（当前外壳无嵌套，纯兜底）
+  const { corrupt } = pruneNestedAnchors(anchors)
+  if (corrupt) {
+    console.warn('[html-inject] 检测到无法判序的重叠锚点，降级为原样返回')
+    return {
+      html,
+      injected: [],
+      skipped: Object.keys(blocks).filter((id) => !NON_ELEMENT_BLOCKS.has(id)),
+    }
+  }
 
   // 4) 逐个决定注入 / 跳过，并抽出 openTag 原文片段
   type Hit = { openStart: number; innerEnd: number; openTag: string; blockHtml: string }

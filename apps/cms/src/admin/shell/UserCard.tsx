@@ -29,11 +29,17 @@ export const UserCard = () => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeMenu()
     }
+    // 菜单坐标是一次性快照，滚动/改变视口后就对不准触发按钮了：与 PageTab 一致，动一下就关
+    const onViewportChange = () => closeMenu()
     document.addEventListener('click', onDocumentClick)
     document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', onViewportChange)
+    window.addEventListener('scroll', onViewportChange, true)
     return () => {
       document.removeEventListener('click', onDocumentClick)
       document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', onViewportChange)
+      window.removeEventListener('scroll', onViewportChange, true)
     }
   }, [closeMenu, menuPos])
 
@@ -44,7 +50,9 @@ export const UserCard = () => {
   const logoutHref = `${adminRoute}${config.admin.routes.logout}`
   const displayName = user.name || user.feishu?.name || user.email || '管理员'
   const initial = displayName.slice(0, 1).toUpperCase()
-  const avatar = user.feishu?.avatar
+  // 飞书资料头像 URL 直接进 <img src>：限制为 http(s)，异常协议回落首字头像
+  const rawAvatar = user.feishu?.avatar
+  const avatar = typeof rawAvatar === 'string' && /^https?:\/\//i.test(rawAvatar) ? rawAvatar : ''
 
   const toggle = () => {
     if (menuPos) {

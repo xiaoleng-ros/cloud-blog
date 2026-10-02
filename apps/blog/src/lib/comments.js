@@ -1,5 +1,7 @@
 // Shared comment UI + Twikoo backend client (no Twikoo front-end bundle).
 // Used by the bottom comment box and selection quote flow.
+import { isSafeHref } from 'cloud-blog/shared/html-safety';
+import { toShanghaiParts } from 'cloud-blog/shared/post-utils';
 
 const esc = (s) =>
   String(s == null ? '' : s).replace(/[&<>"']/g, (m) =>
@@ -28,13 +30,13 @@ const allowedTags = new Set([
   'UL',
 ]);
 
-const safeUrl = (value, protocols = ['http:', 'https:']) => {
-  try {
-    const url = new URL(value, location.origin);
-    return protocols.includes(url.protocol);
-  } catch {
-    return false;
-  }
+// 协议/形态校验直接复用 shared 的 isSafeHref（拒绝 javascript:/data:、控制字符、反斜杠伪装、
+// 协议相对 //host——与红线 shared/html-safety.ts 一致），再按属性语义限定允许的方案；
+// 相对路径只放行单斜杠/普通相对形态（// 已被 isSafeHref 挡掉）
+const safeUrl = (value, protocols = ['http', 'https']) => {
+  if (!isSafeHref(value)) return false;
+  const scheme = String(value).trim().match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
+  return !scheme || protocols.includes(scheme[1].toLowerCase());
 };
 
 const sanitizeComment = (html) => {
@@ -64,7 +66,7 @@ const sanitizeComment = (html) => {
         if (
           name.startsWith('on') ||
           (!isLink && !isImage && !isCode) ||
-          (name === 'href' && !safeUrl(value, ['http:', 'https:', 'mailto:'])) ||
+          (name === 'href' && !safeUrl(value, ['http', 'https', 'mailto'])) ||
           (name === 'src' && !safeUrl(value))
         ) {
           child.removeAttribute(attr.name);
@@ -94,11 +96,9 @@ const rel = (ts) => {
   if (d < 3600) return `${Math.floor(d / 60)} 分钟前`;
   if (d < 86400) return `${Math.floor(d / 3600)} 小时前`;
   if (d < 2592000) return `${Math.floor(d / 86400)} 天前`;
-  const dt = new Date(ts);
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, '0');
-  const day = String(dt.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  // 全仓定格 Asia/Shanghai（与 formatDate/归档口径一致），不受访客本地时区影响
+  const parts = toShanghaiParts(new Date(ts));
+  return parts ? `${parts.year}-${parts.month}-${parts.day}` : '';
 };
 
 export function callTwikoo(envId, event, params = {}) {

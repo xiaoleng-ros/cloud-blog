@@ -19,9 +19,14 @@ type State = {
 
 const STORAGE_KEY = 'yx-admin-tabs'
 
+/** 持久化超过 7 天整体作废：导航结构可能已变，旧标签不应无限期复活 */
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
 const EMPTY: State = { tabs: [], active: '' }
 
 let state: State = EMPTY
+// 已知合法 path 集合（由 PageTab 依 nav-config 注入）；为空时不做 path 过滤
+let allowedPaths: Set<string> | null = null
 const listeners = new Set<() => void>()
 
 const emit = () => {
@@ -31,7 +36,14 @@ const emit = () => {
 const persist = () => {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs: state.tabs, active: state.active }))
+    const tabs = allowedPaths ? state.tabs.filter((tab) => allowedPaths!.has(tab.path)) : state.tabs
+    const active = allowedPaths && tabs.length > 0 && tabs.some((tab) => tab.path === state.active)
+      ? state.active
+      : tabs[0]?.path ?? ''
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ tabs, active, savedAt: Date.now() }),
+    )
   } catch {
     // 隐私模式/配额写不进去不影响功能，只是刷新会丢标签
   }
@@ -53,17 +65,24 @@ export const getTabsSnapshot = (): State => state
 export const getServerSnapshot = (): State => EMPTY
 
 /** 挂载时读回本地标签；空则用初始页兜底 */
-export const hydrateTabs = (fallback: ShellTab) => {
+export const hydrateTabs = (fallback: ShellTab, allowed?: Set<string>) => {
   if (typeof window === 'undefined') return
+  allowedPaths = allowed ?? null
   let parsed: State | null = null
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      const data = JSON.parse(raw) as Partial<State>
-      if (Array.isArray(data.tabs) && data.tabs.length > 0) {
+      const data = JSON.parse(raw) as Partial<State> & { savedAt?: number }
+      const fresh = typeof data.savedAt === 'number' && Date.now() - data.savedAt <= MAX_AGE_MS
+      if (fresh && Array.isArray(data.tabs) && data.tabs.length > 0) {
         parsed = {
           tabs: data.tabs
-            .filter((tab): tab is ShellTab => typeof tab?.path === 'string' && typeof tab?.title === 'string')
+            .filter(
+              (tab): tab is ShellTab =>
+                typeof tab?.path === 'string' &&
+                typeof tab?.title === 'string' &&
+                (!allowedPaths || allowedPaths.has(tab.path)),
+            )
             .slice(0, 20),
           active: typeof data.active === 'string' ? data.active : '',
         }
@@ -75,8 +94,8 @@ export const hydrateTabs = (fallback: ShellTab) => {
   }
 
   if (parsed) {
-    // 存过的 active 可能已不在 tabs 里（旧版本数据结构），落到第一个标签
-    if (!parsed.tabs.some((tab) => tab.path === parsed.active)) parsed.active = parsed.tabs[0].path
+    // 存过的 active 可能已不在 tabs 里（旧版本数据结构 / 被 path 白名单过滤掉），落到第一个标签
+    if (!parsed.tabs.some((tab) => tab.path === parsed!.active)) parsed.active = parsed.tabs[0].path
     commit(parsed)
   } else {
     commit({ tabs: [fallback], active: fallback.path })

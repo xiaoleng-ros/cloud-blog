@@ -22,6 +22,30 @@ import { getSyncProbe } from '../../../lib/blog-sync'
  */
 export const dynamic = 'force-dynamic'
 
+/**
+ * path 白名单：区块缓存键直接取自 ?path=，任意值都会进 100 条 LRU ——
+ * 垃圾 path 能驱逐真实页面缓存并逐个触发全量渲染（DoS 面）。
+ * 规则按博客真实路由形态推导（与 blog-render 的区块组装分支一一对应）：
+ * 静态页是固定集合；文章/分类/标签末段是动态的（数字 ID / 编码词条），逐文件枚举不现实，用模式匹配。
+ */
+const STATIC_SYNC_PATHS = new Set(['/', '/notes/', '/archive/', '/about/'])
+const DYNAMIC_SYNC_PATH_PATTERNS = [
+  /^\/posts\/[^/]+\/[^/]+\/$/, // 文章详情：/posts/{分类名}/{数字ID}/
+  /^\/categories\/[^/]+\/$/,
+  /^\/tags\/[^/]+\/$/,
+]
+
+function isSyncablePath(rawPath: string): boolean {
+  if (!rawPath.startsWith('/') || rawPath.length > 200) return false
+  if (rawPath.includes('\0') || rawPath.includes('\\')) return false
+  const segments = rawPath.split('/')
+  if (segments.some((s) => s === '.' || s === '..')) return false
+  // 与 renderBlocksForPathname 的缓存键归一化一致：补尾斜杠再比对
+  const path = rawPath.endsWith('/') ? rawPath : `${rawPath}/`
+  if (STATIC_SYNC_PATHS.has(path)) return true
+  return DYNAMIC_SYNC_PATH_PATTERNS.some((re) => re.test(path))
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url)
@@ -42,6 +66,16 @@ export async function GET(request: Request) {
     }
 
     const pathname = url.searchParams.get('path') ?? '/'
+
+    // 非白名单 path：返回空区块、绝不进区块缓存（探测 ?version/?digest 分支在上面，语义不变；
+    // path 缺省走 '/' 同样不变）
+    if (!isSyncablePath(pathname)) {
+      const probe = await getSyncProbe()
+      return NextResponse.json(
+        { version: probe.version, title: null, blocks: {} },
+        { headers: { 'Cache-Control': 'no-store, max-age=0' } },
+      )
+    }
 
     // 渲染当前页面所需的最新区块
     const result = await renderBlocksForPathname(pathname)

@@ -8,9 +8,9 @@
  *
  * - 数据不走 Payload 表单上下文：GET/PATCH /api/site-settings 自管理，字段全为字符串
  * - 社交链接复用 SocialLinksField 的解析/序列化，保持「平台 链接」文本格式不变
- * - 保存一次写全部字段（与内置视图行为一致），成功后短暂提示
+ * - 保存只发「与加载基线有差异的字段」，落盘前重读 updatedAt 做冲突检测（root 替换后无 Payload 文档锁）
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import {
   parseSocials,
@@ -18,7 +18,7 @@ import {
   stringifySocials,
   type Platform,
 } from '../../components/SocialLinksField'
-import { fetchGlobal, updateGlobal } from '../lib/api'
+import { describeApiError, fetchGlobal, updateGlobal } from '../lib/api'
 
 /** 字段定义：text 单行、textarea 多行；span=2 占满整行 */
 interface FieldDef {
@@ -173,38 +173,67 @@ type Values = Record<string, string>
 
 const emptyValues = (): Values => ({})
 
+/** 全部字段名（打平各分区），用于「脏字段集合」与冲突比对的基准 */
+const ALL_FIELD_NAMES: string[] = SECTIONS.flatMap((s) => s.fields.map((f) => f.name))
+
+/** 带 updatedAt 的全局文档切片（updatedAt 用于保存前冲突检测） */
+type GlobalDoc = Record<string, unknown> & { updatedAt?: string }
+
+/** 从文档抽取本视图关心的字段值（缺省补空串） */
+const pickValues = (doc: GlobalDoc | null | undefined): Values => {
+  const next: Values = {}
+  for (const name of ALL_FIELD_NAMES) {
+    const v = doc?.[name]
+    next[name] = typeof v === 'string' ? v : ''
+  }
+  return next
+}
+
 export const SettingsEditView = () => {
   const [values, setValues] = useState<Values>(emptyValues)
+  // 加载基线：与 values 做 diff 得到脏字段，PATCH 只发这部分的改动
+  const [baseline, setBaseline] = useState<Values>(emptyValues)
   const [loading, setLoading] = useState(true)
+  // 加载失败 / 冲突（他人已改）：锁存并提示重载，禁止落盘（root 替换后 Payload 文档锁失效，需自行防覆盖）
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [conflict, setConflict] = useState(false)
   const [active, setActive] = useState(SECTIONS[0].key)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const loadedUpdatedAtRef = useRef('')
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    let alive = true
-    void (async () => {
-      try {
-        const doc = await fetchGlobal<Record<string, unknown>>('site-settings')
-        if (!alive) return
-        const next: Values = {}
-        for (const s of SECTIONS) {
-          for (const f of s.fields) {
-            const v = doc?.[f.name]
-            next[f.name] = typeof v === 'string' ? v : ''
-          }
-        }
-        setValues(next)
-      } catch {
-        if (alive) setError('站点设置加载失败，请刷新重试')
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => {
-      alive = false
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadFailed(false)
+    setConflict(false)
+    setError('')
+    try {
+      const doc = await fetchGlobal<GlobalDoc>('site-settings')
+      const next = pickValues(doc)
+      setValues(next)
+      setBaseline(next)
+      loadedUpdatedAtRef.current = typeof doc?.updatedAt === 'string' ? doc.updatedAt : ''
+    } catch (e) {
+      setLoadFailed(true)
+      setError(describeApiError(e))
+    } finally {
+      setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // 「已保存 ✓」提示到点自动收起，卸载时清掉未触发的定时器
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    },
+    [],
+  )
 
   const setValue = useCallback((name: string, v: string) => {
     setValues((prev) => ({ ...prev, [name]: v }))
@@ -213,20 +242,48 @@ export const SettingsEditView = () => {
 
   const section = useMemo(() => SECTIONS.find((s) => s.key === active) ?? SECTIONS[0], [active])
 
+  // 与基线的差异字段：无差异则不发空 PATCH
+  const dirty = useMemo(() => {
+    const out: Values = {}
+    for (const name of ALL_FIELD_NAMES) {
+      if ((values[name] ?? '') !== (baseline[name] ?? '')) out[name] = values[name] ?? ''
+    }
+    return out
+  }, [values, baseline])
+
+  const hasDirty = Object.keys(dirty).length > 0
+
   const save = async () => {
     if (!values.siteName?.trim()) {
       setActive('site')
       setError('站点名称不能为空')
       return
     }
+    if (!hasDirty) return
     setBusy(true)
     setError('')
     try {
-      await updateGlobal<unknown>('site-settings', values)
+      // 落盘前重读全局文档：updatedAt 变化说明他人/他处已改，拒绝覆盖并提示重载
+      const latest = await fetchGlobal<GlobalDoc>('site-settings')
+      const latestUpdatedAt = typeof latest?.updatedAt === 'string' ? latest.updatedAt : ''
+      if (
+        loadedUpdatedAtRef.current &&
+        latestUpdatedAt &&
+        latestUpdatedAt !== loadedUpdatedAtRef.current
+      ) {
+        setConflict(true)
+        setError('站点设置已被他人或他处修改，为避免覆盖你的改动未保存，请重载后再编辑')
+        return
+      }
+      const patched = await updateGlobal<GlobalDoc>('site-settings', dirty)
+      setBaseline((prev) => ({ ...prev, ...dirty }))
+      loadedUpdatedAtRef.current =
+        typeof patched?.updatedAt === 'string' ? patched.updatedAt : loadedUpdatedAtRef.current
       setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2500)
     } catch (e) {
-      setError((e as Error).message)
+      setError(describeApiError(e))
     } finally {
       setBusy(false)
     }
@@ -301,14 +358,25 @@ export const SettingsEditView = () => {
 
           {error && <p className="settings__error">{error}</p>}
 
-          <button
-            type="button"
-            className="settings__submit"
-            disabled={loading || busy}
-            onClick={() => void save()}
-          >
-            {busy ? '保存中…' : saved ? '已保存 ✓' : '保存'}
-          </button>
+          {loadFailed || conflict ? (
+            <button
+              type="button"
+              className="settings__submit"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              重新加载
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="settings__submit"
+              disabled={loading || busy || !hasDirty}
+              onClick={() => void save()}
+            >
+              {busy ? '保存中…' : saved ? '已保存 ✓' : '保存'}
+            </button>
+          )}
         </section>
       </div>
     </div>

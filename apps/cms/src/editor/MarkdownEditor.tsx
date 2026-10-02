@@ -162,8 +162,11 @@ export const MarkdownEditor: React.FC<{
         // 分屏预览延迟按正文长度分级，减少长文的渲染抖动（>5000 字 → 500ms）
         delay: resolvePreviewDelay(initialValue.length),
         markdown: {
-          // 关闭 XSS 过滤（信任作者内容，同时保留前台 remark 的处理链）
-          sanitize: false,
+          // 开启 Vditor 内置 XSS 过滤（Lute SanCheckXFilter：去 script/iframe/on*/javascript:，
+          // 保留常规标签与内联 style，短代码预览不受影响）。
+          // 此前 sanitize:false 让作者贴入的恶意 HTML 能在后台 DOM 里执行（存储型自 XSS）；
+          // 前台链路（remark 白名单净化）本来就有自己的处理，不受这里影响。
+          sanitize: true,
           autoSpace: false,
           callout: false,
           toc: false,

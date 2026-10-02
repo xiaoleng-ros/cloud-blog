@@ -35,6 +35,7 @@ apps/cms/public/*
 .vscode/
 .idea/
 .workbuddy/
+.trae/
 
 # Logs and OS caches
 npm-debug.log*
