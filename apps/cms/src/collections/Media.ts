@@ -7,8 +7,10 @@ import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES } from '../lib/media-upload'
  * 图片 / 多媒体集合：文章封面、正文图片、头像等上传文件都会存到这里。
  *
  * 存储后端由 payload.config.ts 里的 s3Storage 插件接管：
- *   - 生产（EdgeOne）：走 Supabase Storage（S3 兼容接口），文件不进容器磁盘
- *   - 本地（未配 S3_* 环境变量）：自动降级为本地 staticDir='media'
+ *   - 配齐 S3 凭据（线上与本地同一条路径）：文件进 Supabase Storage，落库的 url
+ *     即公开地址 …/storage/v1/object/public/<bucket>/<filename>，浏览器直连 Storage，
+ *     不再经过 CMS 的 /api/media/file 代理
+ *   - 未配 S3 凭据时：自动降级为本地 staticDir='media'
  *
  * access.read 保持公开，保证图片 URL 可直接被浏览器加载，不经过 Payload 鉴权。
  *

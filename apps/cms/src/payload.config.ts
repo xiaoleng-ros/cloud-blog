@@ -30,27 +30,58 @@ const dirname = path.dirname(filename)
 
 /**
  * 对象存储（图片上传）：
- *  - 只要配齐 SUPABASE_SERVICE_ROLE_KEY + SUPABASE_BUCKET 就启用 S3 adapter
- *    走 Supabase Storage（S3 兼容接口），文件不再落容器本地磁盘
+ *  - 配齐 SUPABASE_S3_ACCESS_KEY_ID + SUPABASE_S3_SECRET_ACCESS_KEY + SUPABASE_BUCKET 时启用 S3 adapter
+ *    文件直接进 Supabase Storage，不落容器磁盘
  *  - 未配置时降级为本地磁盘存储（开发环境默认）
  *
  * 生产环境（EdgeOne）必须配置以下环境变量：
- *   SUPABASE_SERVICE_ROLE_KEY  —— Supabase Dashboard → Project Settings → API → service_role key
- *                                  （注意是 service_role，不是 anon key；service_role 绕过 RLS 直接读写）
- *   SUPABASE_BUCKET            —— Storage 里创建的 bucket 名（建议 "blog-media"）
- *   SUPABASE_STORAGE_ENDPOINT  —— 一般不用改，默认从 POSTGRES_URL 里的 project ref 拼
- *                                  例：https://<ref>.supabase.co/storage/v1
+ *   SUPABASE_S3_ACCESS_KEY_ID / SUPABASE_S3_SECRET_ACCESS_KEY
+ *                                —— Supabase Dashboard → Project Settings → Storage →
+ *                                   S3 Access Keys（或 Storage 页的 Connect to S3）生成的一对密钥。
+ *                                   注意不是 service_role JWT：S3 协议只认这对接密钥。
+ *   SUPABASE_BUCKET             —— Storage 里创建的 bucket 名（当前为 "blog-media"，公开读）
+ *   SUPABASE_PROJECT_REF        —— 可选。缺省时从 POSTGRES_URL 主机名里的 ref 推导；
+ *                                   本地库指向 127.0.0.1 时推不出来，必须显式配或配下面两项
+ *   SUPABASE_S3_ENDPOINT        —— 可选，S3 协议 API 端点，默认
+ *                                   https://<ref>.supabase.co/storage/v1/s3
+ *                                   少了 /s3 这段会命中 Kong 的 404 Route not found
+ *   SUPABASE_PUBLIC_BASE        —— 可选，公开读地址前缀，默认
+ *                                   https://<ref>.supabase.co/storage/v1/object/public
  */
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_S3_ACCESS_KEY_ID = process.env.SUPABASE_S3_ACCESS_KEY_ID
+const SUPABASE_S3_SECRET_ACCESS_KEY = process.env.SUPABASE_S3_SECRET_ACCESS_KEY
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET
-const SUPABASE_STORAGE_ENDPOINT =
-  process.env.SUPABASE_STORAGE_ENDPOINT ||
-  (process.env.POSTGRES_URL?.includes('.supabase.com')
-    ? `https://${new URL(process.env.POSTGRES_URL).hostname.split('.')[0]}.supabase.co/storage/v1`
+const SUPABASE_PROJECT_REF =
+  process.env.SUPABASE_PROJECT_REF ||
+  (process.env.POSTGRES_URL?.includes('.supabase.com') || process.env.POSTGRES_URL?.includes('.supabase.co')
+    ? new URL(process.env.POSTGRES_URL).hostname.split('.')[0]
     : undefined)
 
+const SUPABASE_HOST = SUPABASE_PROJECT_REF ? `${SUPABASE_PROJECT_REF}.supabase.co` : undefined
+const SUPABASE_S3_ENDPOINT = process.env.SUPABASE_S3_ENDPOINT || (SUPABASE_HOST ? `https://${SUPABASE_HOST}/storage/v1/s3` : undefined)
+const SUPABASE_PUBLIC_BASE = process.env.SUPABASE_PUBLIC_BASE || (SUPABASE_HOST ? `https://${SUPABASE_HOST}/storage/v1/object/public` : undefined)
+
 /** S3/Supabase 对象存储凭据是否配齐（缺任何一项都不注入 s3Storage 插件） */
-const HAS_S3_CONFIG = Boolean(SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SUPABASE_STORAGE_ENDPOINT)
+const HAS_S3_CONFIG = Boolean(
+  SUPABASE_S3_ACCESS_KEY_ID && SUPABASE_S3_SECRET_ACCESS_KEY && SUPABASE_BUCKET && SUPABASE_S3_ENDPOINT && SUPABASE_PUBLIC_BASE,
+)
+
+/**
+ * 图片对浏览器暴露的公开地址。
+ *
+ * 为什么不能省事用插件自带的 generateURL：它是 `${config.endpoint}/${bucket}/${key}` 的字符串硬拼，
+ * 而 endpoint 同时是 S3 API 端点（…/storage/v1/s3）。该路径不接受匿名 GET（实测 403 Missing
+ * signature），拼出来的地址打不开；公开读只有 …/storage/v1/object/public/<bucket>/<key> 一种形状。
+ * 配合 disablePayloadAccessControl 使用，浏览器直连 Storage，不再由 CMS 进程拉流转发。
+ */
+const generateFileURL = ({ filename, prefix }: { filename: string; prefix?: string }) => {
+  const key = prefix ? `${prefix.replace(/\/+$/, '')}/${filename}` : filename
+  const encoded = key
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+  return `${SUPABASE_PUBLIC_BASE}/${SUPABASE_BUCKET}/${encoded}`
+}
 
 /**
  * 组装插件列表：仅当 S3 凭据齐全时注入 s3Storage。
@@ -60,7 +91,7 @@ const HAS_S3_CONFIG = Boolean(SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SU
  * 找不到 `@payloadcms/storage-s3/client#S3ClientUploadHandler`，Payload 后台会「静默空白」：
  * 页面 200、CSS/JS 全部加载成功、控制台零报错，但 body 内没有任何元素和文字。
  * 因此改动这里的环境变量判断后，必须带同样的环境变量跑一次 `npm run generate:importmap`
- * 并提交 importMap.js（当前仓库已提交含该条目的版本，激活/未激活都不会再空白）。
+ * 并提交 importMap.js。
  *
  * 类型断言说明：s3Storage(...) 通过 declare module 'payload' 扩展了 ConfigureAppOptions，
  * 本地 tsc 能识别，但 EdgeOne 编译链可能不加载该 augmentation，会误报
@@ -70,24 +101,32 @@ const HAS_S3_CONFIG = Boolean(SUPABASE_SERVICE_ROLE_KEY && SUPABASE_BUCKET && SU
 const plugins: Plugin[] =
   HAS_S3_CONFIG
     ? [
-        // HAS_S3_CONFIG 已保证三项 env 均非空，但 TS 无法据此收窄 process.env 类型，
+        // HAS_S3_CONFIG 已保证各 env 均非空，但 TS 无法据此收窄 process.env 类型，
         // 故此处用非空断言。
         s3Storage({
-          collections: { media: true },
+          collections: {
+            media: {
+              // url 由下面的 generateFileURL 直接给出 Storage 公开地址，浏览器不再走 CMS 拉流。
+              // （实测：dev 下 /api/media/file/<filename> 仍会由 Payload 的 staticDir 磁盘服务兜底命中，
+              //  只要 media/ 里有旧文件就还能取到 —— 迁完旧图就该清那个目录，别依赖它）
+              disablePayloadAccessControl: true,
+              generateFileURL,
+            },
+          },
           bucket: SUPABASE_BUCKET!,
-          acl: 'public-read', // 图片公开可读，浏览器可直接加载，不走 signed URL
+          // 不发 x-amz-acl：对象可读性由 bucket 的公开设置决定（blog-media 已是公开读桶），
+          // 逐对象 ACL 不是 Supabase S3 层的写法，带上只可能添一次失败点
           config: {
-            endpoint: SUPABASE_STORAGE_ENDPOINT!,
+            endpoint: SUPABASE_S3_ENDPOINT!,
             region: 'us-east-1', // Supabase 的 S3 兼容接口固定这个 region
             credentials: {
-              // AWS SDK 里 accessKeyId = "supabase-demo" 是占位符，secretAccessKey 才是真 key
-              accessKeyId: 'supabase-demo',
-              secretAccessKey: SUPABASE_SERVICE_ROLE_KEY!,
+              accessKeyId: SUPABASE_S3_ACCESS_KEY_ID!,
+              secretAccessKey: SUPABASE_S3_SECRET_ACCESS_KEY!,
             },
-            // 注：Supabase Storage 兼容模式使用 v4 签名，AWS SDK 默认即 v4，无需显式配置
-            // forcePathStyle: false → bucket 走虚拟主机样式（<bucket>.<endpoint>），
-            // Supabase Storage 兼容模式要求这个
-            forcePathStyle: false,
+            // Supabase 的 S3 兼容层用 v4 签名，AWS SDK 默认即 v4，无需显式配置。
+            // forcePathStyle 必须为 true：虚拟主机风格要 <bucket>.<ref>.supabase.co，
+            // 这个域名根本不解析（实测 Could not resolve host），只能走 path 风格。
+            forcePathStyle: true,
           },
           // 禁用本地磁盘副本，避免每次上传都落一份到容器临时目录
           disableLocalStorage: true,
@@ -189,14 +228,14 @@ if (IS_PRODUCTION && !HAS_S3_CONFIG) {
   const banner = '='.repeat(64)
   console.error(`\n${banner}`)
   console.error('[payload] 生产环境未配置对象存储，拒绝启动')
-  console.error('[payload]   原因：SUPABASE_SERVICE_ROLE_KEY / SUPABASE_BUCKET / SUPABASE_STORAGE_ENDPOINT 未配齐。')
+  console.error('[payload]   原因：SUPABASE_S3_ACCESS_KEY_ID / SUPABASE_S3_SECRET_ACCESS_KEY / SUPABASE_BUCKET 未配齐。')
   console.error('[payload]   后果：图片上传会静默落容器临时盘，实例回收即全部丢失。')
   console.error('[payload]   修复：在部署平台配置上述变量（endpoint 缺省时可从 POSTGRES_URL 的项目 ref 推导）。')
   console.error(`${banner}\n`)
   // 同 PAYLOAD_SECRET 分支：顶层 throw 在 RSC import 上下文可能被 Next 吞成静默白屏，
   // 下一拍强制退出，保证平台记录到非零退出码与明确原因。
   setTimeout(() => process.exit(1), 0)
-  throw new Error('[payload] 生产环境必须配置对象存储（SUPABASE_SERVICE_ROLE_KEY + SUPABASE_BUCKET）')
+  throw new Error('[payload] 生产环境必须配置对象存储（SUPABASE_S3_ACCESS_KEY_ID + SUPABASE_S3_SECRET_ACCESS_KEY + SUPABASE_BUCKET）')
 }
 
 /**
