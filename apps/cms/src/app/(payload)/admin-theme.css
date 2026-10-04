@@ -130,7 +130,8 @@ body {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  padding: var(--card-pad);
+  /* 上下比常规卡片更矮一档：标题行只做「页签」，不抢内容卡的高度 */
+  padding: 0.65rem var(--card-pad-x);
   background: var(--theme-elevation-0);
   border: var(--card-line);
   border-radius: var(--card-radius);
@@ -142,10 +143,11 @@ body {
 
 .page-header__title {
   margin: 0;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  line-height: 1.25;
+  /* 行高锁定 30px（= 原 24px×1.25）：只缩字不缩卡，页头卡高度维持上一轮的收窄结果 */
+  line-height: 30px;
   color: var(--theme-elevation-900);
 }
 
@@ -1025,6 +1027,163 @@ img.gravatar-account {
   }
 }
 
+/* ---------- 11.5 关于页行编辑器（便签 / 技能环） ---------- */
+/* 复用 .social-links-field 的行卡视觉，这里只补三样：行内列宽、色板、批量切换 */
+/* 便签/技能行去掉外层行卡描边与底色：输入框本身就是那个框，不再套两层 */
+.about-row {
+  flex-wrap: nowrap;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+/* 行内单元格：列标签在上、输入框在下，颜色点/删除按钮与输入框底对齐 */
+.about-row__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.about-row__cell--grow {
+  /* 定宽不撑满：留出右侧色点/删除的空间，面板再宽文本框也不跟着变宽 */
+  flex: 0 1 11rem;
+  min-width: 6rem;
+}
+
+.about-row__cell--num {
+  flex: 0 0 4.8rem;
+}
+
+/* 页脚行的链接列吃掉剩余宽度：URL 比名称长得多，不能和名称同宽 */
+.about-row__cell--url {
+  flex: 1 1 16rem;
+  min-width: 8rem;
+}
+
+.about-row__cell--end {
+  align-self: flex-end;
+}
+
+.about-row__cap {
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--theme-elevation-400);
+}
+
+.about-row .social-links-field__remove {
+  align-self: flex-end;
+}
+
+.about-row__num {
+  /* 宽度交给外层 --num 单元格；这里不能再写 flex-basis，
+     否则在纵向 flex 单元格里 basis 会变成高度，把数值框撑高 */
+  width: 100%;
+  text-align: center;
+}
+
+/* 色板：一行色点，选中项描边；最后一个「自定义」里藏着原生取色器 */
+.about-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.about-color__dot {
+  position: relative;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border: 1px solid var(--theme-elevation-300);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.about-color__dot:hover {
+  transform: scale(1.12);
+}
+
+.about-color__dot--on {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.about-color__dot--custom {
+  /* 无自定义色时用彩虹渐变示意「任选」 */
+  background: conic-gradient(#ff8a8a, #ffd97a, #9be89b, #7fd8e8, #97a8f5, #e8a4e0, #ff8a8a);
+  overflow: hidden;
+}
+
+.about-color__dot--custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* 便签/技能环整块限宽到同一列：「批量文本」胶囊右沿对齐保存钮 */
+.about-list-field {
+  max-width: 596px;
+}
+
+/* 行编辑器头部行：字段名 + 说明文字居左上下排，「批量文本」切换胶囊按钮居右 */
+.about-list-field__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.about-list-field__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.about-list-field__toggle {
+  flex-shrink: 0;
+  padding: 0.22rem 0.75rem;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 999px;
+  background: var(--theme-elevation-100);
+  color: var(--accent-text);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.about-list-field__toggle:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.about-list-field__batch {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: var(--card-radius, 12px);
+  background: var(--theme-input-bg);
+  color: inherit;
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.about-list-field__batch:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
 /* ---------- 12. 分类速选字段（PostCategoryField） ---------- */
 .post-category-field {
   display: inline-flex !important;
@@ -1244,6 +1403,8 @@ img.gravatar-account {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* 收进全站统一列：右沿与保存钮 596 对齐 */
+  max-width: 596px;
 }
 
 .account-view__avatar {
@@ -1279,6 +1440,8 @@ img.gravatar-account {
 }
 
 .account-view__hint {
+  /* 密码要求说明同样落在 596 列内 */
+  max-width: 596px;
   margin: 0 0 12px;
   font-size: 13px;
   color: var(--theme-elevation-400);
@@ -1510,81 +1673,11 @@ img.gravatar-account {
   cursor: not-allowed;
 }
 
-/* ---------- 17. 封面图上传器（CoverUploader） ---------- */
-/* 同时服务两处：Payload 原生 collection 编辑页的 cover 字段、自定义写作页发布弹窗 */
+/* ---------- 17. 图片地址上传器（CoverUploader：正文封面 / 发布弹窗 / 站点图标共用） ---------- */
 .cover-uploader {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.cover-uploader__input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 8px 12px;
-  font-size: 14px;
-  border: 1px solid var(--theme-elevation-250);
-  border-radius: 6px;
-  background: var(--theme-elevation-0);
-  color: var(--theme-text);
-  outline: none;
-}
-
-.cover-uploader__input:focus {
-  border-color: var(--accent);
-  box-shadow: var(--ring);
-}
-
-.cover-uploader__input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.cover-uploader__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.cover-uploader__btn {
-  padding: 6px 14px;
-  font-size: 13px;
-  border-radius: 6px;
-  border: 1px solid var(--theme-elevation-250);
-  background: var(--theme-elevation-0);
-  color: var(--theme-elevation-700);
-  cursor: pointer;
-  transition: background 150ms, border-color 150ms;
-}
-
-.cover-uploader__btn:hover:not(:disabled) {
-  background: var(--theme-elevation-50);
-  border-color: var(--theme-elevation-350);
-}
-
-.cover-uploader__btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.cover-uploader__clear {
-  padding: 6px 12px;
-  font-size: 13px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--danger);
-  cursor: pointer;
-}
-
-.cover-uploader__clear:hover:not(:disabled) {
-  border-color: #fecaca;
-  background: var(--danger-soft);
-}
-
-.cover-uploader__clear:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* 封面缩略预览：仅图片加载成功时渲染，限制高度避免撑爆表单 */
@@ -1598,6 +1691,16 @@ img.gravatar-account {
   background: var(--theme-elevation-50);
 }
 
+/* 小图档预览（站点设置「网站配置」的 favicon）：收成一格，别按封面铺满整行 */
+.cover-uploader--icon .cover-uploader__preview {
+  width: 64px;
+  height: 64px;
+  max-height: none;
+  object-fit: contain;
+  padding: 8px;
+  background: var(--theme-elevation-0);
+}
+
 .cover-uploader__hint {
   margin: 0;
   font-size: 13px;
@@ -1609,6 +1712,250 @@ img.gravatar-account {
   margin: 0;
   font-size: 13px;
   color: var(--danger);
+}
+
+/* 统一样式：图片小图标 + 地址输入 + 「选择」上传按钮合并为一个描边框（所有图片地址字段共用） */
+.cover-uploader__combo {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 10px;
+  background: var(--theme-elevation-0);
+  overflow: hidden;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.cover-uploader__combo:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.cover-uploader__combo-glyph {
+  flex: none;
+  align-self: center;
+  margin-left: 12px;
+  color: var(--theme-elevation-400);
+}
+
+.cover-uploader__combo-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 9px 10px;
+  font-size: 14px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--theme-text);
+}
+
+/* 内层 input 必须压过 `.settings__field input` 的通用描边（0,1,1），否则框中框 */
+.settings__field .cover-uploader__combo-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 9px 10px;
+  font-size: 14px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--theme-text);
+}
+
+.cover-uploader__combo-input::placeholder {
+  color: var(--theme-elevation-400);
+}
+
+.cover-uploader__combo-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cover-uploader__combo-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 18px;
+  font-size: 14px;
+  border: none;
+  border-left: 1px solid var(--theme-elevation-200);
+  background: transparent;
+  color: var(--theme-elevation-700);
+  cursor: pointer;
+  transition: background 150ms;
+}
+
+.cover-uploader__combo-btn:hover:not(:disabled) {
+  background: var(--theme-elevation-50);
+}
+
+.cover-uploader__combo-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------- 17b. 自定义日期选择器（站点设置「网站创建时间」） ---------- */
+.date-field {
+  position: relative;
+}
+
+.date-field__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 14.5px;
+  font-family: inherit;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 8px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-text);
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.date-field__trigger--open {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.date-field__placeholder {
+  color: var(--theme-elevation-400);
+}
+
+.date-field__trigger svg {
+  flex: none;
+  color: var(--theme-elevation-500);
+}
+
+/* 弹层：fixed 定位由组件算好，脱离卡内滚动容器 */
+.date-picker {
+  z-index: 60;
+  box-sizing: border-box;
+  padding: 12px;
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.14);
+}
+
+.date-picker__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 8px;
+}
+
+.date-picker__title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--theme-text);
+}
+
+.date-picker__nav {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.date-picker__nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-400);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.date-picker__nav-btn:hover {
+  background: var(--theme-elevation-100);
+  color: var(--theme-text);
+}
+
+.date-picker__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--theme-elevation-500);
+  padding-bottom: 4px;
+}
+
+.date-picker__week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-radius: 8px;
+  transition: background 100ms;
+}
+
+.date-picker__week:hover {
+  background: var(--theme-elevation-100);
+}
+
+.date-picker__day {
+  width: 30px;
+  height: 30px;
+  margin: 4px auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13.5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-700);
+  cursor: pointer;
+  transition: color 100ms, border-color 100ms;
+}
+
+.date-picker__day:hover {
+  color: var(--accent);
+}
+
+.date-picker__day--out {
+  color: var(--theme-elevation-300);
+}
+
+.date-picker__day--today {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.date-picker__day--selected {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.date-picker__foot {
+  border-top: 1px solid var(--theme-elevation-150);
+  margin-top: 6px;
+  padding-top: 6px;
+  text-align: center;
+}
+
+.date-picker__foot-btn {
+  border: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: var(--theme-text);
+  padding: 4px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.date-picker__foot-btn:hover {
+  background: var(--theme-elevation-100);
+  color: var(--accent);
 }
 
 /* ---------- 18. 草稿箱（DraftsView） ----------
@@ -2724,46 +3071,55 @@ img.gravatar-account {
   color: var(--theme-elevation-800);
 }
 
-/* ---------- 18.9 站点设置（SettingsEditView）：左目录卡 + 右内容卡，两张独立卡片 ---------- */
+/* ---------- 18.9 站点设置（SettingsEditView）：左目录卡 + 右内容卡两张独立卡片，右卡吃满剩余宽度 ---------- */
 .settings {
-  gap: var(--card-gap);
-  /* 撑满视口剩余高度：内容短时卡片底边落到「视口底 − 一道 --gutter」，
-     与左侧大侧栏卡的底部留白齐平，不再让卡片半路截断、下面空一块画布 */
-  min-height: calc(100vh - var(--shell-content-top));
+  /* 页头卡与下方双栏卡挨得更紧一档（比通用 --card-gap 小） */
+  gap: 0.5rem;
+  /* 桌面端整页不滚：根容器恰好吃满「视口 − 顶栏下沉量」，外层滚动条消失，
+     滚动只发生在右内容卡（和目录卡放不下时）内部 */
+  height: calc(100vh - var(--shell-content-top));
 }
 
 /* 两栏（或单栏）布局吃掉 .settings 里除页头卡外的全部剩余高度；
-   网格本身 align-items: stretch，左目录卡与右内容卡会被一起拉齐 */
+   min-height:0 让两张卡可以小于内容高，滚动被关在卡片内部 */
 .settings__layout {
   flex: 1;
+  min-height: 0;
 }
 
 .settings__layout {
   display: grid;
-  grid-template-columns: 264px minmax(0, 1fr);
-  /* 分隔符式的 gap 与卡片之间其它间距同源；左右两栏各自成卡 */
-  gap: var(--card-gap);
+  grid-template-columns: 300px minmax(0, 1fr);
+  /* 左右两卡之间的列间距也收紧一档，与页头到双栏的间距同源 */
+  gap: 0.5rem;
   width: 100%;
-  /* 靠左不用居中：左边缘要和顶部标签条、页头卡在同一条栅格线上；
-     宽度仍设上限，避免表单输入框在大屏上被拉到两米长 */
-  max-width: 1100px;
   align-items: stretch;
 }
 
-/* 单栏变体（导航管理）：无左侧目录菜单，只有一张靠左的卡片 */
+/* 单栏变体（导航管理）：卡片吃满整个内容列，不再有 820 的宽度上限 */
 .settings__layout--single {
   grid-template-columns: minmax(0, 1fr);
-  max-width: 820px;
+}
+
+/* 卡变宽但版式不跟着摊开：行、按钮、说明、保存钮都封顶在原 820 卡的内容宽（820 − 26×2 内边距） */
+.settings__layout--single .settings__panel > * {
+  max-width: 768px;
 }
 
 .settings__menu {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   padding: 14px 12px;
   background: var(--theme-elevation-0);
   border: var(--card-line);
   border-radius: var(--card-radius);
+  /* 目录条目多到卡片放不下时，只有目录卡内部可滚；否则永远静止 */
+  overflow-y: auto;
+}
+
+/* 目录内容盒：纯排布容器（等距竖排），不需要任何 sticky */
+.settings__menu-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .settings__menu-item {
@@ -2841,20 +3197,131 @@ img.gravatar-account {
   background: var(--accent);
 }
 
+/* 刷新首帧的选中蓝框：水合前 active 仍为 null，React 版选中态要等 JS 判定才「后到」，
+   于是刷新时蓝框慢半拍。用 :has()+:target 让 URL 哈希命中的分区，其目录项在 SSR 首帧即点亮。
+   水合后受控渲染不再带分区 id，下面这些规则自动失效，交棒给 .settings__menu-item--active。 */
+.settings__layout:has(#site:target) [data-sec='site'],
+.settings__layout:has(#hero:target) [data-sec='hero'],
+.settings__layout:has(#socials:target) [data-sec='socials'],
+.settings__layout:has(#footer:target) [data-sec='footer'],
+.settings__layout:has(#about:target) [data-sec='about'],
+.settings__layout:has(.settings__ssr):not(:has([id]:target)) [data-sec='site'] {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.settings__layout:has(#site:target) [data-sec='site'] .settings__menu-icon,
+.settings__layout:has(#hero:target) [data-sec='hero'] .settings__menu-icon,
+.settings__layout:has(#socials:target) [data-sec='socials'] .settings__menu-icon,
+.settings__layout:has(#footer:target) [data-sec='footer'] .settings__menu-icon,
+.settings__layout:has(#about:target) [data-sec='about'] .settings__menu-icon,
+.settings__layout:has(.settings__ssr):not(:has([id]:target)) [data-sec='site'] .settings__menu-icon {
+  background: var(--theme-elevation-0);
+  color: var(--accent-text);
+}
+
+.settings__layout:has(#site:target) [data-sec='site'] .settings__menu-title,
+.settings__layout:has(#hero:target) [data-sec='hero'] .settings__menu-title,
+.settings__layout:has(#socials:target) [data-sec='socials'] .settings__menu-title,
+.settings__layout:has(#footer:target) [data-sec='footer'] .settings__menu-title,
+.settings__layout:has(#about:target) [data-sec='about'] .settings__menu-title,
+.settings__layout:has(.settings__ssr):not(:has([id]:target)) [data-sec='site'] .settings__menu-title {
+  color: var(--accent-text);
+}
+
+/* 右侧圆点：水合前用 ::after 复刻同一颗，受控渲染后由 .settings__menu-dot 接管（届时上面规则已失效） */
+.settings__layout:has(#site:target) [data-sec='site']::after,
+.settings__layout:has(#hero:target) [data-sec='hero']::after,
+.settings__layout:has(#socials:target) [data-sec='socials']::after,
+.settings__layout:has(#footer:target) [data-sec='footer']::after,
+.settings__layout:has(#about:target) [data-sec='about']::after,
+.settings__layout:has(.settings__ssr):not(:has([id]:target)) [data-sec='site']::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .settings__panel {
   padding: 22px 26px 26px;
   min-width: 0;
   background: var(--theme-elevation-0);
   border: var(--card-line);
   border-radius: var(--card-radius);
+  /* 页面不滚，右卡内部滚：这是整页滚动取消后唯一的内容滚动区 */
+  overflow-y: auto;
+}
+
+/* 加载期间字段骨架常驻，fieldset disabled 统一锁住所有控件（无需逐个透传 disabled） */
+.settings__body {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+.settings__body:disabled {
+  cursor: progress;
+}
+
+/* 数据未到的空窗（冷启动、慢网络）里，光有 cursor: progress 是看不见的——
+   面板和 SSR 骨架长得一模一样，用户读作「点坏了」。这里只给输入控件的描边
+   做呼吸，标签、列头、布局一帧不动，保持「骨架常驻、只有框内数据在 loading」。 */
+.settings__body[data-loading='true'] :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+  animation: settings-loading-breathe 1.05s ease-in-out infinite;
+}
+
+@keyframes settings-loading-breathe {
+  0%, 100% {
+    border-color: var(--theme-elevation-250);
+  }
+  50% {
+    border-color: var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings__body[data-loading='true'] :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+    animation: none;
+    border-color: var(--accent);
+  }
+}
+
+/* 水合前骨架：五个分区都在 DOM 里，:target 按 URL 哈希只显示对应分区，无哈希显示默认第一项 */
+.settings__ssr-sec {
+  display: none;
+}
+
+.settings__ssr-sec:target {
+  display: block;
+}
+
+.settings__ssr:not(:has(.settings__ssr-sec:target)) .settings__ssr-sec--default {
+  display: block;
 }
 
 @media (max-width: 900px) {
+  /* 堆叠版式回到整页滚动：定高会把两张卡挤成半高小窗 */
+  .settings {
+    height: auto;
+    min-height: calc(100vh - var(--shell-content-top));
+  }
+
   .settings__layout {
     grid-template-columns: 1fr;
   }
 
-  .settings__menu {
+  .settings__menu,
+  .settings__panel {
+    overflow-y: visible;
+  }
+
+  .settings__menu-inner {
     flex-direction: row;
     flex-wrap: wrap;
   }
@@ -2873,25 +3340,28 @@ img.gravatar-account {
 
 .settings__grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* 全站所有分区统一：单列竖排，原来并排的两个框改为上下顺序 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px 18px;
-}
-
-@media (max-width: 720px) {
-  .settings__grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .settings__field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* 字段标题 ↔ 输入框的上下间距：原来 6px 太挤，拉一档 */
+  gap: 10px;
   min-width: 0;
+  /* 每个字段（含输入/文本框）宽 = 关于页保存钮 596，全站对齐 */
+  max-width: 596px;
 }
 
 .settings__field--full {
   grid-column: 1 / -1;
+}
+
+/* 整行但收窄：与下方行编辑器叉叉列、保存钮右沿对齐 */
+.settings__field--narrow {
+  max-width: 596px;
 }
 
 .settings__field-label {
@@ -2954,6 +3424,11 @@ img.gravatar-account {
   transition: background 120ms ease;
 }
 
+/* 站点设置的保存钮：右沿对齐技能环每行的叉叉列，不铺满面板 */
+.settings__submit--fit {
+  max-width: 596px;
+}
+
 .settings__submit:hover:not(:disabled) {
   background: var(--accent-hover);
 }
@@ -2967,6 +3442,8 @@ img.gravatar-account {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 社交链接不走 .settings__grid，单独收到 596 列，与其他分区、保存钮同宽 */
+  max-width: 596px;
 }
 
 

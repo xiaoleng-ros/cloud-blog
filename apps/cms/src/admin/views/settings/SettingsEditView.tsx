@@ -10,8 +10,26 @@
  * - 社交链接复用 SocialLinksField 的解析/序列化，保持「平台 链接」文本格式不变
  * - 保存只发「与加载基线有差异的字段」，落盘前重读 updatedAt 做冲突检测（root 替换后无 Payload 文档锁）
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+
+// 客户端在首帧绘制前跑（消除分区闪回），SSR 无 window 时退化为 useEffect 避免告警
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+import {
+  notesFromBatch,
+  notesToBatch,
+  parseNotes,
+  parseSkills,
+  PRESET_COLORS,
+  skillsFromBatch,
+  skillsToBatch,
+  legacyHtmlToMarker,
+  stringifyNotes,
+  stringifySkills,
+  type NoteItem,
+  type SkillItem,
+} from 'cloud-blog/shared/about-format'
 import { PageHeader } from '../../components/PageHeader'
+import { CoverUploader } from '../../components/CoverUploader'
 import {
   parseSocials,
   PLATFORM_OPTIONS,
@@ -20,16 +38,21 @@ import {
 } from '../../components/SocialLinksField'
 import { describeApiError, fetchGlobal, updateGlobal } from '../lib/api'
 
-/** 字段定义：text 单行、textarea 多行；span=2 占满整行 */
+/** 字段定义：text 单行、textarea 多行、date 自定义日历；span=2 占满整行 */
 interface FieldDef {
   name: string
   label: string
-  type: 'text' | 'textarea'
+  type: 'text' | 'textarea' | 'date'
+  editor?: 'notes' | 'skills' | 'footer'
+  /** uploader = 图片上传器（与正文封面共用 CoverUploader，值同样是图片地址） */
+  widget?: 'uploader'
   required?: boolean
   placeholder?: string
   hint?: string
   rows?: number
   span?: 1 | 2
+  /** 整行字段收窄展示（正文这类短文本不需要铺满） */
+  narrow?: boolean
 }
 
 interface SectionDef {
@@ -66,6 +89,30 @@ const SECTIONS: SectionDef[] = [
       { name: 'twikooEnvId', label: 'Twikoo 评论服务地址', type: 'text' },
       { name: 'neteasePlaylistId', label: '网易云歌单 ID', type: 'text' },
       { name: 'siteDescription', label: '站点简介', type: 'textarea', span: 2, rows: 3 },
+    ],
+  },
+  {
+    key: 'site-config',
+    title: '网站配置',
+    desc: '图标、备案号与创建时间',
+    icon: icon(
+      <>
+        <path d="M4 7h8M18 7h2M4 12h2M12 12h8M4 17h6M16 17h4" />
+        <circle cx="15" cy="7" r="2.2" />
+        <circle cx="9" cy="12" r="2.2" />
+        <circle cx="13.5" cy="17" r="2.2" />
+      </>,
+    ),
+    fields: [
+      { name: 'siteIcon', label: '网站图标', type: 'text', span: 2, widget: 'uploader' },
+      {
+        name: 'siteIcp',
+        label: 'ICP 备案号',
+        type: 'text',
+        span: 2,
+        placeholder: '例：豫ICP备2020031040号-1',
+      },
+      { name: 'siteCreatedAt', label: '网站创建时间', type: 'date', span: 2 },
     ],
   },
   {
@@ -115,17 +162,19 @@ const SECTIONS: SectionDef[] = [
         name: 'footerChannels',
         label: '页脚链接',
         type: 'textarea',
+        editor: 'footer',
         span: 2,
         rows: 5,
-        hint: '每行一条「名称 链接」。支持 Bilibili / YouTube / RSS 图标，其余名称按文字展示。链接以 http 开头用新标签打开。',
+        hint: '名称首词命中图标才有图形：Bilibili / YouTube / RSS / X / 抖音 / 小红书 / 网易云音乐 / QQ / 微信 / GitHub，或线性图标名（mail / archive / globe…），其余按文字展示。http 链接新标签打开。',
       },
       {
         name: 'footerGroups',
         label: '页脚群组',
         type: 'textarea',
+        editor: 'footer',
         span: 2,
         rows: 4,
-        hint: '每行一条「名称 链接」，链接可留空仅填名称（展示为纯文字标签）。支持 QQ / 微信图标。',
+        hint: '链接可留空，只填名称时前台展示为纯文字标签。支持 QQ / 微信图标。',
       },
     ],
   },
@@ -140,30 +189,33 @@ const SECTIONS: SectionDef[] = [
       </>,
     ),
     fields: [
-      { name: 'aboutLead', label: '关于页大标题', type: 'text', span: 2 },
+      { name: 'aboutLead', label: '关于页大标题', type: 'text', span: 2, narrow: true },
       {
         name: 'aboutParagraphs',
         label: '关于页正文',
         type: 'textarea',
         span: 2,
+        narrow: true,
         rows: 6,
-        hint: '每个段落一行。可使用简单 HTML，如 <span class="marker-highlight">高亮</span> 来给部分文字加高亮标记。',
+        hint: '一行一段，想换行直接回车；给部分文字加高亮写成 ==这样== 即可，不需要懂 HTML。',
       },
       {
         name: 'aboutNotes',
         label: '关于页便签',
         type: 'textarea',
+        editor: 'notes',
         span: 2,
         rows: 4,
-        hint: '每行一条「标题｜副文字｜颜色」，颜色可选 yellow / cyan / pink。',
+        hint: '每条便签一行：标题、副文字，颜色点色板即选（含自定义任意色）。',
       },
       {
         name: 'skills',
         label: '技能环',
         type: 'textarea',
+        editor: 'skills',
         span: 2,
         rows: 6,
-        hint: '每行一条「名称｜副标题｜数值｜颜色」，数值 0-100，颜色可选 yellow / cyan / pink / purple。',
+        hint: '每条技能一行：名称、副标题、数值 0-100，颜色点色板即选（含自定义任意色）。',
       },
     ],
   },
@@ -184,7 +236,11 @@ const pickValues = (doc: GlobalDoc | null | undefined): Values => {
   const next: Values = {}
   for (const name of ALL_FIELD_NAMES) {
     const v = doc?.[name]
-    next[name] = typeof v === 'string' ? v : ''
+    let s = typeof v === 'string' ? v : ''
+    // 存量正文可能还是旧 HTML 写法（marker-highlight span / <br>）：
+    // 载入即转成 ==记号==，用户第一次保存后字段里就不再有 HTML
+    if (name === 'aboutParagraphs') s = legacyHtmlToMarker(s)
+    next[name] = s
   }
   return next
 }
@@ -197,7 +253,8 @@ export const SettingsEditView = () => {
   // 加载失败 / 冲突（他人已改）：锁存并提示重载，禁止落盘（root 替换后 Payload 文档锁失效，需自行防覆盖）
   const [loadFailed, setLoadFailed] = useState(false)
   const [conflict, setConflict] = useState(false)
-  const [active, setActive] = useState(SECTIONS[0].key)
+  // null = 尚未从 URL 判定分区：SSR 首帧不预选「站点信息」，避免刷新时先闪错误分区
+  const [active, setActive] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -227,6 +284,22 @@ export const SettingsEditView = () => {
     void load()
   }, [load])
 
+  // 刷新/直达后停留在同一分区：水合后首帧绘制前从 location.hash 判定，无效哈希回落默认分区
+  useIsoLayoutEffect(() => {
+    const restore = () => {
+      const hash = window.location.hash.replace(/^#/, '')
+      setActive(SECTIONS.some((s) => s.key === hash) ? hash : SECTIONS[0].key)
+    }
+    restore()
+    window.addEventListener('hashchange', restore)
+    return () => window.removeEventListener('hashchange', restore)
+  }, [])
+
+  const goSection = useCallback((key: string) => {
+    setActive(key)
+    window.history.replaceState(null, '', `#${key}`)
+  }, [])
+
   // 「已保存 ✓」提示到点自动收起，卸载时清掉未触发的定时器
   useEffect(
     () => () => {
@@ -255,7 +328,7 @@ export const SettingsEditView = () => {
 
   const save = async () => {
     if (!values.siteName?.trim()) {
-      setActive('site')
+      goSection('site')
       setError('站点名称不能为空')
       return
     }
@@ -295,65 +368,54 @@ export const SettingsEditView = () => {
 
       <div className="settings__layout">
         <nav className="settings__menu" aria-label="配置分区">
-          {SECTIONS.map((s) => (
-            <button
-              type="button"
-              key={s.key}
-              className={`settings__menu-item${active === s.key ? ' settings__menu-item--active' : ''}`}
-              onClick={() => {
-                setActive(s.key)
-                setError('')
-              }}
-            >
-              <span className="settings__menu-icon" aria-hidden="true">
-                {s.icon}
-              </span>
-              <span className="settings__menu-text">
-                <span className="settings__menu-title">{s.title}</span>
-                <span className="settings__menu-desc">{s.desc}</span>
-              </span>
-              {active === s.key && <span className="settings__menu-dot" aria-hidden="true" />}
-            </button>
-          ))}
+          {/* 页面不滚，滚动只发生在卡内部；这层只管目录条目的等距竖排 */}
+          <div className="settings__menu-inner">
+            {SECTIONS.map((s) => (
+              <button
+                type="button"
+                key={s.key}
+                data-sec={s.key}
+                className={`settings__menu-item${active === s.key ? ' settings__menu-item--active' : ''}`}
+                onClick={() => {
+                  goSection(s.key)
+                  setError('')
+                }}
+              >
+                <span className="settings__menu-icon" aria-hidden="true">
+                  {s.icon}
+                </span>
+                <span className="settings__menu-text">
+                  <span className="settings__menu-title">{s.title}</span>
+                  <span className="settings__menu-desc">{s.desc}</span>
+                </span>
+                {active === s.key && <span className="settings__menu-dot" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
         </nav>
 
         <section className="settings__panel">
-          <h2 className="settings__panel-title">{section.title}</h2>
-
-          {loading ? (
-            <p className="drafts__empty">加载中…</p>
-          ) : section.key === 'socials' ? (
-            <SocialsEditor value={values.socials ?? ''} onChange={(v) => setValue('socials', v)} />
-          ) : (
-            <div className="settings__grid">
-              {section.fields.map((f) => (
-                <label
-                  key={f.name}
-                  className={`settings__field${f.span === 2 ? ' settings__field--full' : ''}`}
-                >
-                  <span className="settings__field-label">
-                    {f.label}
-                    {f.required && <i className="settings__field-req">*</i>}
-                  </span>
-                  {f.type === 'textarea' ? (
-                    <textarea
-                      value={values[f.name] ?? ''}
-                      onChange={(e) => setValue(f.name, e.target.value)}
-                      placeholder={f.placeholder}
-                      rows={f.rows ?? 4}
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      value={values[f.name] ?? ''}
-                      onChange={(e) => setValue(f.name, e.target.value)}
-                      placeholder={f.placeholder}
-                    />
-                  )}
-                  {f.hint && <span className="settings__field-hint">{f.hint}</span>}
-                </label>
+          {active === null ? (
+            // SSR/水合前：五个分区的标题、说明、输入框骨架全部就位，
+            // 由 CSS :target 按 URL 哈希只显示对应分区（无哈希显示默认第一项），
+            // 加载只发生在框内数据（此时为空）。水合完成后切换到受控的单分区渲染。
+            <div className="settings__ssr">
+              {SECTIONS.map((s, i) => (
+                <div key={s.key} id={s.key} className={`settings__ssr-sec${i === 0 ? ' settings__ssr-sec--default' : ''}`}>
+                  <h2 className="settings__panel-title">{s.title}</h2>
+                  <fieldset className="settings__body" disabled>
+                    <SectionBody sec={s} values={emptyValues()} onField={noopField} />
+                  </fieldset>
+                </div>
               ))}
             </div>
+          ) : (
+            <>
+              <h2 className="settings__panel-title">{section.title}</h2>
+              <fieldset className="settings__body" data-loading={loading || undefined} disabled={loading}>
+                <SectionBody sec={section} values={values} onField={setValue} />
+              </fieldset>
+            </>
           )}
 
           {error && <p className="settings__error">{error}</p>}
@@ -361,7 +423,7 @@ export const SettingsEditView = () => {
           {loadFailed || conflict ? (
             <button
               type="button"
-              className="settings__submit"
+              className="settings__submit settings__submit--fit"
               onClick={() => void load()}
               disabled={loading}
             >
@@ -370,7 +432,7 @@ export const SettingsEditView = () => {
           ) : (
             <button
               type="button"
-              className="settings__submit"
+              className="settings__submit settings__submit--fit"
               disabled={loading || busy || !hasDirty}
               onClick={() => void save()}
             >
@@ -383,8 +445,95 @@ export const SettingsEditView = () => {
   )
 }
 
-/** 社交链接面板：与 SocialLinksField 相同的行卡片交互，但值来自本视图 state */
-function SocialsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+const noopField = () => {}
+
+/** 分区字段主体：SSR 骨架（空值 + 外层 disabled）与水合后受控渲染共用同一套版式 */
+function SectionBody({
+  sec,
+  values,
+  onField,
+}: {
+  sec: SectionDef
+  values: Values
+  onField: (name: string, v: string) => void
+}) {
+  if (sec.key === 'socials') {
+    return <SocialsEditor value={values.socials ?? ''} onChange={(v) => onField('socials', v)} />
+  }
+  return (
+    <div className="settings__grid">
+      {sec.fields.map((f) =>
+        f.editor ? (
+          <div className="settings__field settings__field--full" key={f.name}>
+            {f.editor === 'notes' ? (
+              <NotesEditor
+                label={f.label}
+                hint={f.hint}
+                value={values[f.name] ?? ''}
+                onChange={(v) => onField(f.name, v)}
+              />
+            ) : f.editor === 'skills' ? (
+              <SkillsEditor
+                label={f.label}
+                hint={f.hint}
+                value={values[f.name] ?? ''}
+                onChange={(v) => onField(f.name, v)}
+              />
+            ) : (
+              <FooterLineEditor
+                label={f.label}
+                hint={f.hint}
+                value={values[f.name] ?? ''}
+                onChange={(v) => onField(f.name, v)}
+              />
+            )}
+          </div>
+        ) : f.widget === 'uploader' ? (
+          <div className="settings__field settings__field--full" key={f.name}>
+            <span className="settings__field-label">{f.label}</span>
+            {f.hint && <span className="settings__field-hint">{f.hint}</span>}
+            <CoverUploader
+              value={values[f.name] ?? ''}
+              onChange={(v) => onField(f.name, v)}
+              placeholder="请输入图标地址"
+              className="cover-uploader--icon"
+            />
+          </div>
+        ) : (
+          <label
+            key={f.name}
+            className={`settings__field${f.span === 2 ? ' settings__field--full' : ''}${f.narrow ? ' settings__field--narrow' : ''}`}
+          >
+            <span className="settings__field-label">
+              {f.label}
+              {f.required && <i className="settings__field-req">*</i>}
+            </span>
+            {f.hint && <span className="settings__field-hint">{f.hint}</span>}
+            {f.type === 'textarea' ? (
+              <textarea
+                value={values[f.name] ?? ''}
+                onChange={(e) => onField(f.name, e.target.value)}
+                placeholder={f.placeholder}
+                rows={f.rows ?? 4}
+              />
+            ) : f.type === 'date' ? (
+              <DateField value={values[f.name] ?? ''} onChange={(v) => onField(f.name, v)} />
+            ) : (
+              <input
+                type="text"
+                value={values[f.name] ?? ''}
+                onChange={(e) => onField(f.name, e.target.value)}
+                placeholder={f.placeholder}
+              />
+            )}
+          </label>
+        ),
+      )}
+    </div>
+  )
+}
+
+/** 社交链接面板：与 SocialLinksField 相同的行卡片交互，但值来自本视图 state */function SocialsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const items = parseSocials(value)
 
   const replace = (next: typeof items) => onChange(stringifySocials(next))
@@ -455,8 +604,549 @@ function SocialsEditor({ value, onChange }: { value: string; onChange: (v: strin
       </button>
       <p className="social-links-field__hint">
         每行保存为「平台 链接」格式，前台会自动匹配对应图标。支持{' '}
-        {PLATFORM_OPTIONS.map((p) => p.label).join(' / ')}。
+        {PLATFORM_OPTIONS.map((p) => p.label).join(' / ')}；认不出图标的平台不会消失，前台按纯文字显示平台名。
       </p>
+    </div>
+  )
+}
+
+/** 颜色选择：5 个预设主题色点 + 原生取色器（任意颜色）。存 token 或 hex，空 = 前台默认色 */
+function ColorPicker({ value, onChange }: { value: string; onChange: (color: string) => void }) {
+  const isCustom = value.startsWith('#')
+  return (
+    <span className="about-color">
+      {PRESET_COLORS.map((c) => (
+        <button
+          type="button"
+          key={c.token}
+          className={`about-color__dot${value === c.token ? ' about-color__dot--on' : ''}`}
+          style={{ backgroundColor: c.swatch }}
+          title={c.label}
+          aria-label={c.label}
+          onClick={() => onChange(c.token)}
+        />
+      ))}
+      <label
+        className={`about-color__dot about-color__dot--custom${isCustom ? ' about-color__dot--on' : ''}`}
+        style={isCustom ? { backgroundColor: value } : undefined}
+        title="自定义颜色"
+      >
+        <input type="color" value={isCustom ? value : '#ffdf8a'} onChange={(e) => onChange(e.target.value)} />
+      </label>
+    </span>
+  )
+}
+
+/** 行编辑器公共外壳：头部（字段名 + 「批量文本」切换胶囊）+ 列表 + 添加按钮；批量模式整块换成 textarea */
+const DEFAULT_BATCH_PLACEHOLDER =
+  '每行一条，用竖线分隔，颜色可省略：\n坐标广州|1995 年生|green\n吃素|偶尔|#c9e6a4'
+
+function ListEditorShell({
+  label,
+  hint,
+  batch,
+  batchText,
+  emptyText,
+  addLabel,
+  batchPlaceholder,
+  onAdd,
+  onToggleBatch,
+  onBatchText,
+  children,
+}: {
+  label: string
+  hint?: string
+  batch: boolean
+  batchText: string
+  emptyText: string
+  addLabel: string
+  batchPlaceholder?: string
+  onAdd: () => void
+  onToggleBatch: () => void
+  onBatchText: (t: string) => void
+  children: ReactNode
+}) {
+  const isEmpty = Array.isArray(children) && children.length === 0
+  return (
+    <div className="social-links-field about-list-field">
+      <div className="about-list-field__head">
+        <div className="about-list-field__titles">
+          <span className="settings__field-label">{label}</span>
+          {hint && <span className="settings__field-hint">{hint}</span>}
+        </div>
+        <button type="button" className="about-list-field__toggle" onClick={onToggleBatch}>
+          {batch ? '逐条编辑' : '批量文本'}
+        </button>
+      </div>
+      {batch ? (
+        <textarea
+          className="about-list-field__batch"
+          value={batchText}
+          rows={6}
+          placeholder={batchPlaceholder ?? DEFAULT_BATCH_PLACEHOLDER}
+          onChange={(e) => onBatchText(e.target.value)}
+        />
+      ) : (
+        <>
+          <div className="social-links-field__list">
+            {isEmpty ? <div className="social-links-field__empty">{emptyText}</div> : children}
+          </div>
+          <button type="button" className="social-links-field__add" onClick={onAdd}>
+            {addLabel}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** 便签行编辑器：每行「标题 + 副文字 + 颜色点」，可切批量文本模式 */
+function NotesEditor({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  const items = useMemo(() => parseNotes(value), [value])
+  const [batch, setBatch] = useState(false)
+  const [batchText, setBatchText] = useState('')
+
+  const replace = (next: NoteItem[]) => onChange(stringifyNotes(next))
+  const update = (index: number, patch: Partial<NoteItem>) =>
+    replace(items.map((it, i) => (i === index ? { ...it, ...patch } : it)))
+
+  const toggleBatch = () => {
+    if (!batch) setBatchText(notesToBatch(items))
+    else onChange(stringifyNotes(notesFromBatch(batchText, items)))
+    setBatch(!batch)
+  }
+
+  return (
+    <ListEditorShell
+      label={label}
+      hint={hint}
+      batch={batch}
+      batchText={batchText}
+      onBatchText={(t) => {
+        setBatchText(t)
+        onChange(stringifyNotes(notesFromBatch(t, items)))
+      }}
+      emptyText="还没有便签，点击下方按钮添加一条。"
+      addLabel="+ 添加便签"
+      onAdd={() => replace([...items, { title: '', subtitle: '', color: '' }])}
+      onToggleBatch={toggleBatch}
+    >
+      {items.map((it, index) => (
+        <div className="social-links-field__row about-row" key={index}>
+          <span className="about-row__cell about-row__cell--grow">
+            <i className="about-row__cap">标题</i>
+            <input
+              type="text"
+              className="social-links-field__input"
+              value={it.title}
+              onChange={(e) => update(index, { title: e.target.value })}
+            />
+          </span>
+          <span className="about-row__cell about-row__cell--grow">
+            <i className="about-row__cap">副文字</i>
+            <input
+              type="text"
+              className="social-links-field__input"
+              value={it.subtitle}
+              onChange={(e) => update(index, { subtitle: e.target.value })}
+            />
+          </span>
+          <span className="about-row__cell about-row__cell--end">
+            <ColorPicker value={it.color} onChange={(c) => update(index, { color: c })} />
+          </span>
+          <button
+            type="button"
+            className="social-links-field__remove about-row__remove"
+            aria-label="删除此便签"
+            title="删除"
+            onClick={() => replace(items.filter((_, i) => i !== index))}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </ListEditorShell>
+  )
+}
+
+/** 技能环行编辑器：每行「名称 + 副标题 + 数值 + 颜色点」，可切批量文本模式 */
+function SkillsEditor({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  const items = useMemo(() => parseSkills(value), [value])
+  const [batch, setBatch] = useState(false)
+  const [batchText, setBatchText] = useState('')
+
+  const replace = (next: SkillItem[]) => onChange(stringifySkills(next))
+  const update = (index: number, patch: Partial<SkillItem>) =>
+    replace(items.map((it, i) => (i === index ? { ...it, ...patch } : it)))
+
+  const toggleBatch = () => {
+    if (!batch) setBatchText(skillsToBatch(items))
+    else onChange(stringifySkills(skillsFromBatch(batchText, items)))
+    setBatch(!batch)
+  }
+
+  return (
+    <ListEditorShell
+      label={label}
+      hint={hint}
+      batch={batch}
+      batchText={batchText}
+      onBatchText={(t) => {
+        setBatchText(t)
+        onChange(stringifySkills(skillsFromBatch(t, items)))
+      }}
+      emptyText="还没有技能，点击下方按钮添加一条。"
+      addLabel="+ 添加技能"
+      onAdd={() => replace([...items, { label: '', sublabel: '', value: 80, color: '' }])}
+      onToggleBatch={toggleBatch}
+    >
+      {items.map((it, index) => (
+        <div className="social-links-field__row about-row" key={index}>
+          <span className="about-row__cell about-row__cell--grow">
+            <i className="about-row__cap">名称</i>
+            <input
+              type="text"
+              className="social-links-field__input"
+              value={it.label}
+              onChange={(e) => update(index, { label: e.target.value })}
+            />
+          </span>
+          <span className="about-row__cell about-row__cell--grow">
+            <i className="about-row__cap">副标题</i>
+            <input
+              type="text"
+              className="social-links-field__input"
+              value={it.sublabel}
+              onChange={(e) => update(index, { sublabel: e.target.value })}
+            />
+          </span>
+          <span className="about-row__cell about-row__cell--num">
+            <i className="about-row__cap">数值</i>
+            <input
+              type="number"
+              className="social-links-field__input about-row__num"
+              value={it.value}
+              min={0}
+              max={100}
+              aria-label="数值 0-100"
+              onChange={(e) => update(index, { value: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+            />
+          </span>
+          <span className="about-row__cell about-row__cell--end">
+            <ColorPicker value={it.color} onChange={(c) => update(index, { color: c })} />
+          </span>
+          <button
+            type="button"
+            className="social-links-field__remove about-row__remove"
+            aria-label="删除此技能"
+            title="删除"
+            onClick={() => replace(items.filter((_, i) => i !== index))}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </ListEditorShell>
+  )
+}
+
+/** 页脚一行：名称可含空格（前台按最后一个空格切分），链接可留空 */
+interface FooterLine {
+  name: string
+  href: string
+}
+
+/**
+ * 页脚文本 → 行数组。切分规则与前台 parseFooterLines 一致（最后一个空格），
+ * 空行直接忽略：新加的空行由组件本地 state 持有，不靠文本里的空行占位。
+ */
+function parseFooterLines(raw: string): FooterLine[] {
+  const out: FooterLine[] = []
+  for (const line of String(raw ?? '').split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const sp = trimmed.lastIndexOf(' ')
+    if (sp === -1) out.push({ name: trimmed, href: '' })
+    else out.push({ name: trimmed.slice(0, sp).trim(), href: trimmed.slice(sp + 1).trim() })
+  }
+  return out
+}
+
+/** 行数组 → 页脚文本：名称与链接都空的行写成空行，前台解析会跳过 */
+function stringifyFooterLines(items: FooterLine[]): string {
+  return items
+    .map((it) => [it.name.trim(), it.href.trim()].filter(Boolean).join(' '))
+    .join('\n')
+}
+
+/** 页脚行编辑器：每行「名称 + 链接」，可切批量文本模式（批量文本就是存储格式本身） */
+function FooterLineEditor({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  // 行内容以本地 state 为准：文本格式对「名称里正在输入的空格」是有损的
+  // （"QQ " 存成 "QQ"），若每帧从 value 反解，「QQ 交流群」这种带空格的名永远打不出来。
+  const [rows, setRows] = useState(() => parseFooterLines(value))
+  const [batch, setBatch] = useState(false)
+  const emittedRef = useRef<string | null>(null)
+
+  // value 被外部改写（首次载入、批量文本）才重新反解；自己刚写回的那次跳过
+  useEffect(() => {
+    if (value === emittedRef.current) return
+    emittedRef.current = value
+    setRows(parseFooterLines(value))
+  }, [value])
+
+  const commit = (next: FooterLine[]) => {
+    const text = stringifyFooterLines(next)
+    emittedRef.current = text
+    setRows(next)
+    onChange(text)
+  }
+  const update = (index: number, patch: Partial<FooterLine>) =>
+    commit(rows.map((it, i) => (i === index ? { ...it, ...patch } : it)))
+
+  return (
+    <ListEditorShell
+      label={label}
+      hint={hint}
+      batch={batch}
+      batchText={value}
+      onBatchText={onChange}
+      emptyText="还没有条目，点击下方按钮添加一条。"
+      addLabel="+ 添加一条"
+      batchPlaceholder={'每行一条「名称 链接」：\nBilibili https://space.bilibili.com/1459419286\nRSS /rss.xml'}
+      onAdd={() => commit([...rows, { name: '', href: '' }])}
+      onToggleBatch={() => setBatch(!batch)}
+    >
+      {rows.map((it, index) => (
+        <div className="social-links-field__row about-row" key={index}>
+          <span className="about-row__cell about-row__cell--grow">
+            <i className="about-row__cap">名称</i>
+            <input
+              type="text"
+              className="social-links-field__input"
+              value={it.name}
+              placeholder="Bilibili"
+              onChange={(e) => update(index, { name: e.target.value })}
+            />
+          </span>
+          <span className="about-row__cell about-row__cell--url">
+            <i className="about-row__cap">链接</i>
+            <input
+              type="text"
+              className="social-links-field__input"
+              value={it.href}
+              placeholder="https://... 或 /rss.xml"
+              onChange={(e) => update(index, { href: e.target.value })}
+            />
+          </span>
+          <button
+            type="button"
+            className="social-links-field__remove about-row__remove"
+            aria-label="删除此条"
+            title="删除"
+            onClick={() => commit(rows.filter((_, i) => i !== index))}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </ListEditorShell>
+  )
+}
+
+/* ---------- 自定义日期选择器（网站创建时间） ----------
+ * 原生 input[type=date] 的弹层样式不可控，改成周一起始的日历面板；
+ * 值仍是 'YYYY-MM-DD' 文本，与后端存储格式一致。
+ */
+const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日']
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const toDateText = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+const parseDateText = (s: string): Date | null => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+const dpIcon = (paths: ReactNode) => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {paths}
+  </svg>
+)
+
+const DateField: React.FC<{ value: string; onChange: (v: string) => void; placeholder?: string }> = ({
+  value,
+  onChange,
+  placeholder = '请选择日期',
+}) => {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [panelPos, setPanelPos] = useState<React.CSSProperties>({ position: 'fixed', top: 0, left: 0 })
+  const selected = useMemo(() => parseDateText(value), [value])
+  const [view, setView] = useState(() => {
+    const base = selected ?? new Date()
+    return new Date(base.getFullYear(), base.getMonth(), 1)
+  })
+
+  // 打开瞬间对齐到已选值（无值则当月）；不放 effect 里，否则会吞掉同批的月份导航点击
+  const toggle = () => {
+    if (!open) {
+      const base = parseDateText(value) ?? new Date()
+      setView(new Date(base.getFullYear(), base.getMonth(), 1))
+    }
+    setOpen(!open)
+  }
+
+  // 点外部 / Esc 关闭
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  // fixed 定位：躲开「卡内滚动」容器的裁剪；下方放不下就翻到上方
+  useIsoLayoutEffect(() => {
+    if (!open) return
+    const r = rootRef.current?.getBoundingClientRect()
+    if (!r) return
+    const H = 384
+    const W = 300
+    const spaceBelow = window.innerHeight - r.bottom
+    const top = spaceBelow >= H + 12 ? r.bottom + 6 : Math.max(12, r.top - H - 6)
+    const left = Math.min(Math.max(12, r.left), window.innerWidth - W - 12)
+    setPanelPos({ position: 'fixed', top, left, width: W })
+  }, [open])
+
+  // 6 行 × 7 列，前后月补白
+  const days = useMemo(() => {
+    const first = new Date(view.getFullYear(), view.getMonth(), 1)
+    const offset = (first.getDay() + 6) % 7
+    return Array.from({ length: 42 }, (_, i) => {
+      const d = new Date(first.getFullYear(), first.getMonth(), 1 - offset + i)
+      return { text: toDateText(d), day: d.getDate(), out: d.getMonth() !== view.getMonth() }
+    })
+  }, [view])
+
+  const todayText = toDateText(new Date())
+  const pick = (text: string) => {
+    onChange(text)
+    setOpen(false)
+  }
+  const shiftMonth = (delta: number) => setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1))
+  const shiftYear = (delta: number) => setView((v) => new Date(v.getFullYear() + delta, v.getMonth(), 1))
+
+  return (
+    <div className="date-field" ref={rootRef}>
+      <button
+        type="button"
+        className={`date-field__trigger${open ? ' date-field__trigger--open' : ''}`}
+        onClick={toggle}
+      >
+        <span className={value ? 'date-field__text' : 'date-field__placeholder'}>{value || placeholder}</span>
+        {dpIcon(
+          <>
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M8 3v4M16 3v4M3 10h18" />
+          </>,
+        )}
+      </button>
+      {open && (
+        <div className="date-picker" style={panelPos}>
+          <div className="date-picker__head">
+            <span className="date-picker__nav">
+              <button type="button" className="date-picker__nav-btn" onClick={() => shiftYear(-1)} aria-label="上一年">
+                {dpIcon(<><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></>)}
+              </button>
+              <button type="button" className="date-picker__nav-btn" onClick={() => shiftMonth(-1)} aria-label="上个月">
+                {dpIcon(<path d="m15 18-6-6 6-6" />)}
+              </button>
+            </span>
+            <span className="date-picker__title">
+              {view.getFullYear()}年 {view.getMonth() + 1}月
+            </span>
+            <span className="date-picker__nav">
+              <button type="button" className="date-picker__nav-btn" onClick={() => shiftMonth(1)} aria-label="下个月">
+                {dpIcon(<path d="m9 18 6-6-6-6" />)}
+              </button>
+              <button type="button" className="date-picker__nav-btn" onClick={() => shiftYear(1)} aria-label="下一年">
+                {dpIcon(<><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></>)}
+              </button>
+            </span>
+          </div>
+          <div className="date-picker__weekdays">
+            {WEEK_LABELS.map((w) => (
+              <span key={w}>{w}</span>
+            ))}
+          </div>
+          <div className="date-picker__grid">
+            {Array.from({ length: 6 }, (_, w) => (
+              <div className="date-picker__week" key={w}>
+                {days.slice(w * 7, w * 7 + 7).map((cell) => (
+                  <button
+                    type="button"
+                    key={cell.text}
+                    className={[
+                      'date-picker__day',
+                      cell.out && 'date-picker__day--out',
+                      cell.text === todayText && 'date-picker__day--today',
+                      cell.text === value && 'date-picker__day--selected',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={() => pick(cell.text)}
+                  >
+                    {cell.day}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="date-picker__foot">
+            <button type="button" className="date-picker__foot-btn" onClick={() => pick(todayText)}>
+              今天
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

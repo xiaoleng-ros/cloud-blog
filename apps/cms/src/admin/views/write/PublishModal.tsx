@@ -172,7 +172,7 @@ export const PublishModal: React.FC<Props> = ({
               />
               <label className="publish-modal__label">封面图</label>
               {/* 复用 CoverUploader：与 Payload 原生编辑页的 cover 字段共用同一套 UI */}
-              <CoverUploader value={cover} onChange={setCover} disabled={saving} />
+              <CoverUploader value={cover} onChange={setCover} disabled={saving} placeholder="请输入封面地址" />
               <label className="publish-modal__label">文章分类（必填）</label>
               {singleSelect(categories, categoryIds, setCategoryIds, '请选择分类（必填）')}
               <label className="publish-modal__label">置顶权重</label>

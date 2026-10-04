@@ -140,8 +140,8 @@ export const PageTab = () => {
               <Link
                 href={tab.path}
                 onClick={() => activateTab(tab.path)}
-                prefetch={false}
                 style={{ display: 'contents' }}
+                unstable_dynamicOnHover
               >
                 {entry && <ShellIcon name={entry.icon} size={15} />}
                 <span className="pagetab__label">{tab.title}</span>

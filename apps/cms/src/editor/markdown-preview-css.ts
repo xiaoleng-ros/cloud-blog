@@ -212,6 +212,16 @@ img {
   max-width: 100%;
 }
 
+/* 品牌图形官方色：色值由 shared/icon-paths 写进内联自定义属性，这里只负责深浅主题取哪一个。
+   没上色表的图标（如抖音无可核实的官方色）保持跟随 currentColor。 */
+.brand-glyph {
+  fill: var(--glyph-color, currentColor);
+}
+
+html[data-theme='dark'] .brand-glyph {
+  fill: var(--glyph-color-dark, var(--glyph-color, currentColor));
+}
+
 h1,
 h2,
 h3 {
@@ -687,6 +697,12 @@ p {
 /* 精选区块的锚点始终存在（便于运行时注入），内容为空时整块收起，
    避免后台还没有文章时留下一条孤立的分割线 */
 .hero__picks:not(:has(*)) {
+  display: none;
+}
+
+/* Hero 卡片同理：锚点常驻供运行时注入，后台把文案清空时不要只剩一张空卡。
+   箭头/贴纸是常驻装饰，不参与「有没有内容」的判定 */
+.hero__card:not(:has(.hero__title, .hero__subtitle, .hero__bio, .hero__actions)) {
   display: none;
 }
 
@@ -4093,6 +4109,14 @@ html.theme-anim body {
   border-color: var(--ink);
   color: var(--ink);
 }
+/* 社交链接认不出图标时只显示平台名：圆按钮改成手绘胶囊，宽度跟着文字走 */
+.icon-button--label {
+  width: auto;
+  padding: 0 0.7rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
+  border-radius: 0.7em 1em 0.8em 0.9em / 1em 0.7em 0.9em 0.8em;
+}
 .button-row a:hover {
   background: var(--sticky-cyan);
   border-color: var(--ink);
@@ -4149,6 +4173,18 @@ html.theme-anim body {
   border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
   box-shadow: 4px 5px 0 var(--shadow-sm);
   transform: rotate(-0.6deg);
+}
+
+/* 第二层外框：套在卡片外面一圈，与卡片反向微旋，
+   让上下左右的留白自然不匀，读起来像手绘描了两遍 */
+.hero__card::before {
+  content: "";
+  position: absolute;
+  inset: -2.4rem;
+  border: 2px solid color-mix(in srgb, var(--ink) 55%, transparent);
+  border-radius: 265px 18px 235px 18px / 18px 235px 18px 265px;
+  transform: rotate(0.7deg);
+  pointer-events: none;
 }
 
 .hero__title {
@@ -4284,6 +4320,12 @@ html.theme-anim body {
 @media (max-width: 560px) {
   .hero__card {
     padding: 2rem 1.25rem;
+    /* 让出 0.9rem 给外框，窄屏上两层线都不会贴到屏幕边 */
+    width: calc(100% - 1.8rem);
+  }
+
+  .hero__card::before {
+    inset: -0.9rem;
   }
 
   .hero__arrow {
@@ -4461,6 +4503,12 @@ html.theme-anim body {
   margin-bottom: 4rem;
 }
 
+/* 关于页的同步锚点常驻，后台把正文/便签/技能清空时整块收起，不留空 grid 的间距 */
+.about__profile:not(:has(*)),
+.about__skills:not(:has(*)) {
+  display: none;
+}
+
 .about__intro-card {
   position: relative;
   padding: 1.8rem 2rem;
@@ -4569,16 +4617,10 @@ html.theme-anim body {
   transform: rotate(-0.4deg);
 }
 
-.about__note--yellow {
-  background: var(--sticky-yellow);
-}
-
-.about__note--cyan {
-  background: var(--sticky-cyan);
-}
-
-.about__note--pink {
-  background: var(--sticky-pink);
+/* 便签底色吃 --note-color（渲染端注入：主题色 token 变量或任意 hex），
+   未指定时回退樱粉，与旧 about__note--pink 观感一致 */
+.about__note {
+  background: var(--note-color, var(--sticky-pink));
 }
 
 .about__note-tape {

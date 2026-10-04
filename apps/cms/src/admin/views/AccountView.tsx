@@ -246,23 +246,26 @@ export const AccountView = () => {
       <div className="settings__layout">
         {/* 左侧目录 */}
         <nav className="settings__menu" aria-label="账号设置分区">
-          {TABS.map((t) => (
-            <button
-              type="button"
-              key={t.key}
-              className={`settings__menu-item${tab === t.key ? ' settings__menu-item--active' : ''}`}
-              onClick={() => switchTab(t.key)}
-            >
-              <span className="settings__menu-icon" aria-hidden="true">
-                {t.icon}
-              </span>
-              <span className="settings__menu-text">
-                <span className="settings__menu-title">{t.label}</span>
-                <span className="settings__menu-desc">{t.desc}</span>
-              </span>
-              {tab === t.key && <span className="settings__menu-dot" aria-hidden="true" />}
-            </button>
-          ))}
+          {/* 与站点设置同款：这层只管目录条目的等距竖排 */}
+          <div className="settings__menu-inner">
+            {TABS.map((t) => (
+              <button
+                type="button"
+                key={t.key}
+                className={`settings__menu-item${tab === t.key ? ' settings__menu-item--active' : ''}`}
+                onClick={() => switchTab(t.key)}
+              >
+                <span className="settings__menu-icon" aria-hidden="true">
+                  {t.icon}
+                </span>
+                <span className="settings__menu-text">
+                  <span className="settings__menu-title">{t.label}</span>
+                  <span className="settings__menu-desc">{t.desc}</span>
+                </span>
+                {tab === t.key && <span className="settings__menu-dot" aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
         </nav>
 
         {/* 右侧面板 */}
@@ -309,7 +312,7 @@ export const AccountView = () => {
               </div>
               <button
                 type="button"
-                className="settings__submit"
+                className="settings__submit settings__submit--fit"
                 onClick={() => void saveProfile()}
                 disabled={savingProfile || loading}
               >
@@ -356,7 +359,7 @@ export const AccountView = () => {
               </div>
               <button
                 type="button"
-                className="settings__submit"
+                className="settings__submit settings__submit--fit"
                 onClick={() => void savePassword()}
                 disabled={savingPassword || loading}
               >

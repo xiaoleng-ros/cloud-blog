@@ -12,6 +12,7 @@ import { CloudLogo as CloudLogo_d06fa95a4848ce56f762457715ce74a8 } from '../../.
 import { FeishuLoginLink as FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593 } from '../../../../src/admin/components/FeishuLoginLink.tsx'
 import { LoginBrand as LoginBrand_6a9d4450ccefb77d748f6fa2e00f2590 } from '../../../../src/admin/components/LoginBrand.tsx'
 import { AdminShell as AdminShell_f209b93b646b4cabbc227d16b216c7fb } from '../../../../src/admin/shell/AdminShell.tsx'
+import { S3ClientUploadHandler as S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24 } from '@payloadcms/storage-s3/client'
 import { DashboardView as DashboardView_1b3552f3c55b03dbdd4b9732a8e74d1d } from '../../../../src/admin/views/DashboardView.tsx'
 import { AccountView as AccountView_b1e2354f00c039951dd0009e54fea135 } from '../../../../src/admin/views/AccountView.tsx'
 import { PostComposeView as PostComposeView_c48bc1412d48efbcf260795811a628d2 } from '../../../../src/admin/views/write/PostComposeView.tsx'
@@ -36,6 +37,7 @@ export const importMap = {
   "/src/admin/components/FeishuLoginLink.tsx#FeishuLoginLink": FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593,
   "/src/admin/components/LoginBrand.tsx#LoginBrand": LoginBrand_6a9d4450ccefb77d748f6fa2e00f2590,
   "/src/admin/shell/AdminShell.tsx#AdminShell": AdminShell_f209b93b646b4cabbc227d16b216c7fb,
+  "@payloadcms/storage-s3/client#S3ClientUploadHandler": S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24,
   "/src/admin/views/DashboardView.tsx#DashboardView": DashboardView_1b3552f3c55b03dbdd4b9732a8e74d1d,
   "/src/admin/views/AccountView.tsx#AccountView": AccountView_b1e2354f00c039951dd0009e54fea135,
   "/src/admin/views/write/PostComposeView.tsx#PostComposeView": PostComposeView_c48bc1412d48efbcf260795811a628d2,

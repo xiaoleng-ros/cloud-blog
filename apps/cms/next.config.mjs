@@ -14,6 +14,22 @@ import { withPayload } from '@payloadcms/next/withPayload'
  */
 const nextConfig = {
   reactStrictMode: false,
+  experimental: {
+    // 悬停才预取动态路由。默认行为是「进入视口就预取」，侧栏 13 个链接会一次性把
+    // dev 服务器打成并发按需编译（实测同时编译 4 个页面时单页耗时 21s）。
+    //
+    // 这是半个开关：它只把 process.env.__NEXT_DYNAMIC_ON_HOVER 烘进客户端包，
+    // hover 时要真正把该链接的 fetchStrategy 升到 Full，还必须有 <Link unstable_dynamicOnHover>。
+    // 判据在 next/dist/client/components/links.js:243 —— 两个条件同时为真才升级，缺一即空转。
+    // 所以侧栏与多标签的 Link 都带上了该 prop（CustomNav.tsx / PageTab.tsx）。
+    // 另注：next dev 里预取整体被禁用（app-dir/link.js:351 直接 return），这条只在生产生效。
+    //
+    // 注意：不要给后台加 staleTimes.dynamic（客户端路由缓存）。Payload 启动时会直接告警
+    // "detected a non-zero value for the staleTimes.dynamic option ... may cause stale data
+    // to load within the Admin panel"——后台列表数据就在 RSC 树里，缓存壳子等于缓存数据。
+    // 实测它也确实没生效（重复导航仍每次发 RSC 请求）。
+    dynamicOnHover: true,
+  },
   // cloud-blog/shared/* 是仓库内的 TS 源码（file: 依赖），必须交给 SWC 转译，
   // 否则 Next 默认跳过 node_modules 会导致构建期无法解析 .ts 源码。
   transpilePackages: ['cloud-blog'],

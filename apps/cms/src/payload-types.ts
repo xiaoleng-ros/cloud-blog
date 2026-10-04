@@ -602,6 +602,9 @@ export interface SiteSetting {
   twikooEnvId?: string | null;
   neteasePlaylistId?: string | null;
   siteDescription?: string | null;
+  siteIcon?: string | null;
+  siteIcp?: string | null;
+  siteCreatedAt?: string | null;
   greeting?: string | null;
   name?: string | null;
   subtitle?: string | null;
@@ -619,15 +622,15 @@ export interface SiteSetting {
   footerGroups?: string | null;
   aboutLead?: string | null;
   /**
-   * 每个段落一行。可使用简单 HTML，如 <span class="marker-highlight">高亮</span> 来给部分文字加高亮标记。
+   * 一行一段，想换行直接回车；给部分文字加高亮写成 ==这样== 即可（旧数据里的 HTML 会在后台首次保存时自动转成该记号）。
    */
   aboutParagraphs?: string | null;
   /**
-   * 每行一条「标题｜副文字｜颜色」，颜色可选 yellow / cyan / pink。
+   * 后台由行编辑器管理：JSON 数组，兼容旧「标题|副文字|颜色」行文本。颜色 = 预设 token（yellow/cyan/pink/green/purple）或任意 hex。
    */
   aboutNotes?: string | null;
   /**
-   * 每行一条「名称｜副标题｜数值｜颜色」，数值 0-100，颜色可选 yellow / cyan / pink / purple。
+   * 后台由行编辑器管理：JSON 数组，兼容旧「名称|副标题|数值|颜色」行文本。数值 0-100，颜色同上可任选。
    */
   skills?: string | null;
   updatedAt?: string | null;
@@ -660,6 +663,9 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   twikooEnvId?: T;
   neteasePlaylistId?: T;
   siteDescription?: T;
+  siteIcon?: T;
+  siteIcp?: T;
+  siteCreatedAt?: T;
   greeting?: T;
   name?: T;
   subtitle?: T;

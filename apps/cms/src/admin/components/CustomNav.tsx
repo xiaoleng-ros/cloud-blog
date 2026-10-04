@@ -8,7 +8,7 @@
  * 这样 Payload 的开合动画、grid 列宽（--nav-width）与移动端抽屉逻辑继续生效，
  * 悬浮卡片的外观完全由 admin-shell.css 在这几层上实现。
  */
-import { Hamburger, Link, useConfig, useNav } from '@payloadcms/ui'
+import { Hamburger, Link, useConfig, useNav, useRouteTransition } from '@payloadcms/ui'
 import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 
@@ -17,12 +17,13 @@ import { buildAdminHref, navSections, resolveNavEntry } from '../shell/nav-confi
 import { UserCard } from '../shell/UserCard'
 
 /**
- * 侧栏滚动位置的跨挂载记忆。
+ * 侧栏滚动位置的持久化。
  * Payload 每次后台路由切换都会重渲染服务端模板，CustomNav 被整块重挂载，
  * DOM 上的 scrollTop 随之归零——于是点靠下的菜单后目录跳回顶部。
- * 但跳转是 SPA（JS 上下文不销毁），故把位置存在模块作用域：SPA 跳转保留、
- * 真正整页刷新才清零，正好符合「导航后还在原位、刷新才回顶」的直觉。
+ * SPA 跳转靠模块变量兜住；整页刷新会重建 JS，再往 sessionStorage 镜像一份
+ * （按标签页隔离、关标签自动清），刷新后目录停在原位置，不用重新往下找。
  */
+const NAV_SCROLL_KEY = 'admin-nav-scroll-top'
 let persistedScrollTop = 0
 
 export const CustomNav = () => {
@@ -34,8 +35,26 @@ export const CustomNav = () => {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const wrapRef = useRef<HTMLElement>(null)
 
+  /**
+   * 点击后的等待指示。
+   * 冷路径（该页还没进过缓存）要现场等一次后台模板的服务端渲染，旧界面在这一两秒里
+   * 完全静止，容易被读成「点没点上」。命中缓存时 isTransitioning 一闪即过，指示器不出现。
+   * CustomNav 在导航提交时才整块重挂载，等待期间本实例仍在，所以能靠局部状态显示。
+   */
+  const { isTransitioning } = useRouteTransition()
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isTransitioning) setPendingHref(null)
+  }, [isTransitioning])
+
+  // 兜底：RouteTransition provider 缺席时 isTransitioning 恒为 false，靠路径变化收起指示
+  useEffect(() => setPendingHref(null), [pathname])
+
   // 重挂载后把滚动位置写回去；此时目录项已同步渲染，可直接赋值
   useEffect(() => {
+    const saved = window.sessionStorage.getItem(NAV_SCROLL_KEY)
+    if (saved !== null) persistedScrollTop = Number(saved) || 0
     if (wrapRef.current) wrapRef.current.scrollTop = persistedScrollTop
   }, [])
 
@@ -54,6 +73,7 @@ export const CustomNav = () => {
           className="nav__wrap"
           onScroll={(event) => {
             persistedScrollTop = event.currentTarget.scrollTop
+            window.sessionStorage.setItem(NAV_SCROLL_KEY, String(persistedScrollTop))
           }}
           ref={wrapRef}
         >
@@ -89,14 +109,20 @@ export const CustomNav = () => {
                     {section.items.map((item) => {
                       const href = buildAdminHref(item.path, adminRoute)
                       const isActive = href === activeHref
+                      const isPending = pendingHref === href
                       return (
                         <Link
-                          className={`nav__link${isActive ? ' nav__link--active' : ''}`}
+                          className={`nav__link${isActive ? ' nav__link--active' : ''}${isPending ? ' nav__link--pending' : ''}`}
                           href={href}
                           id={`nav-${item.path.replace(/\//g, '-').replace(/^-/, '')}`}
                           key={item.path}
-                          prefetch={false}
+                          onClick={() => setPendingHref(href)}
                           tabIndex={navOpen ? 0 : -1}
+                          // 悬停预取是「双开关」：next.config 的 experimental.dynamicOnHover 只把
+                          // process.env.__NEXT_DYNAMIC_ON_HOVER 烘进客户端包，真正把该链接的
+                          // fetchStrategy 升到 Full 要靠这个 per-link prop ——
+                          // next/dist/client/components/links.js:243 要求两者同时为真，缺一即空转。
+                          unstable_dynamicOnHover
                         >
                           {isActive && <span className="nav__link-indicator" />}
                           <ShellIcon name={item.icon} size={16} />
@@ -128,6 +154,16 @@ export const CustomNav = () => {
             </button>
           </div>
         </div>
+
+        {/* 首帧前定位：SSR HTML 里这段同步脚本在解析阶段就把 scrollTop 摆好，
+            早于浏览器首次绘制，消除刷新时「先画顶部再跳下来」的一帧闪烁。
+            SPA 重挂载不重跑此脚本，由上面的 useEffect 兜底。 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=sessionStorage.getItem('admin-nav-scroll-top');if(t){var n=document.querySelector('.nav__wrap');if(n)n.scrollTop=parseInt(t,10)||0}}catch(e){}})();",
+          }}
+        />
       </div>
     </aside>
   )

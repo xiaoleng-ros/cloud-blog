@@ -304,6 +304,35 @@ html[data-theme='dark'] .template-minimal__wrap {
   opacity: 1;
 }
 
+/* 冷路径导航的等待反馈：点下去到服务端把后台模板渲染出来之间有 0.3–0.6s 静止窗口，
+   旧界面毫无变化会被读成「没点上」。命中客户端路由缓存时 isTransitioning 一闪即过，
+   这套样式根本不出现，只有真正需要等待的那一次才亮。 */
+.nav__link--pending {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.nav__link--pending .shell-icon {
+  animation: nav-pending 1.05s ease-in-out infinite;
+}
+
+@keyframes nav-pending {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav__link--pending .shell-icon {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 .nav__link-indicator {
   background: var(--accent);
   top: 26%;
@@ -786,6 +815,12 @@ html[data-theme='dark'] .pagetab__tab--active {
   outline: none;
 }
 
+/* 全局 a11y 规则给聚焦 input 描 2px 轮廓，会在搜索框内画出第二个框；
+   外圈 .palette__search:focus-within 已承担焦点态，这里按字面取消内圈 */
+.palette__input:focus-visible {
+  outline: none;
+}
+
 .palette__list {
   margin: 0;
   padding: 0.5rem 0 0.15rem;
@@ -988,8 +1023,7 @@ html[data-theme='dark'] .dashboard__action--yellow:hover {
 
 /* 危险态描边：原亮色的 #fecaca/#fca5a5 在暗底上过亮 */
 html[data-theme='dark'] .drafts__op--danger,
-html[data-theme='dark'] .manage__action--danger,
-html[data-theme='dark'] .cover-uploader__clear:hover:not(:disabled) {
+html[data-theme='dark'] .manage__action--danger {
   border-color: rgb(239 106 106 / 0.45);
 }
 

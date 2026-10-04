@@ -58,6 +58,16 @@ export const SiteSettings: GlobalConfig = {
           ],
         },
         {
+          label: '网站配置',
+          fields: [
+            { name: 'siteIcon', type: 'text', label: '网站图标' },
+            { name: 'siteIcp', type: 'text', label: 'ICP 备案号' },
+            // 创建时间存 'YYYY-MM-DD' 文本而非 date：date 落库是带时区时间戳，
+            // 跨时区读回会整体偏一天，而它只需要按年/按日原样展示。
+            { name: 'siteCreatedAt', type: 'text', label: '网站创建时间' },
+          ],
+        },
+        {
           label: '首页 Hero',
           fields: [
             {
@@ -125,7 +135,7 @@ export const SiteSettings: GlobalConfig = {
               admin: {
                 rows: 6,
                 description:
-                  '每个段落一行。可使用简单 HTML，如 <span class="marker-highlight">高亮</span> 来给部分文字加高亮标记。',
+                  '一行一段，想换行直接回车；给部分文字加高亮写成 ==这样== 即可（旧数据里的 HTML 会在后台首次保存时自动转成该记号）。',
               },
             },
             {
@@ -134,7 +144,8 @@ export const SiteSettings: GlobalConfig = {
               label: '关于页便签',
               admin: {
                 rows: 4,
-                description: '每行一条「标题｜副文字｜颜色」，颜色可选 yellow / cyan / pink。',
+                description:
+                  '后台由行编辑器管理：JSON 数组，兼容旧「标题|副文字|颜色」行文本。颜色 = 预设 token（yellow/cyan/pink/green/purple）或任意 hex。',
               },
             },
             {
@@ -143,7 +154,8 @@ export const SiteSettings: GlobalConfig = {
               label: '技能环',
               admin: {
                 rows: 6,
-                description: '每行一条「名称｜副标题｜数值｜颜色」，数值 0-100，颜色可选 yellow / cyan / pink / purple。',
+                description:
+                  '后台由行编辑器管理：JSON 数组，兼容旧「名称|副标题|数值|颜色」行文本。数值 0-100，颜色同上可任选。',
               },
             },
           ],

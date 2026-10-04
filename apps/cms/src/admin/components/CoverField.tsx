@@ -30,6 +30,7 @@ export const CoverField: React.FC<{ path: string; label?: string }> = ({ path, l
         id={path}
         value={typeof value === 'string' ? value : ''}
         onChange={setValue}
+        placeholder="请输入封面地址"
       />
       <FieldError message={errorMessage} showError={showError} />
     </div>

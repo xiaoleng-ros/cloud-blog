@@ -238,7 +238,15 @@ export async function fetchGlobal<T>(slug: string): Promise<T> {
   return request<T>('GET', `/api/globals/${slug}`)
 }
 
-/** 保存全局配置单例 */
+/**
+ * 保存全局配置单例
+ * 注意：Payload 3 的 globals REST 更新端点是 POST /（见 payload/dist/globals/endpoints/index.js），
+ * 不存在 PATCH/PUT 路由，发 PATCH 会被 handleEndpoints 返回 404 Route not found。
+ * 且该端点把文档包在 { message, result } 里返回（与 GET 直接返回文档不同），
+ * 这里统一解包成文档本体，避免调用方拿不到 updatedAt 而误判并发冲突。
+ */
 export async function updateGlobal<T>(slug: string, data: Record<string, unknown>): Promise<T> {
-  return request<T>('PATCH', `/api/globals/${slug}`, data)
+  const res = await request<{ message?: string; result?: T } | T>('POST', `/api/globals/${slug}`, data)
+  if (res && typeof res === 'object' && 'result' in res) return (res as { result: T }).result
+  return res as T
 }

@@ -11,18 +11,37 @@
  */
 import { FieldLabel, useField } from '@payloadcms/ui'
 import React, { useCallback, useMemo } from 'react'
+// 平台圆点颜色取自前台图标表的官方色：后台色板与前台显示不会各说各话
+import { BRAND_ICONS } from 'cloud-blog/shared/icon-paths'
+import { socialIconFor } from 'cloud-blog/shared/site-defaults'
 
-/** 支持的社交平台（与前台 socialIconMap 保持一致） */
-export const PLATFORM_OPTIONS = [
-  { value: 'bilibili', label: 'Bilibili', color: '#fb7299' },
-  { value: 'douyin', label: '抖音', color: '#000000' },
-  { value: 'youtube', label: 'YouTube', color: '#ff0000' },
-  { value: 'x', label: 'X', color: '#0f1419' },
-  { value: 'rss', label: 'RSS 订阅', color: '#f26522' },
-] as const
+/** 圆点兜底色：没有官方色的平台（抖音暂无可核实的官方色、GitHub 是线性图标）用它 */
+const DOT_FALLBACK = '#8d8d8d'
 
-/** 平台类型 */
-export type Platform = (typeof PLATFORM_OPTIONS)[number]['value']
+const PLATFORM_LABELS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'bilibili', label: 'Bilibili' },
+  { value: 'douyin', label: '抖音' },
+  { value: '小红书', label: '小红书' },
+  { value: '网易云音乐', label: '网易云音乐' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'x', label: 'X' },
+  { value: 'rss', label: 'RSS 订阅' },
+  { value: 'QQ', label: 'QQ' },
+  { value: '微信', label: '微信' },
+  { value: 'github', label: 'GitHub' },
+]
+
+/**
+ * 可选的社交平台。value 就是写进行首的那个平台名，前台按 shared/site-defaults 的别名表找图标；
+ * 表里没有的图标不会整条消失，而是显示纯文字（与页脚同一套规则）。
+ */
+export const PLATFORM_OPTIONS = PLATFORM_LABELS.map((p) => ({
+  ...p,
+  color: BRAND_ICONS[socialIconFor(p.value)]?.color ?? DOT_FALLBACK,
+}))
+
+/** 平台类型（就是行首那段文本） */
+export type Platform = string
 
 /** 单条社交链接 */
 export interface SocialItem {
@@ -184,7 +203,8 @@ export const SocialLinksField: React.FC<{ path: string; label?: string }> = ({ p
 
       {/* 格式说明 */}
       <p className="social-links-field__hint">
-        每行保存为「平台 链接」格式，前台会自动匹配对应图标。支持 {PLATFORM_OPTIONS.map((p) => p.label).join(' / ')}。
+        每行保存为「平台 链接」格式，前台会自动匹配对应图标。支持 {PLATFORM_OPTIONS.map((p) => p.label).join(' / ')}；
+        认不出图标的平台不会消失，前台按纯文字显示平台名。
       </p>
     </div>
   )
