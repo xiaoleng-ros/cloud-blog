@@ -1,21 +1,17 @@
 ---
+import { resolveAboutColor } from 'cloud-blog/shared/about-format';
+
 export interface Props {
   label: string;
   sublabel?: string;
   value: number;
-  color?: 'yellow' | 'cyan' | 'pink' | 'purple';
+  /** 预设 token（yellow/cyan/pink/green/purple）或任意 hex；空回退淡黄 */
+  color?: string;
 }
 
-const { label, sublabel, value, color = 'yellow' } = Astro.props;
+const { label, sublabel, value, color } = Astro.props;
 
-const colorMap = {
-  yellow: 'var(--sticky-yellow)',
-  cyan: 'var(--sticky-cyan)',
-  pink: 'var(--sticky-pink)',
-  purple: 'var(--sticky-purple)',
-};
-
-const ringColor = colorMap[color];
+const ringColor = resolveAboutColor(color) || 'var(--sticky-yellow)';
 const percent = Math.min(100, Math.max(0, value));
 ---
 

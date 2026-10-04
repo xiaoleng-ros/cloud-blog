@@ -3,7 +3,9 @@
  *
  * 数据流通：构建/开发时优先从后台 API 拉取文章与随笔；
  * 后台不可用（API 失败）时自动回退到本地 src/content 下的 .md 文件，
- * 保证前台在后台未启动时仍可正常开发与构建。
+ * 保证前台在后台未启动时仍可开发。构建不允许产出空站：文章详情页一条都没有时
+ * 由 astro.config 的 empty-site-guard 集成让构建非零退出（「0 篇文章」的产物
+ * 会照常打印 Complete!，发现不了，还可能被 build:all 带上线）。
  *
  * 渲染：统一使用 LoaderContext.renderMarkdown()，与前台 glob loader 的
  * markdown 管线完全一致（astro.config 中的 remark/rehype 插件均生效）。
@@ -360,8 +362,8 @@ export const payloadPostsLoader: Loader = {
       if (fallbackEntries.length === 0) {
         ctx.logger.error(
           '[payload-loader] ⚠️ 后台拉取失败且没有任何本地 markdown 兜底：' +
-            '前台会用默认文案（模板作者名）构建，并且不会生成任何文章详情页（/posts/* 会 404）。' +
-            `请检查 PUBLIC_PAYLOAD_URL 是否指向真实线上域名（当前解析为 ${PAYLOAD_URL}）。`,
+            '前台会退回默认文案（模板作者名），并且不会生成任何文章详情页（/posts/* 会 404）。' +
+            `请检查 PUBLIC_PAYLOAD_URL 是否指向真实后台地址（当前解析为 ${PAYLOAD_URL}）。`,
         );
       }
       await storeEntries(ctx, ctx.store, fallbackEntries, (id) => urlsOf.get(id));
@@ -482,7 +484,8 @@ function schedulePolling(
   if (!ctx.watcher) return;
 
   // 先回收同一 loader 上一轮的轮询，再挂新的
-  const previous = pollingTimers.get(ctx.name);
+  // 键用 ctx.collection：LoaderContext 上没有 name（name 属于 Loader 对象本身）
+  const previous = pollingTimers.get(ctx.collection);
   if (previous) clearInterval(previous);
 
   ctx.logger.info(`[payload-loader] 已启用 dev 自动同步（每 ${AUTO_REFRESH_MS / 1000}s 轮询 ${label}）`);
@@ -507,7 +510,7 @@ function schedulePolling(
     }
   };
 
-  pollingTimers.set(ctx.name, setInterval(() => void poll(), AUTO_REFRESH_MS));
+  pollingTimers.set(ctx.collection, setInterval(() => void poll(), AUTO_REFRESH_MS));
 }
 
 /**

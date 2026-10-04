@@ -135,8 +135,9 @@ interface ApiProject {
   status: string;
 }
 
-/** 关于页项目条目（来自后台 projects 集合） */
-export interface ProjectEntry {
+/** 关于页项目条目（来自后台 projects 集合）。用 type 而非 interface：
+ *  接口没有隐式索引签名，无法作为 Record<string, unknown> 传给 loader 的 ctx.parseData */
+export type ProjectEntry = {
   id: string;
   group: string;
   groupDescription?: string;

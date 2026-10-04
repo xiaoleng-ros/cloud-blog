@@ -18,11 +18,11 @@ const { title = '评论' } = Astro.props;
   import { mountComments } from '../lib/comments.js';
 
   const ENV_ID = import.meta.env.PUBLIC_TWIKOO_ENV_ID;
-  let activeRoot = null;
+  let activeRoot: Element | null = null;
   let cleanup = () => {};
 
   const initComments = () => {
-    const root = document.querySelector('[data-cbox]');
+    const root = document.querySelector<HTMLElement>('[data-cbox]');
     if (root === activeRoot) return;
 
     cleanup();
@@ -37,22 +37,23 @@ const { title = '评论' } = Astro.props;
     const mountEl = root.querySelector('[data-c-mount]');
     const countEl = root.querySelector('[data-c-count]');
     let started = false;
-    let api = null;
+    let api: ReturnType<typeof mountComments> | null = null;
 
     const start = () => {
       if (started) return api;
       started = true;
+      if (!mountEl) return api;
       api = mountComments(mountEl, {
         envId: ENV_ID,
         url: location.pathname,
         onCount: (n) => {
-          countEl.textContent = n ? `· ${n}` : '';
+          if (countEl) countEl.textContent = n ? `· ${n}` : '';
         },
       });
       return api;
     };
 
-    const quoteComment = (detail) => {
+    const quoteComment = (detail: { text?: string; returnY?: number }) => {
       const instance = start();
       root.scrollIntoView({ behavior: 'smooth', block: 'start' });
       window.setTimeout(() => instance?.quote(detail), 180);
@@ -60,7 +61,7 @@ const { title = '评论' } = Astro.props;
 
     window.addEventListener(
       'blog:quote-comment',
-      (event) => quoteComment(event.detail),
+      (event) => quoteComment((event as CustomEvent<{ text?: string; returnY?: number }>).detail),
       { signal: controller.signal },
     );
 

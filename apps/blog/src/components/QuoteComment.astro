@@ -12,11 +12,11 @@ const { selector = '.post-content' } = Astro.props;
 
 <script>
   const commentsEnabled = Boolean(import.meta.env.PUBLIC_TWIKOO_ENV_ID);
-  let activeRoot = null;
+  let activeRoot: Element | null = null;
   let cleanup = () => {};
 
   const initQuoteComments = () => {
-    const rootMarker = document.querySelector('[data-qc-root]');
+    const rootMarker = document.querySelector<HTMLElement>('[data-qc-root]');
     if (rootMarker === activeRoot) return;
 
     cleanup();
@@ -25,7 +25,7 @@ const { selector = '.post-content' } = Astro.props;
 
     const controller = new AbortController();
     const signal = controller.signal;
-    const scopeSelector = rootMarker.dataset.qcSelector;
+    const scopeSelector = rootMarker.dataset.qcSelector ?? '.post-content';
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'qc-pop';
@@ -35,9 +35,9 @@ const { selector = '.post-content' } = Astro.props;
 
     let quotedText = '';
     let returnY = 0;
-    let hideTimer = null;
+    let hideTimer: number | undefined;
 
-    const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const clean = (value: unknown) => String(value || '').replace(/\s+/g, ' ').trim();
 
     const hide = () => {
       button.hidden = true;
@@ -52,10 +52,8 @@ const { selector = '.post-content' } = Astro.props;
       if (text.length < 2) return null;
 
       const range = selection.getRangeAt(0);
-      const container =
-        range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
-          ? range.commonAncestorContainer
-          : range.commonAncestorContainer.parentElement;
+      const ancestor = range.commonAncestorContainer;
+      const container = ancestor instanceof Element ? ancestor : ancestor.parentElement;
       const scope = container?.closest(scopeSelector);
       if (!scope) return null;
 

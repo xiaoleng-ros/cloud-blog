@@ -81,6 +81,34 @@ function siteUrlGuard() {
   };
 }
 
+/**
+ * 空站守卫：构建产物里一条文章详情页都没有就让构建失败（非零退出）。
+ *
+ * 为什么放这里而不是 loader 里抛错：loader 在 dev / astro check 里同样会跑，
+ * 那两种场景下「后台没起来」是正常状态（dev 靠轮询自愈、check 不关心数据），
+ * 只有 build 才需要拦住空站；astro:build:done 只在构建时触发，天然区分。
+ * 拦的是两类事故：「库里 0 篇已发布文章」和「PUBLIC_PAYLOAD_URL 指错域名 →
+ * 静默回退本地 markdown」，两者都会照常打印 Complete!，随后被 build:all 带上线。
+ */
+function emptySiteGuard() {
+  return {
+    name: 'empty-site-guard',
+    hooks: {
+      'astro:build:done'({ pages }) {
+        // pathname 不带前导斜杠（如 404/、posts/AI纪元/2/）；列表页是 posts/ 或 posts，
+        // 详情页在 posts/ 之后还有内容
+        const detailPages = pages.filter((page) => /^\/?posts\/.+/.test(page.pathname ?? ''));
+        if (detailPages.length > 0) return;
+        throw new Error(
+          '[astro.config] 构建产物里没有任何文章详情页（/posts/*），已中止。' +
+            '通常是后台拉取失败后静默回退了本地 markdown（src/content/posts 为空）：' +
+            '确认 PUBLIC_PAYLOAD_URL 指向的后台有已发布文章；本地刷新前台外壳请用 npm run sync:blog。',
+        );
+      },
+    },
+  };
+}
+
 export default defineConfig({
   site: SITE,
   base: '/',
@@ -93,7 +121,7 @@ export default defineConfig({
     // 保证构建期与运行期(/api/blog-sync)两条链产出相同的净化结果。
     rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], mdIframeHostGuard, rehypeImgAttrs],
   },
-  integrations: [payloadHotReload(), siteUrlGuard()],
+  integrations: [payloadHotReload(), siteUrlGuard(), emptySiteGuard()],
   // 把唯一来源的 SITE 注入 import.meta.env.SITE_URL：
   // payload-api.ts / site-defaults.ts（→ rss/sitemap/robots 的 absoluteUrl）全部读同一个值，
   // 彻底消除「astro.config 用 process.env、feed 用 import.meta.env」的双源分歧。

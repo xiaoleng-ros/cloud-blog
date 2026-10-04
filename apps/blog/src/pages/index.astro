@@ -3,7 +3,8 @@ import { getCollection } from 'astro:content';
 import Icon from '../components/Icon.astro';
 import PostSummary from '../components/PostSummary.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getHero, getSiteSettings, parseSocials } from '../lib/site-settings';
+import { getHero, getSiteSettings, getSocials } from '../lib/site-settings';
+import { hasIcon } from 'cloud-blog/shared/icon-paths';
 import {
   formatDate,
   getPostCategory,
@@ -25,32 +26,11 @@ const heroPicks = [
   ...latestPosts.filter((post) => !featuredPosts.some((f) => f.id === post.id)),
 ].slice(0, 5);
 
-// Hero 文案与社交链接：优先读取后台站点设置，后台不可用时回退默认值
+// Hero 文案与社交链接：后台填了才显示，只有后台整体不可用时才用离线兜底
 const settings = await getSiteSettings();
 const hero = await getHero();
 const heroBio = hero.bio.replace('{count}', String(posts.length));
-
-const defaultSocials = [
-  { platform: 'bilibili', href: 'https://space.bilibili.com/46377861', label: 'Bilibili' },
-  { platform: 'douyin', href: 'https://www.douyin.com/user/self', label: '抖音' },
-  { platform: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg', label: 'YouTube' },
-  { platform: 'x', href: 'https://x.com/shenfanlaogou', label: 'X' },
-  { platform: 'rss', href: '/rss.xml', label: 'RSS 订阅' },
-];
-/** 平台 → Icon 图标名映射 */
-const socialIconMap: Record<string, string> = {
-  bilibili: 'bilibili',
-  douyin: 'douyin',
-  youtube: 'youtube',
-  x: 'x-platform',
-  rss: 'rss',
-};
-const socials = (() => {
-  // 后台社交链接是 textarea（每行「平台 链接」），解析为数组；为空回退默认
-  const items = parseSocials(settings?.socials).map((item) => ({ ...item, label: item.platform }));
-  const src = items.length > 0 ? items : defaultSocials;
-  return src.map((item) => ({ ...item, icon: socialIconMap[item.platform] })).filter((item) => item.href && item.icon);
-})();
+const socials = await getSocials();
 
 // Warm clay/amber band for cover-less featured items, on palette.
 // 站点名：与 BaseLayout 保持一致，优先后台设置
@@ -75,31 +55,39 @@ const coverHue = (value: string) => {
       <span class="hero__sticker hero__sticker--1" aria-hidden="true"></span>
       <span class="hero__sticker hero__sticker--2" aria-hidden="true"></span>
 
-      <h1 class="hero__title">
-        {hero.greeting}<span class="hero__name">{hero.name}</span>！
-      </h1>
-      <p class="hero__subtitle">{hero.subtitle}</p>
-      <p class="hero__bio">{heroBio}</p>
+      {(hero.greeting || hero.name) && (
+        <h1 class="hero__title">
+          {hero.greeting}<span class="hero__name">{hero.name}</span>！
+        </h1>
+      )}
+      {hero.subtitle && <p class="hero__subtitle">{hero.subtitle}</p>}
+      {heroBio && <p class="hero__bio">{heroBio}</p>}
 
-      <div class="hero__actions">
-        <a class="hero__tag" href="/archive/">
-          {hero.buttonLabel}
-          <Icon name="arrow-right" size={16} />
-        </a>
-        <span class="hero__social" aria-label="社交链接">
-          {socials.map((item) => (
-            <a
-              class="icon-button"
-              href={item.href}
-              target={item.href.startsWith('http') ? '_blank' : undefined}
-              rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-              aria-label={item.label}
-            >
-              <Icon name={item.icon} />
+      {(hero.buttonLabel || socials.length > 0) && (
+        <div class="hero__actions">
+          {hero.buttonLabel && (
+            <a class="hero__tag" href="/archive/">
+              {hero.buttonLabel}
+              <Icon name="arrow-right" size={16} />
             </a>
-          ))}
-        </span>
-      </div>
+          )}
+          {socials.length > 0 && (
+            <span class="hero__social" aria-label="社交链接">
+              {socials.map((item) => (
+                <a
+                  class={hasIcon(item.icon) ? 'icon-button' : 'icon-button icon-button--label'}
+                  href={item.href}
+                  target={item.href.startsWith('http') ? '_blank' : undefined}
+                  rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                  aria-label={item.label}
+                >
+                  {hasIcon(item.icon) ? <Icon name={item.icon} /> : item.label}
+                </a>
+              ))}
+            </span>
+          )}
+        </div>
+      )}
     </div>
 
     {/* 精选区块：锚点始终渲染（即使构建时后台还没有文章），

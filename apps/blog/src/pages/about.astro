@@ -1,5 +1,6 @@
 ---
 import { getCollection, type CollectionEntry } from 'astro:content';
+import { resolveAboutColor } from 'cloud-blog/shared/about-format';
 import Icon from '../components/Icon.astro';
 import SkillRing from '../components/SkillRing.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -14,7 +15,7 @@ const firstYear = posts.reduce((min, post) => {
   return year && year < min ? year : min;
 }, Number(toShanghaiParts(new Date())?.year));
 
-// 关于页正文/便签/技能：优先后台站点设置（可随时在后台修改），缺失时回退默认值
+// 关于页正文/便签/技能：以后台站点设置为准，后台留空前台就不出该项
 const about = await getAboutContent();
 
 // 作者名：页面的 description / SEO 用，优先后台站点设置
@@ -71,40 +72,50 @@ const STAR_FILL_SVG =
   <article class="about">
     <!-- 关于我：左文字 + 右便签（运行时同步区块） -->
     <section class="about__profile" aria-labelledby="about-heading" data-sync-block="aboutProfile">
-      <div class="about__intro-card">
-        <span class="about__eyebrow">ABOUT</span>
-        <h1 id="about-heading" class="about__lead">
-          {about.lead}
-        </h1>
-        {about.paragraphs.map((paragraph) => (
-          <p class="about__text" set:html={paragraph} />
-        ))}
-        <div class="about__facts">
-          <span class="about__fact">{postCount} 篇文章</span>
-          <span class="about__fact">写于 {firstYear} 至今</span>
-          <span class="about__fact">全站由 AI 开发</span>
-        </div>
-      </div>
-
-      <div class="about__notes">
-        {about.notes.map((note) => (
-          <div class={`about__note about__note--${note.color}`}>
-            <span class="about__note-tape" aria-hidden="true"></span>
-            <strong>{note.title}</strong>
-            <span>{note.subtitle}</span>
+      {(about.lead || about.paragraphs.length > 0) && (
+        <div class="about__intro-card">
+          <span class="about__eyebrow">ABOUT</span>
+          {about.lead && (
+            <h1 id="about-heading" class="about__lead">
+              {about.lead}
+            </h1>
+          )}
+          {about.paragraphs.map((paragraph) => (
+            <p class="about__text" set:html={paragraph} />
+          ))}
+          <div class="about__facts">
+            <span class="about__fact">{postCount} 篇文章</span>
+            <span class="about__fact">写于 {firstYear} 至今</span>
+            <span class="about__fact">全站由 AI 开发</span>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {about.notes.length > 0 && (
+        <div class="about__notes">
+          {about.notes.map((note) => (
+            <div class="about__note" style={resolveAboutColor(note.color) ? `--note-color: ${resolveAboutColor(note.color)}` : undefined}>
+              <span class="about__note-tape" aria-hidden="true"></span>
+              <strong>{note.title}</strong>
+              <span>{note.subtitle}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
 
-    <!-- 我的小本领（运行时同步区块） -->
+    <!-- 我的小本领（运行时同步区块）：锚点常驻，后台没有技能时区块内不出任何内容 -->
     <section class="about__skills" aria-labelledby="skills-heading" data-sync-block="aboutSkills">
-      <div class="section__header">
-        <h2 id="skills-heading">我的小本领</h2>
-      </div>
-      <div class="skill-grid">
-        {about.skills.map((skill) => <SkillRing {...skill} />)}
-      </div>
+      {about.skills.length > 0 && (
+        <>
+          <div class="section__header">
+            <h2 id="skills-heading">我的小本领</h2>
+          </div>
+          <div class="skill-grid">
+            {about.skills.map((skill) => <SkillRing {...skill} />)}
+          </div>
+        </>
+      )}
     </section>
 
     <!-- 项目区（运行时同步区块）

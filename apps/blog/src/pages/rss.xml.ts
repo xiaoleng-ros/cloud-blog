@@ -28,7 +28,7 @@ export async function GET() {
   const posts = sortPosts(await getCollection('posts')).slice(0, 50);
   const latestDate = posts
     .map(getPostUpdatedDate)
-    .filter(Boolean)
+    .filter((d): d is Date => Boolean(d))
     .sort((a, b) => b.getTime() - a.getTime())[0];
 
   // 站点作者：Feedly / NetNewsWire 等客户端识别 author 时需要 email，用 site.url 派生的伪 email 兜底

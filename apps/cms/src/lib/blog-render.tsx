@@ -27,9 +27,35 @@ import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.m
 import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs'
 import { createRehypeImgAttrs } from 'cloud-blog/shared/rehype-img-attrs.mjs'
 // href 协议白名单 + 关于页正文净化：与前台共用同一份实现（escapeAttr 只挡引号，挡不住 javascript:）
-import { safeHref, sanitizeInlineHtml } from 'cloud-blog/shared/html-safety'
+import { safeHref } from 'cloud-blog/shared/html-safety'
+import {
+  parseNotes,
+  parseSkills,
+  resolveAboutColor,
+  splitAboutParagraphs,
+  type NoteItem,
+  type SkillItem,
+} from 'cloud-blog/shared/about-format'
 // 正文净化白名单：与 Astro 构建链共用同一份 schema（默认值来自本 app 依赖，shared 层不带裸包 import）
 import { buildMdSanitizeSchema } from 'cloud-blog/shared/md-sanitize-schema.mjs'
+// 站点内容的离线兜底：与前台 Astro 层同一份，只有后台整体不可用（settings 为 null）才取用
+import {
+  footerIconFor,
+  OFFLINE_ABOUT,
+  OFFLINE_FOOTER,
+  OFFLINE_HERO,
+  OFFLINE_SOCIALS,
+  socialIconFor,
+} from 'cloud-blog/shared/site-defaults'
+// 图标唯一一张表：与 Astro 的 Icon.astro 同一份，品牌图形带官方色
+import {
+  BRAND_ICONS,
+  brandRenderSize,
+  brandTransform,
+  hasIcon,
+  iconInnerMarkup,
+  isBrandIcon,
+} from 'cloud-blog/shared/icon-paths'
 
 const mdSanitizeSchema = buildMdSanitizeSchema(defaultSchema)
 
@@ -122,52 +148,34 @@ function parseSocials(raw?: string): Array<{ platform: string; href: string }> {
   return out
 }
 
+/**
+ * Hero / 社交 / 页脚 / 关于的取值规则与前台 site-settings.ts 完全一致：
+ * 后台可用时原样返回（字段留空就是空串/空数组，由渲染层省略该项），
+ * 仅当后台整体不可用（settings === null）才使用 shared/site-defaults 的离线兜底。
+ */
 function getHeroData(settings: Record<string, any> | null) {
+  if (settings === null) return { ...OFFLINE_HERO }
   return {
-    greeting: settings?.greeting ?? '嗨，我是',
-    name: settings?.name ?? '段枫',
-    subtitle: settings?.subtitle ?? '又名 DUAN FENG · 爱折腾的创作者',
-    bio:
-      settings?.bio ??
-      '别人叫我「AI 实践者」，我觉得自己只是个爱画画、爱写代码的孩子。把屏幕当画板，把代码当蜡笔，在这里画了 {count} 篇笔记。',
-    buttonLabel: settings?.buttonLabel ?? '浏览文章',
+    greeting: settings.greeting ?? '',
+    name: settings.name ?? '',
+    subtitle: settings.subtitle ?? '',
+    bio: settings.bio ?? '',
+    buttonLabel: settings.buttonLabel ?? '',
   }
-}
-
-const defaultSocials = [
-  { platform: 'bilibili', href: 'https://space.bilibili.com/46377861', label: 'Bilibili' },
-  { platform: 'douyin', href: 'https://www.douyin.com/user/self', label: '抖音' },
-  { platform: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg', label: 'YouTube' },
-  { platform: 'x', href: 'https://x.com/shenfanlaogou', label: 'X' },
-  { platform: 'rss', href: '/rss.xml', label: 'RSS 订阅' },
-]
-
-const socialIconMap: Record<string, string> = {
-  bilibili: 'bilibili',
-  douyin: 'douyin',
-  youtube: 'youtube',
-  x: 'x-platform',
-  rss: 'rss',
 }
 
 function getSocials(settings: Record<string, any> | null) {
-  const items = parseSocials(settings?.socials).map((item) => ({ ...item, label: item.platform }))
-  const src = items.length > 0 ? items : defaultSocials
-  return src
-    .map((item) => ({ ...item, icon: socialIconMap[item.platform] }))
-    .filter((item) => item.href && item.icon)
+  const items =
+    settings === null
+      ? OFFLINE_SOCIALS
+      : parseSocials(settings.socials).map((item) => ({ ...item, label: item.platform }))
+  // 与页脚同规则：认不出图标的平台照样显示，只是没有图形
+  return items
+    .map((item) => ({ ...item, icon: socialIconFor(item.platform) }))
+    .filter((item) => item.href)
 }
 
 function getFooterData(settings: Record<string, any> | null) {
-  const iconMap: Record<string, string> = {
-    Bilibili: 'bilibili', bilibili: 'bilibili',
-    YouTube: 'youtube', youtube: 'youtube',
-    RSS: 'rss', rss: 'rss',
-    QQ: 'qq', qq: 'qq',
-    微信: 'wechat', wechat: 'wechat',
-  }
-  const footerIconFor = (name: string) => iconMap[name] ?? String(name).toLowerCase()
-
   const parseFooterLines = (raw?: string | null) => {
     if (!raw) return []
     const out: Array<{ name: string; icon: string; href: string }> = []
@@ -186,25 +194,17 @@ function getFooterData(settings: Record<string, any> | null) {
     return out
   }
 
-  const channels = parseFooterLines(settings?.footerChannels)
-  const groups = parseFooterLines(settings?.footerGroups)
+  if (settings === null) {
+    return {
+      subtitle: OFFLINE_FOOTER.subtitle,
+      channels: OFFLINE_FOOTER.channels,
+      groups: OFFLINE_FOOTER.groups,
+    }
+  }
   return {
-    subtitle: settings?.footerSubtitle ?? 'AI · Code · Web',
-    channels:
-      channels.length > 0
-        ? channels
-        : [
-            { name: 'Bilibili', icon: 'bilibili', href: 'https://space.bilibili.com/46377861' },
-            { name: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg' },
-            { name: 'RSS', icon: 'rss', href: '/rss.xml' },
-          ],
-    groups:
-      groups.length > 0
-        ? groups
-        : [
-            { name: 'QQ 交流群', icon: 'qq', href: '' },
-            { name: '微信交流群', icon: 'wechat', href: '' },
-          ],
+    subtitle: settings.footerSubtitle ?? '',
+    channels: parseFooterLines(settings.footerChannels),
+    groups: parseFooterLines(settings.footerGroups),
   }
 }
 
@@ -218,67 +218,27 @@ function coverHue(value: string): number {
 }
 
 // ---------------------------------------------------------------------------
-// 图标渲染（复刻 Icon.astro：线性图标 + 品牌实心图标）
+// 图标渲染：与 Astro 的 Icon.astro 共用 shared/icon-paths 同一张表
+// （以前两侧各抄一份，这份少了 archive / compass / spark / bookmark / mail 五个，
+//   于是后台同步回来的区块里那几个图标会变成空白）
 // ---------------------------------------------------------------------------
 
-const icons: Record<string, string> = {
-  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
-  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  'arrow-right': '<path d="M5 12h14M13 6l6 6-6 6"/>',
-  'arrow-up-right': '<path d="M7 17 17 7M8 7h9v9"/>',
-  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
-  layers: '<path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5M3 17l9 5 9-5"/>',
-  hash: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
-  globe: '<circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
-  github: '<path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.7 4.7 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.3 4.3 0 0 0-.1 3.2A4.7 4.7 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/>',
-  download: '<path d="M12 3v11M7 10l5 5 5-5M5 19h14"/>',
-  cloud: '<path d="M7 18h9.5a3.5 3.5 0 0 0 .3-6.98 5 5 0 0 0-9.65-1.35A3.75 3.75 0 0 0 7 18Z"/>',
-  'cloud-drizzle': '<path d="M8 12.5a4 4 0 0 1 .2-7.97 5 5 0 0 1 9.5 1.3 3.5 3.5 0 0 1 .3 6.67"/><path d="M8 17v1.5M8 20.5V21M12 18v1.5M12 21.5V22M16 17v1.5M16 20.5V21"/>',
-  'cloud-rain': '<path d="M8 12.5a4 4 0 0 1 .2-7.97 5 5 0 0 1 9.5 1.3 3.5 3.5 0 0 1 .3 6.67"/><path d="M8 16v4M12 17v4M16 16v4"/>',
-  'cloud-snow': '<path d="M8 12.5a4 4 0 0 1 .2-7.97 5 5 0 0 1 9.5 1.3 3.5 3.5 0 0 1 .3 6.67"/><path d="M8 17h.01M8 20.5h.01M12 18.5h.01M12 22h.01M16 17h.01M16 20.5h.01"/>',
-  'cloud-lightning': '<path d="M8 12.5a4 4 0 0 1 .2-7.97 5 5 0 0 1 9.5 1.3 3.5 3.5 0 0 1 .3 6.67"/><path d="M12 15.5l-2 3.5h3l-2 3.5"/>',
-  wind: '<path d="M3 8h10a2.5 2.5 0 1 0-2.45-3M3 16h14a2.5 2.5 0 1 1-2.45 3M3 12h7"/>',
-  fog: '<path d="M4 9h16M4 13h11M9 17h11M4 17h2"/>',
-  smile: '<circle cx="12" cy="12" r="9.5"/><path d="M8.4 14.2a4 4 0 0 0 7.2 0"/><path d="M9 9.6h.01M15 9.6h.01"/>',
-  meh: '<circle cx="12" cy="12" r="9.5"/><path d="M8.5 15h7"/><path d="M9 9.6h.01M15 9.6h.01"/>',
-  frown: '<circle cx="12" cy="12" r="9.5"/><path d="M8.4 15.6a4 4 0 0 1 7.2 0"/><path d="M9 9.6h.01M15 9.6h.01"/>',
-  tired: '<circle cx="12" cy="12" r="9.5"/><path d="M7.8 9.6h2.6M13.6 9.6h2.6"/><path d="M9.5 15.4h5"/>',
-  heart: '<path d="M12 20.3 4.6 13a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13Z"/>',
-  idea: '<path d="M9.5 18h5M10.5 21h3"/><path d="M12 3a6.2 6.2 0 0 0-3.8 11.1c.6.5 1 1.2 1.05 2h5.5c.05-.8.45-1.5 1.05-2A6.2 6.2 0 0 0 12 3Z"/>',
-}
-
-const brandIcons: Record<string, string> = {
-  bilibili:
-    '<path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.658.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373Z"/>',
-  douyin:
-    '<path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>',
-  youtube:
-    '<path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>',
-  'x-platform':
-    '<path d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"/>',
-  rss: '<path d="M19.199 24C19.199 13.467 10.533 4.8 0 4.8V0c13.165 0 24 10.835 24 24h-4.801zM3.291 17.415c1.814 0 3.293 1.479 3.293 3.295 0 1.813-1.485 3.29-3.301 3.29C1.47 24 0 22.526 0 20.71s1.475-3.294 3.291-3.295zM15.909 24h-4.665c0-6.169-5.075-11.245-11.244-11.245V8.09c8.727 0 15.909 7.184 15.909 15.91z"/>',
-  qq: '<path d="M21.395 15.035a40 40 0 0 0-.803-2.264l-1.079-2.695c.001-.032.014-.562.014-.836C19.526 4.632 17.351 0 12 0S4.474 4.632 4.474 9.241c0 .274.013.804.014.836l-1.08 2.695a39 39 0 0 0-.802 2.264c-1.021 3.283-.69 4.643-.438 4.673.54.065 2.103-2.472 2.103-2.472 0 1.469.756 3.387 2.394 4.771-.612.188-1.363.479-1.845.835-.434.32-.379.646-.301.778.343.578 5.883.369 7.482.189 1.6.18 7.14.389 7.483-.189.078-.132.132-.458-.301-.778-.483-.356-1.233-.646-1.846-.836 1.637-1.384 2.393-3.302 2.393-4.771 0 0 1.563 2.537 2.103 2.472.251-.03.581-1.39-.438-4.673"/>',
-  wechat: '<path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.27-.027-.407-.03zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z"/>',
-}
-
 function iconSvg(name: string, size = 20, className?: string, strokeWidth = 1.75): string {
-  const isBrand = name in brandIcons
-  const path = isBrand ? brandIcons[name] : (icons[name] ?? '')
-  const renderSize = isBrand ? Math.round(size * 0.75) : size
-  const brandAdjust: Record<string, { scale?: number; dx?: number; dy?: number }> = {
-    'x-platform': { scale: 0.86 },
-    rss: { scale: 0.82, dx: 1.3, dy: -1.3 },
+  const inner = iconInnerMarkup(name)
+  if (isBrandIcon(name)) {
+    const brand = BRAND_ICONS[name]
+    const renderSize = brandRenderSize(size)
+    const transform = brandTransform(name)
+    const cls = escapeAttr(['brand-glyph', className].filter(Boolean).join(' '))
+    // 官方色写成内联自定义属性，实际 fill 由 .brand-glyph 按深浅主题取用
+    const style = brand.color
+      ? ` style="--glyph-color:${escapeAttr(brand.color)};--glyph-color-dark:${escapeAttr(brand.darkColor ?? brand.color)};"`
+      : ''
+    const g = transform ? `<g transform="${escapeAttr(transform)}">` : '<g>'
+    return `<svg class="${cls}"${style} width="${renderSize}" height="${renderSize}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${g}${inner}</g></svg>`
   }
-  const adj = isBrand ? brandAdjust[name] : undefined
-  const brandTransform = adj
-    ? `translate(${adj.dx ?? 0} ${adj.dy ?? 0}) translate(12 12) scale(${adj.scale ?? 1}) translate(-12 -12)`
-    : undefined
   const cls = className ? ` class="${escapeAttr(className)}"` : ''
-  if (isBrand) {
-    const g = brandTransform ? `<g transform="${escapeAttr(brandTransform)}">` : '<g>'
-    return `<svg${cls} width="${renderSize}" height="${renderSize}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${g}${path}</g></svg>`
-  }
-  return `<svg${cls} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`
+  return `<svg${cls} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`
 }
 
 // ---------------------------------------------------------------------------
@@ -454,22 +414,42 @@ function renderHeroCard(
   const socialHtml = socials
     .map((item) => {
       const link = safeHref(item.href, '#')
-      return `<a class="icon-button" href="${escapeAttr(link)}" ${
+      // 认不出图标 → 平台名纯文字胶囊（与 index.astro 的条件渲染保持一致）
+      const known = hasIcon(item.icon)
+      const inner = known ? iconSvg(item.icon) : escapeHtml(item.label)
+      const cls = known ? 'icon-button' : 'icon-button icon-button--label'
+      return `<a class="${cls}" href="${escapeAttr(link)}" ${
         link.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''
-      } aria-label="${escapeAttr(item.label)}">${iconSvg(item.icon)}</a>`
+      } aria-label="${escapeAttr(item.label)}">${inner}</a>`
     })
     .join('')
+
+  // 每一项都只在后台真有内容时输出：结构对齐 index.astro 的条件渲染
+  const titleHtml =
+    hero.greeting || hero.name
+      ? `<h1 class="hero__title">${escapeHtml(hero.greeting)}<span class="hero__name">${escapeHtml(
+          hero.name,
+        )}</span>！</h1>`
+      : ''
+  const actionsHtml =
+    hero.buttonLabel || socials.length > 0
+      ? `<div class="hero__actions">
+    ${
+      hero.buttonLabel
+        ? `<a class="hero__tag" href="/archive/">${escapeHtml(hero.buttonLabel)}${iconSvg('arrow-right', 16)}</a>`
+        : ''
+    }
+    ${socials.length > 0 ? `<span class="hero__social" aria-label="社交链接">${socialHtml}</span>` : ''}
+  </div>`
+      : ''
 
   return `<span class="hero__arrow" aria-hidden="true"></span>
   <span class="hero__sticker hero__sticker--1" aria-hidden="true"></span>
   <span class="hero__sticker hero__sticker--2" aria-hidden="true"></span>
-  <h1 class="hero__title">${escapeHtml(hero.greeting)}<span class="hero__name">${escapeHtml(hero.name)}</span>！</h1>
-  <p class="hero__subtitle">${escapeHtml(hero.subtitle)}</p>
-  <p class="hero__bio">${escapeHtml(hero.bio)}</p>
-  <div class="hero__actions">
-    <a class="hero__tag" href="/archive/">${escapeHtml(hero.buttonLabel)}${iconSvg('arrow-right', 16)}</a>
-    <span class="hero__social" aria-label="社交链接">${socialHtml}</span>
-  </div>`
+  ${titleHtml}
+  ${hero.subtitle ? `<p class="hero__subtitle">${escapeHtml(hero.subtitle)}</p>` : ''}
+  ${hero.bio ? `<p class="hero__bio">${escapeHtml(hero.bio)}</p>` : ''}
+  ${actionsHtml}`
 }
 
 /** 首页精选内容（锚点 index.astro 的 aside[data-sync-block="heroPicks"]） */
@@ -537,29 +517,44 @@ function renderFooterInner(
   footer: { subtitle: string; channels: Array<{ name: string; icon: string; href: string }>; groups: Array<{ name: string; icon: string; href: string }> },
   author: string,
 ): string {
+  // 图标表里没有的名字不渲染空 svg，只留文字（与 Footer.astro 的条件渲染一致）
+  const glyph = (name: string) => (hasIcon(name) ? iconSvg(name, 15) : '')
   const link = (item: { name: string; icon: string; href: string }, plain = false) => {
     // 与前台 site-settings.ts 一致：协议不合法的链接退化成空串（群组据此渲染成纯文字标签）
     const href = safeHref(item.href, '')
     return plain
-      ? `<span class="site-footer__item">${iconSvg(item.icon, 15)}${escapeHtml(item.name)}</span>`
-      : `<a href="${escapeAttr(href)}" ${href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''}>${iconSvg(item.icon, 15)}${escapeHtml(item.name)}</a>`
+      ? `<span class="site-footer__item">${glyph(item.icon)}${escapeHtml(item.name)}</span>`
+      : `<a href="${escapeAttr(href)}" ${href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''}>${glyph(item.icon)}${escapeHtml(item.name)}</a>`
   }
 
-  const channelsHtml = footer.channels.map((c) => link(c)).join('')
+  const channelsHtml = footer.channels
+    .map((c) => (safeHref(c.href, '') ? link(c) : link(c, true)))
+    .join('')
   const groupsHtml = footer.groups.map((g) => (safeHref(g.href, '') ? link(g) : link(g, true))).join('')
+  // 分隔点只在真有群组时出现：与 Footer.astro 的 `groups.length > 0 &&` 守卫保持一致，
+  // 否则后台清空群组后页脚会留一个孤零零的「·」
+  const groupsSection =
+    footer.groups.length > 0
+      ? `<span class="site-footer__sep" aria-hidden="true"></span>${groupsHtml}`
+      : ''
+  // 后台把链接和群组都清空时，整个 nav 不出（与 Footer.astro 一致），避免空容器撑出间距
+  const hasLinks = footer.channels.length > 0 || footer.groups.length > 0
 
   return `<div class="site-footer__id">
     <img src="/avatars/avatar.png" alt="${escapeAttr(author)}" class="site-footer__avatar" width="40" height="40" />
     <div class="site-footer__id-text">
       <strong>${escapeHtml(author)}</strong>
-      <span>${escapeHtml(footer.subtitle)}</span>
+      ${footer.subtitle ? `<span>${escapeHtml(footer.subtitle)}</span>` : ''}
     </div>
   </div>
-  <nav class="site-footer__links" aria-label="页脚链接">
+  ${
+    hasLinks
+      ? `<nav class="site-footer__links" aria-label="页脚链接">
     ${channelsHtml}
-    <span class="site-footer__sep" aria-hidden="true"></span>
-    ${groupsHtml}
+    ${groupsSection}
   </nav>`
+      : ''
+  }`
 }
 
 /** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]） */
@@ -911,17 +906,7 @@ async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): P
 // 关于页（about.astro）：正文/便签/技能环 + 项目区
 // ---------------------------------------------------------------------------
 
-interface SkillItem {
-  label: string
-  sublabel: string
-  value: number
-  color: 'yellow' | 'cyan' | 'pink' | 'purple'
-}
-interface NoteItem {
-  title: string
-  subtitle: string
-  color: 'yellow' | 'cyan' | 'pink'
-}
+// SkillItem / NoteItem 与解析统一走 shared/about-format（前台同一份实现）
 interface AboutData {
   lead: string
   paragraphs: string[]
@@ -929,99 +914,29 @@ interface AboutData {
   skills: SkillItem[]
 }
 
-const SKILL_COLORS = ['yellow', 'cyan', 'pink', 'purple']
-const NOTE_COLORS = ['yellow', 'cyan', 'pink']
-
-function safeSkillColor(color: string): SkillItem['color'] {
-  return (color && SKILL_COLORS.includes(color) ? color : 'yellow') as SkillItem['color']
-}
-function safeNoteColor(color: string): NoteItem['color'] {
-  return (color && NOTE_COLORS.includes(color) ? color : 'pink') as NoteItem['color']
-}
-
-function parseSkills(raw?: string | null): SkillItem[] {
-  if (!raw) return []
-  const out: SkillItem[] = []
-  for (const line of String(raw).split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    const parts = trimmed.split('|').map((s) => s.trim())
-    if (!parts[0]) continue
-    out.push({
-      label: parts[0],
-      sublabel: parts[1] ?? '',
-      value: Math.min(100, Math.max(0, Number(parts[2]) || 0)),
-      color: safeSkillColor(parts[3] ?? ''),
-    })
-  }
-  return out
-}
-
-function parseAboutNotes(raw?: string | null): NoteItem[] {
-  if (!raw) return []
-  const out: NoteItem[] = []
-  for (const line of String(raw).split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    const parts = trimmed.split('|').map((s) => s.trim())
-    if (!parts[0]) continue
-    out.push({ title: parts[0], subtitle: parts[1] ?? '', color: safeNoteColor(parts[2] ?? '') })
-  }
-  return out
-}
-
-/** 关于页文案：优先后台 SiteSettings，缺失回退默认（与前台 site-settings.ts 一致） */
+/** 关于页文案：与前台 getAboutContent() 同规则——后台填了才有，宕机才兜底 */
 function getAboutData(settings: Record<string, any> | null): AboutData {
-  const skills = parseSkills(settings?.skills)
-  const notes = parseAboutNotes(settings?.aboutNotes)
-  const paragraphs = String(settings?.aboutParagraphs ?? '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    // 关于页正文在两条链路里都是「原样 HTML」（前台 set:html / 这里拼字符串），
-    // 过一次排版白名单，保证 script / on* 属性这类执行载体两边都存活不了
-    .map((s) => sanitizeInlineHtml(s))
+  if (settings === null) {
+    return {
+      lead: OFFLINE_ABOUT.lead,
+      paragraphs: OFFLINE_ABOUT.paragraphs,
+      notes: OFFLINE_ABOUT.notes,
+      skills: OFFLINE_ABOUT.skills,
+    }
+  }
   return {
-    lead: settings?.aboutLead ?? '关于我',
-    paragraphs:
-      paragraphs.length > 0
-        ? paragraphs
-        : [
-            '我喜欢<span class="marker-highlight">歪一点</span>的东西——太正了反而不真实。',
-            '白天：<span class="marker-highlight">前端工程师 + 视觉设计师</span>，做正经的项目。<br />晚上：<span class="marker-highlight">画涂鸦</span>、写小工具、做声音装置。',
-            '梦想是让互联网上多一点<span class="marker-highlight">好玩的角落</span>。',
-          ],
-    notes:
-      notes.length > 0
-        ? notes
-        : [
-            { title: '坐标广州', subtitle: '1995 年生', color: 'yellow' },
-            { title: '独立创作者', subtitle: '8 年经验', color: 'cyan' },
-            { title: '一天三杯咖啡', subtitle: '（不是广告）', color: 'pink' },
-          ],
-    skills:
-      skills.length > 0
-        ? skills
-        : [
-            { label: 'HTML / CSS', sublabel: '画框搭的', value: 95, color: 'yellow' },
-            { label: 'JavaScript', sublabel: '会耍魔术', value: 90, color: 'cyan' },
-            { label: 'AI 工具', sublabel: '乱点乱用', value: 88, color: 'pink' },
-            { label: 'Astro', sublabel: '让人省点', value: 85, color: 'purple' },
-            { label: '视觉设计', sublabel: '爱涂爱画', value: 82, color: 'yellow' },
-          ],
+    lead: settings.aboutLead ?? '',
+    // 正文：==记号== → 高亮 span（整体转义后仅还原记号，比旧 HTML 白名单更严）；
+    // 存量 HTML 写法在解析时自动转换，无需迁移数据
+    paragraphs: splitAboutParagraphs(settings.aboutParagraphs),
+    notes: parseNotes(settings.aboutNotes),
+    skills: parseSkills(settings.skills),
   }
 }
 
-const SKILL_RING_COLOR: Record<SkillItem['color'], string> = {
-  yellow: 'var(--sticky-yellow)',
-  cyan: 'var(--sticky-cyan)',
-  pink: 'var(--sticky-pink)',
-  purple: 'var(--sticky-purple)',
-}
-
-/** 技能环（与 SkillRing.astro 结构一致） */
+/** 技能环（与 SkillRing.astro 结构一致）：颜色 token 走主题变量，hex 原样 */
 function renderSkillRing(skill: SkillItem): string {
-  const ringColor = SKILL_RING_COLOR[skill.color]
+  const ringColor = resolveAboutColor(skill.color) || 'var(--sticky-yellow)'
   const percent = Math.min(100, Math.max(0, skill.value))
   return `<div class="skill-ring">
   <div class="skill-ring__track" aria-hidden="true">
@@ -1041,29 +956,39 @@ function renderAboutProfile(about: AboutData, postCount: number, firstYear: numb
     .map((p) => `<p class="about__text">${p}</p>`)
     .join('')
   const notesHtml = about.notes
-    .map(
-      (n) => `<div class="about__note about__note--${escapeAttr(n.color)}">
+    .map((n) => {
+      const color = resolveAboutColor(n.color)
+      return `<div class="about__note"${color ? ` style="--note-color: ${escapeAttr(color)}"` : ''}>
     <span class="about__note-tape" aria-hidden="true"></span>
     <strong>${escapeHtml(n.title)}</strong>
     <span>${escapeHtml(n.subtitle)}</span>
-  </div>`,
-    )
+  </div>`
+    })
     .join('')
-  return `<div class="about__intro-card">
+  // 结构与条件渲染对齐 about.astro：后台留空的项整块不出
+  const introHtml =
+    about.lead || about.paragraphs.length > 0
+      ? `<div class="about__intro-card">
     <span class="about__eyebrow">ABOUT</span>
-    <h1 id="about-heading" class="about__lead">${escapeHtml(about.lead)}</h1>
+    ${about.lead ? `<h1 id="about-heading" class="about__lead">${escapeHtml(about.lead)}</h1>` : ''}
     ${paragraphsHtml}
     <div class="about__facts">
       <span class="about__fact">${postCount} 篇文章</span>
       <span class="about__fact">写于 ${firstYear} 至今</span>
       <span class="about__fact">全站由 AI 开发</span>
     </div>
-  </div>
-  <div class="about__notes">${notesHtml}</div>`
+  </div>`
+      : ''
+  const notesSection =
+    about.notes.length > 0 ? `<div class="about__notes">${notesHtml}</div>` : ''
+
+  return `${introHtml}
+  ${notesSection}`
 }
 
 /** 关于页技能环内容（锚点 about.astro 的 section[data-sync-block="aboutSkills"]） */
 function renderAboutSkills(skills: SkillItem[]): string {
+  if (skills.length === 0) return ''
   return `<div class="section__header">
     <h2 id="skills-heading">我的小本领</h2>
   </div>

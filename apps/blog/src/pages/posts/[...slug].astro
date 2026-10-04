@@ -30,7 +30,9 @@ export async function getStaticPaths() {
   return [
     ...posts.map((post) => ({
       params: { slug: getPostPathParams(post) },
-      props: { post },
+      // 两个分支的 props 形状保持一致（canonicalPath 显式带 undefined）：
+      // 否则 getStaticPaths 的联合类型会让解构出的 canonicalPath 报「属性不存在」
+      props: { post, canonicalPath: undefined },
     })),
     ...posts.map((post) => ({
       params: { slug: String(post.id) },

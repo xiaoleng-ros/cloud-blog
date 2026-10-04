@@ -158,6 +158,11 @@ const FORM = `
   <p class="cbox__empty" data-empty hidden>还没有评论，来说两句吧。</p>
   <button type="button" class="cbox__more" data-more hidden>加载更多</button>`;
 
+/**
+ * @param {Element} root
+ * @param {{ envId?: string, url?: string, onCount?: (count: number) => void }} [options]
+ * @returns {{ reload: () => unknown, quote: (detail?: { text?: string, returnY?: number }) => void }}
+ */
 export function mountComments(root, { envId, url, onCount } = {}) {
   root.innerHTML = FORM;
   const $ = (s) => root.querySelector(s);

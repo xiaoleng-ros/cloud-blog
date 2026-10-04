@@ -2,6 +2,7 @@
 import Icon from './Icon.astro';
 import { site, toShanghaiParts } from '../lib/posts';
 import { getFooter, getSiteSettings } from '../lib/site-settings';
+import { hasIcon } from 'cloud-blog/shared/icon-paths';
 
 // 构建年份仅作为无 JS 环境的静态兜底；按全仓统一的 Asia/Shanghai 定格（与 formatDate 同口径）
 const buildYear = toShanghaiParts(new Date())?.year ?? String(new Date().getFullYear());
@@ -10,10 +11,11 @@ const buildYear = toShanghaiParts(new Date())?.year ?? String(new Date().getFull
 const settings = await getSiteSettings();
 const author = settings?.siteAuthor ?? site.author;
 
-// 页脚副标题/链接/群组：优先后台站点设置（可随时在后台修改），缺失时回退默认值
+// 页脚副标题/链接/群组：以后台站点设置为准，后台留空前台就不出这一项
 const footer = await getFooter();
 const channels = footer.channels;
 const groups = footer.groups;
+const hasLinks = channels.length > 0 || groups.length > 0;
 ---
 
 <footer class="site-footer">
@@ -28,44 +30,53 @@ const groups = footer.groups;
       />
       <div class="site-footer__id-text">
         <strong>{author}</strong>
-        <span>{footer.subtitle}</span>
+        {footer.subtitle && <span>{footer.subtitle}</span>}
       </div>
     </div>
 
-    <nav class="site-footer__links" aria-label="页脚链接">
-      {channels.map(({ name, icon, href }) => (
-        <a
-          href={href}
-          target={href.startsWith('http') ? '_blank' : undefined}
-          rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
-        >
-          <Icon name={icon} size={15} />
-          {name}
-        </a>
-      ))}
-      {groups.length > 0 && (
-        <>
-          <span class="site-footer__sep" aria-hidden="true"></span>
-          {groups.map(({ name, icon, href }) => (
-            href ? (
-              <a
-                href={href}
-                target={href.startsWith('http') ? '_blank' : undefined}
-                rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
-              >
-                <Icon name={icon} size={15} />
-                {name}
-              </a>
-            ) : (
-              <span class="site-footer__item">
-                <Icon name={icon} size={15} />
-                {name}
-              </span>
-            )
-          ))}
-        </>
-      )}
-    </nav>
+    {hasLinks && (
+      <nav class="site-footer__links" aria-label="页脚链接">
+        {channels.map(({ name, icon, href }) => (
+          href ? (
+            <a
+              href={href}
+              target={href.startsWith('http') ? '_blank' : undefined}
+              rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            >
+              {hasIcon(icon) && <Icon name={icon} size={15} />}
+              {name}
+            </a>
+          ) : (
+            <span class="site-footer__item">
+              {hasIcon(icon) && <Icon name={icon} size={15} />}
+              {name}
+            </span>
+          )
+        ))}
+        {groups.length > 0 && (
+          <>
+            <span class="site-footer__sep" aria-hidden="true"></span>
+            {groups.map(({ name, icon, href }) => (
+              href ? (
+                <a
+                  href={href}
+                  target={href.startsWith('http') ? '_blank' : undefined}
+                  rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                >
+                  {hasIcon(icon) && <Icon name={icon} size={15} />}
+                  {name}
+                </a>
+              ) : (
+                <span class="site-footer__item">
+                  {hasIcon(icon) && <Icon name={icon} size={15} />}
+                  {name}
+                </span>
+              )
+            ))}
+          </>
+        )}
+      </nav>
+    )}
   </div>
 
   <div class="site-footer__bar" data-sync-block="footerBar">
