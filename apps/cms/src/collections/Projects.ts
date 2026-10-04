@@ -30,7 +30,7 @@ export const Projects: CollectionConfig = {
   },
   access: {
     // 草稿不可匿名读取（见 lib/access）
-    read: publishedOnlyForAnonymous,
+    read: publishedOnlyForAnonymous(),
   },
   hooks: {
     afterChange: [syncInvalidateHook],

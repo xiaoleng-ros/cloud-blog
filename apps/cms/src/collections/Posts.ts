@@ -32,7 +32,7 @@ export const Posts: CollectionConfig = {
   },
   access: {
     // 草稿不可匿名读取（见 lib/access）
-    read: publishedOnlyForAnonymous,
+    read: publishedOnlyForAnonymous({ trash: true }),
   },
   hooks: {
     afterChange: [syncInvalidateHook],
