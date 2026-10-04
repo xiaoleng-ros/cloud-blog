@@ -20,7 +20,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import matter from 'gray-matter';
 import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
-import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, fetchSyncDigest, type MdEntry, type ProjectEntry } from './payload-api';
+import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, fetchSyncDigest, type MdEntry } from './payload-api';
 import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs';
 
 /**

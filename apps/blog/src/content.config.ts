@@ -1,4 +1,6 @@
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
+// `z` 从 astro:content 导入已废弃（Astro 7 移除），改为直连 astro/zod（同源 zod v4）
+import { z } from 'astro/zod';
 import { payloadNotesLoader, payloadPostsLoader, payloadProjectsLoader } from './lib/payload-loader';
 
 const stringList = z.preprocess((value) => {
@@ -31,7 +33,7 @@ const posts = defineCollection({
       main_color: z.string().optional(),
       author: z.string().optional(),
     })
-    .passthrough(),
+    .loose(),
 });
 
 const notes = defineCollection({
@@ -43,7 +45,7 @@ const notes = defineCollection({
       mood: z.string().optional(),
       tags: stringList,
     })
-    .passthrough(),
+    .loose(),
 });
 
 const projects = defineCollection({
@@ -62,7 +64,7 @@ const projects = defineCollection({
       tags: stringList,
       sortOrder: z.coerce.number().default(0),
     })
-    .passthrough(),
+    .loose(),
 });
 
 export const collections = { posts, notes, projects };

@@ -161,19 +161,6 @@ function namesOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] 
   return names.length > 0 ? names : undefined;
 }
 
-/** 从单选/多选关系里取首个名称（用于拼接 URL） */
-function firstCategoryName(ref?: RefDoc | number | (RefDoc | number)[] | null): string {
-  if (!ref) return 'uncategorized';
-  const first = Array.isArray(ref) ? ref[0] : ref;
-  if (!first) return 'uncategorized';
-  return typeof first === 'object' ? first.name || 'uncategorized' : String(first);
-}
-
-/** 生成文章前台路径：/posts/{分类名}/{数字ID}/ */
-function postPathOf(doc: { id: number; categories?: RefDoc | number | null }): string {
-  return `/posts/${encodeURIComponent(firstCategoryName(doc.categories))}/${String(doc.id)}/`;
-}
-
 /** 把「每行一个」的文本拆为数组 */
 function linesOf(text?: string | null): string[] | undefined {
   if (!text) return undefined;

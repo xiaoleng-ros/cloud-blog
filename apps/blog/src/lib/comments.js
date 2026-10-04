@@ -101,12 +101,13 @@ const rel = (ts) => {
   return parts ? `${parts.year}-${parts.month}-${parts.day}` : '';
 };
 
-export function callTwikoo(envId, event, params = {}) {
-  return fetch(envId, {
+export async function callTwikoo(envId, event, params = {}) {
+  const response = await fetch(envId, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event, ...params }),
-  }).then((r) => r.json());
+  });
+  return response.json();
 }
 
 export const itemHTML = (c, { reply = false, actions = true } = {}) => {

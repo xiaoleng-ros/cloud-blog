@@ -10,6 +10,8 @@ import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs';
 import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs';
 import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs';
 import { buildMdSanitizeSchema, mdIframeHostGuard } from 'cloud-blog/shared/md-sanitize-schema.mjs';
+// Astro 7 的 markdown.processor：astro 自身的可选 peer 依赖，显式声明在 dependencies 里
+import { unified } from '@astrojs/markdown-remark';
 
 /**
  * Payload 后台数据 hot-reload：
@@ -116,10 +118,14 @@ export default defineConfig({
     '/projects': '/about',
   },
   markdown: {
-    remarkPlugins: [remarkLegacyShortcodes],
-    // 顺序与 CMS blog-render 完全一致：短代码展开 → raw 解析 → 白名单净化 → 图片属性补齐，
-    // 保证构建期与运行期(/api/blog-sync)两条链产出相同的净化结果。
-    rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], mdIframeHostGuard, rehypeImgAttrs],
+    // Astro 7 起顶层的 remarkPlugins / rehypePlugins 已废弃，必须挂到 unified() 处理器上；
+    // Astro 对旧写法的内部自动接管（validate.js coerceLegacyMarkdownPlugins）与本写法等价。
+    processor: unified({
+      remarkPlugins: [remarkLegacyShortcodes],
+      // 顺序与 CMS blog-render 完全一致：短代码展开 → raw 解析 → 白名单净化 → 图片属性补齐，
+      // 保证构建期与运行期(/api/blog-sync)两条链产出相同的净化结果。
+      rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], mdIframeHostGuard, rehypeImgAttrs],
+    }),
   },
   integrations: [payloadHotReload(), siteUrlGuard(), emptySiteGuard()],
   // 把唯一来源的 SITE 注入 import.meta.env.SITE_URL：

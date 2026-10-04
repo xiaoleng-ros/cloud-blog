@@ -449,22 +449,15 @@ const routeMotion = {
 
       (() => {
         const signal = window.__blogPageController.signal;
+        // 只用异步剪贴板 API（https/localhost 全支持）。不要再补 document.execCommand('copy') 兜底：
+        // 该接口已废弃，且只为 http 非安全上下文而存在，走「复制失败」提示即可。
         const writeClipboard = async (text) => {
-          if (globalThis.navigator?.clipboard?.writeText) {
-            await globalThis.navigator.clipboard.writeText(text);
-            return true;
+          if (!globalThis.navigator?.clipboard?.writeText) {
+            return false;
           }
 
-          const textarea = document.createElement('textarea');
-          textarea.value = text;
-          textarea.setAttribute('readonly', '');
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.append(textarea);
-          textarea.select();
-          const copied = document.execCommand('copy');
-          textarea.remove();
-          return copied;
+          await globalThis.navigator.clipboard.writeText(text);
+          return true;
         };
 
         // 绑定文章正文交互（代码复制按钮 + 图片灯箱）。可安全重入：
@@ -690,8 +683,6 @@ const routeMotion = {
         // 所以断开是正常事件，必须真重连，而不是永远退化成轮询。
         const SSE_RETRY_MS = 5_000;
         const SSE_RETRY_MAX_MS = 60_000;
-        // 与 CMS 渲染层约定的区块 ID → 页面锚点（data-sync-block 属性）映射
-        const BLOCK_SELECTOR = '[data-sync-block]';
         // 滚动显现（scroll reveal）目标：新插入的 DOM 默认无 is-revealed 会隐藏，
         // 需要手动补类，保证同步更新后的内容立即可见
         const REVEAL_SEL = [
