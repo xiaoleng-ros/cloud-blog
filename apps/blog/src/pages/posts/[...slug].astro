@@ -2,7 +2,6 @@
 import { getCollection, render } from 'astro:content';
 import CommentsBox from '../../components/CommentsBox.astro';
 import Icon from '../../components/Icon.astro';
-import QuoteComment from '../../components/QuoteComment.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import {
   absoluteUrl,
@@ -228,7 +227,6 @@ const articleSchema = {
       )}
     </div>
 
-    <QuoteComment />
     <CommentsBox />
   </article>
 </BaseLayout>

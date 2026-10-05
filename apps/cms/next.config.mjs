@@ -14,6 +14,9 @@ import { withPayload } from '@payloadcms/next/withPayload'
  */
 const nextConfig = {
   reactStrictMode: false,
+  // Waline 服务端（ThinkJS）在运行时用动态 require 加载其 src/*，被打包器静态分析会碎，
+  // 必须保持为 server external，交给 createRequire 在 node_modules 里原样解析。
+  serverExternalPackages: ['@waline/vercel', 'thinkjs', 'think-model-postgresql', 'ip2region'],
   experimental: {
     // 悬停才预取动态路由。默认行为是「进入视口就预取」，侧栏 13 个链接会一次性把
     // dev 服务器打成并发按需编译（实测同时编译 4 个页面时单页耗时 21s）。

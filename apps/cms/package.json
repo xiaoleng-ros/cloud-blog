@@ -31,6 +31,7 @@
     "@payloadcms/richtext-lexical": "3.88.0",
     "@payloadcms/storage-s3": "3.88.0",
     "@payloadcms/ui": "3.88.0",
+    "@waline/vercel": "^1.43.4",
     "cloud-blog": "file:../..",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.7",

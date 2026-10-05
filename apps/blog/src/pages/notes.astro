@@ -2,7 +2,6 @@
 import { getCollection, render } from 'astro:content';
 import CommentsBox from '../components/CommentsBox.astro';
 import Icon from '../components/Icon.astro';
-import QuoteComment from '../components/QuoteComment.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { formatDate, toShanghaiParts } from '../lib/posts';
 
@@ -159,7 +158,6 @@ const moodIcon = (mood?: string) => {
 
     <CommentsBox title="留言" />
   </section>
-  <QuoteComment selector=".note__body" />
 
   <script is:inline data-astro-rerun>
     (() => {

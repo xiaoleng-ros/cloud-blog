@@ -599,7 +599,6 @@ export interface SiteSetting {
   siteAuthor?: string | null;
   githubUser?: string | null;
   githubRepo?: string | null;
-  twikooEnvId?: string | null;
   neteasePlaylistId?: string | null;
   siteDescription?: string | null;
   siteIcon?: string | null;
@@ -660,7 +659,6 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   siteAuthor?: T;
   githubUser?: T;
   githubRepo?: T;
-  twikooEnvId?: T;
   neteasePlaylistId?: T;
   siteDescription?: T;
   siteIcon?: T;

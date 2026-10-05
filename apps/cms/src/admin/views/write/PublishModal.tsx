@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { formatDate } from 'cloud-blog/shared/post-utils'
 import { CoverUploader } from '../../components/CoverUploader'
+import { DateField } from '../../components/DateField'
 import { fetchSelectableCategories, fetchTerms, type TermOption } from '../lib/api'
 
 /** 发布前的元信息（文章与随笔共用结构，字段按集合取用） */
@@ -198,12 +199,7 @@ export const PublishModal: React.FC<Props> = ({
                 placeholder="可选"
               />
               <label className="publish-modal__label">日期</label>
-              <input
-                type="date"
-                className="publish-modal__input"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
+              <DateField value={date} onChange={setDate} placeholder="选择日期" />
             </>
           )}
 

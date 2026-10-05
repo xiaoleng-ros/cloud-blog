@@ -27,7 +27,6 @@ export interface SiteSettingsData {
   siteAuthor?: string;
   githubUser?: string;
   githubRepo?: string;
-  twikooEnvId?: string;
   neteasePlaylistId?: string;
   greeting?: string;
   name?: string;

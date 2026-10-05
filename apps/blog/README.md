@@ -11,7 +11,7 @@
 
 </div>
 
-包含 ✍️ 文章 · 📝 随笔 · 📂 归档 · 🏷️ 分类 · 🏷️ 标签 · 🔍 搜索 · 📡 RSS · 🗺️ 站点地图 · 💬 Twikoo 评论 · 🧑🏫 关于页。
+包含 ✍️ 文章 · 📝 随笔 · 📂 归档 · 🏷️ 分类 · 🏷️ 标签 · 🔍 搜索 · 📡 RSS · 🗺️ 站点地图 · 💬 Waline 评论 · 🧑🏫 关于页。
 
 ---
 
@@ -97,7 +97,7 @@ npm run preview
 ```bash
 SITE_URL=https://example.com
 PUBLIC_PAYLOAD_URL=https://your-domain.example.com
-PUBLIC_TWIKOO_ENV_ID=https://your-twikoo.example.com
+PUBLIC_WALINE_URL=/api/waline
 PUBLIC_NETEASE_PLAYLIST_ID=8792942606
 PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 ```
@@ -106,7 +106,7 @@ PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 | --- | --- |
 | `SITE_URL` | 站点正式域名，用于 RSS、sitemap、canonical URL 和结构化数据 |
 | `PUBLIC_PAYLOAD_URL` | 后台 API 地址，默认 `http://localhost:9527`，构建时用于拉取内容 |
-| `PUBLIC_TWIKOO_ENV_ID` | Twikoo 后端地址。未配置时，评论区和选中文字引用评论功能自动隐藏 |
+| `PUBLIC_WALINE_URL` | Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置），跨域部署时填完整地址 |
 | `PUBLIC_NETEASE_PLAYLIST_ID` | 网易云音乐歌单 ID。未配置时使用默认歌单 `8792942606` |
 | `PUBLIC_MUSIC_API` | Meting 兼容的音乐 API 地址，默认 `https://meting.mikus.ink/api`，也可换成自建服务 |
 
@@ -123,15 +123,9 @@ PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 
 ## 💬 评论
 
-评论前端没有使用 Twikoo 的默认 UI，而是通过 `src/lib/comments.js` 调用 Twikoo 后端接口并渲染自定义样式。
+评论后端是 **Waline**，直接挂在 CMS 应用的 `/api/waline` 路由下（复用同一个 Postgres 库的独立 schema，无需单独部署），数据表脚本见 `apps/cms/scripts/waline/schema.sql`。前台在文章/随笔页通过官方 `@waline/client` 组件挂载（见 `src/components/CommentsBox.astro`），服务地址由 `PUBLIC_WALINE_URL` 在构建期注入。
 
-文章正文支持选中文字后引用到底部评论区：
-
-1. ✅ 确认 `.env` 已配置 `PUBLIC_TWIKOO_ENV_ID`，否则评论区和引用按钮都会隐藏。
-2. ✍️ 在文章正文或随笔正文中拖选至少 2 个字符。
-3. 💡 选区上方会出现「引用评论」按钮。
-4. 📥 点击按钮后页面会滚动到底部评论区，并把选中的文字以 Markdown blockquote 写入评论框。
-5. ↩️ 发送成功后页面会回到刚才的阅读位置。
+先审后发、同 IP 发言间隔、敏感词过滤均由 `apps/cms/.env` 的 Waline 分区变量控制；后台「评论管理」页可筛选、搜索与审核评论（批准 / 退回待审 / 标垃圾 / 删除）。建表、首次注册管理员与 REST 审核配方见 `apps/cms/scripts/waline/README.md`。
 
 ---
 

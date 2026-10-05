@@ -57,3 +57,6 @@ pnpm-debug.log*
 **/*方案*.md
 **/*改造*.md
 **/*规范*.md
+
+# Waline 表情图包：dev/build 启动时从 node_modules 落盘，运行时产物不入库
+apps/blog/public/waline-emojis/

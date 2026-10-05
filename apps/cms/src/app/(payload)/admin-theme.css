@@ -1831,6 +1831,71 @@ img.gravatar-account {
   color: var(--theme-elevation-500);
 }
 
+/* 区间选择器：一个框内「开始日期 → 结束日期」，末尾一个日历图标（列表页工具栏用） */
+.range-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 3px 6px 3px 3px;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 8px;
+  background: var(--theme-elevation-0);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.range-field--open {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.range-field__half {
+  padding: 5px 8px;
+  font-size: 14px;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.range-field__half--empty {
+  color: var(--theme-elevation-400);
+}
+
+.range-field__half--active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.range-field__sep {
+  color: var(--theme-elevation-400);
+  font-size: 14px;
+}
+
+.range-field__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-500);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.range-field__icon:hover {
+  color: var(--accent);
+}
+
 /* 弹层：fixed 定位由组件算好，脱离卡内滚动容器 */
 .date-picker {
   z-index: 60;
@@ -2184,6 +2249,8 @@ img.gravatar-account {
 
 .trash__search {
   width: 240px;
+  height: 36px;
+  box-sizing: border-box;
   padding: 8px 12px;
   font-size: 14px;
   border: 1px solid var(--theme-elevation-200);
@@ -2202,36 +2269,596 @@ img.gravatar-account {
   color: var(--theme-elevation-400);
 }
 
-.trash__daterange {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border: 1px solid var(--theme-elevation-200);
-  border-radius: 8px;
-  background: var(--theme-elevation-0);
-}
-
-.trash__date {
-  border: none;
-  background: transparent;
-  font-size: 14px;
-  color: var(--theme-elevation-700);
-}
-
-.trash__date:focus {
-  outline: none;
-  color: var(--theme-elevation-900);
-}
-
-.trash__date-sep {
-  color: var(--theme-elevation-400);
-  font-size: 14px;
-}
+/* 日期区间框已统一走 components/DateField.tsx 的 .range-field，原生 input[type=date] 全部退场 */
 
 /* 隐藏内置列表页的「回收站」Tab 胶囊：统一走侧边导航的回收站独立页 */
 #trash-view-pill {
   display: none;
+}
+
+/* ---------- 18.55 评论管理（CommentsView） ----------
+   版式：标题卡（右侧状态筛选胶囊）→ 左「工具栏 + 五列表格」卡 + 右详情卡（两张独立卡）。
+   页面不滚（高度吃满「视口 − 顶栏下沉量」），滚动只发生在左卡表格区；
+   分页 / 确认框复用 drafts__* 通用类，这里补评论页特有的版式。 */
+.comments {
+  height: calc(100vh - var(--shell-content-top));
+  gap: 0.5rem;
+}
+
+@media (max-width: 1100px) {
+  /* 窄屏两卡改纵向堆叠：页面恢复整页滚动，卡片各限高、内部滚 */
+  .comments {
+    height: auto;
+  }
+
+  .comments__panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .comments__card {
+    max-height: 64vh;
+  }
+}
+
+/* 左卡工具栏：搜索 + 日期范围 + 重置，右侧一条操作提示（在卡内，不另起一张卡） */
+.comments__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.comments__search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 230px;
+  padding: 0 12px;
+  height: 36px;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 8px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-500);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.comments__search:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.comments__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--theme-text);
+}
+
+.comments__search input::placeholder {
+  color: var(--theme-elevation-400);
+}
+
+/* type=search 的浏览器原生清除按钮与后台其它输入框不一致，统一去掉 */
+.comments__search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.comments__reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-elevation-500);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.comments__reset:hover {
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-900);
+}
+
+.comments__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--theme-elevation-400);
+  white-space: nowrap;
+}
+
+/* 表格区：唯一发生滚动的地方；表头粘住，滚动时列名不跑 */
+.comments__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.comments__table {
+  table-layout: fixed;
+}
+
+.comments__col-nick {
+  width: 210px;
+}
+
+.comments__col-post {
+  width: 200px;
+}
+
+.comments__col-time {
+  width: 118px;
+}
+
+.comments__col-ops {
+  width: 156px;
+}
+
+.comments__table td {
+  vertical-align: middle;
+}
+
+.comments__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.comments__chip {
+  padding: 6px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--theme-elevation-600);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.comments__chip:hover {
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-900);
+}
+
+.comments__chip--active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.comments__badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-600);
+  font-variant-numeric: tabular-nums;
+}
+
+.comments__chip--active .comments__badge {
+  background: var(--theme-elevation-0);
+  color: var(--accent-text);
+}
+
+.comments__banner {
+  margin: 0;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* 左右两张卡：等高一列，各自内部滚动 */
+.comments__panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: var(--card-gap);
+}
+
+.comments__card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--theme-elevation-0);
+  border: var(--card-line);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+}
+
+.comments__card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-elevation-100);
+}
+
+.comments__card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--theme-elevation-800);
+}
+
+/* 行：整行可点（选中后右卡出详情），回复行按层深缩进、颜色压一档 */
+.comments__tr {
+  cursor: pointer;
+}
+
+.comments__tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.comments__tr--active td,
+.comments__tr--active:hover td {
+  background: var(--accent-soft);
+}
+
+.comments__tr--reply td {
+  color: var(--theme-elevation-600);
+}
+
+/* 评论者格：展开箭头（或回复拐角）+ 昵称 + 状态胶囊，单行不折 */
+.comments__nick-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.comments__caret {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-400);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+button.comments__caret:hover {
+  background: var(--theme-elevation-150);
+  color: var(--theme-elevation-900);
+}
+
+.comments__nick {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-elevation-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 内容 / 文章两列单行截断，完整文本靠 title 悬浮（表头固定列宽，见 comments__col-*） */
+.comments__cell-text,
+.comments__cell-post {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comments__cell-text {
+  color: var(--theme-elevation-700);
+}
+
+.comments__cell-post {
+  font-size: 13px;
+  color: var(--theme-elevation-500);
+}
+
+.comments__cell-time {
+  font-size: 13px;
+  color: var(--theme-elevation-400);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.comments__cell-ops {
+  white-space: nowrap;
+}
+
+/* 行内操作：无边框文字按钮，三枚并排塞进操作列 */
+.comments__quick {
+  padding: 4px 7px;
+  font-size: 12.5px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-elevation-600);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.comments__quick:hover:not(:disabled) {
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-900);
+}
+
+.comments__quick--danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.comments__quick:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 状态胶囊：表格行与右卡头部共用，不依赖 manage__pill 的左边距 */
+.comments__pill {
+  display: inline-block;
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 999px;
+}
+
+.comments__pill--waiting {
+  background: #fdf6e3;
+  color: var(--theme-warning-500);
+}
+
+.comments__pill--approved {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.comments__pill--spam {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.comments__pill--other {
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-600);
+}
+
+/* 表体的空 / 错状态：铺满一格、和表头同色的浅灰面板，下方留白到卡底 */
+.comments__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 300px;
+  padding: 48px 16px;
+  background: var(--theme-elevation-50);
+  border-bottom: 1px solid var(--theme-elevation-100);
+}
+
+.comments__state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-400);
+}
+
+.comments__state-msg {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-elevation-500);
+}
+
+.comments__list-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--theme-elevation-100);
+}
+
+.comments__foot-info {
+  font-size: 13px;
+  color: var(--theme-elevation-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.comments__foot-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comments__foot-pager .drafts__op {
+  margin-right: 0;
+}
+
+/* 骨架行（首帧 / 加载态）：只刷表体，工具栏与表头常驻 */
+@keyframes commentsSkelPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.comments__skel-line {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--theme-elevation-150);
+  animation: commentsSkelPulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comments__skel-line {
+    animation: none;
+  }
+}
+
+/* 右卡：详情 */
+.comments__detail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 28px;
+  text-align: center;
+}
+
+.comments__state-title {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--theme-elevation-800);
+}
+
+.comments__state-sub {
+  margin: 0;
+  max-width: 250px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--theme-elevation-400);
+}
+
+.comments__detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.comments__detail-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--theme-elevation-800);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comments__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-elevation-100);
+}
+
+.comments__meta-row {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.comments__meta-row dt {
+  flex: 0 0 56px;
+  color: var(--theme-elevation-400);
+}
+
+.comments__meta-row dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--theme-elevation-700);
+  overflow-wrap: anywhere;
+}
+
+.comments__meta-row a {
+  color: var(--info);
+  text-decoration: none;
+}
+
+.comments__meta-row a:hover {
+  text-decoration: underline;
+}
+
+.comments__detail-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--theme-elevation-100);
+}
+
+.comments__act {
+  padding: 7px 16px;
+  font-size: 13.5px;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 8px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-700);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.comments__act:hover {
+  border-color: var(--theme-elevation-350);
+  color: var(--theme-elevation-900);
+}
+
+.comments__act--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.comments__act--primary:hover {
+  filter: brightness(1.06);
+  color: #fff;
+}
+
+.comments__act--danger {
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
+.comments__act--danger:hover {
+  background: var(--danger-soft);
+  border-color: #fca5a5;
+  color: var(--danger);
+}
+
+.comments__act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ---------- 18.6 管理列表（Posts / Notes ManageView） ----------
@@ -2257,6 +2884,8 @@ img.gravatar-account {
 
 .manage__select {
   min-width: 120px;
+  height: 36px;
+  box-sizing: border-box;
   padding: 8px 12px;
   font-size: 14px;
   border: 1px solid var(--theme-elevation-200);
@@ -2273,8 +2902,8 @@ img.gravatar-account {
 }
 
 .manage__reset {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2300,6 +2929,8 @@ img.gravatar-account {
 }
 
 .manage__action {
+  height: 36px;
+  box-sizing: border-box;
   padding: 7px 14px;
   font-size: 14px;
   font-weight: 500;

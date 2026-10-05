@@ -7,6 +7,7 @@ import * as migration_20260930_000000_add_posts_notes_trash from './20260930_000
 import * as migration_20261001_000000_add_categories_tree_fields from './20261001_000000_add_categories_tree_fields';
 import * as migration_20261002_000000_add_users_feishu_open_id_unique from './20261002_000000_add_users_feishu_open_id_unique';
 import * as migration_20261004_000000_add_site_config_fields from './20261004_000000_add_site_config_fields';
+import * as migration_20261005_000000_drop_waline_url from './20261005_000000_drop_waline_url';
 
 export const migrations = [
   {
@@ -53,5 +54,10 @@ export const migrations = [
     up: migration_20261004_000000_add_site_config_fields.up,
     down: migration_20261004_000000_add_site_config_fields.down,
     name: '20261004_000000_add_site_config_fields'
+  },
+  {
+    up: migration_20261005_000000_drop_waline_url.up,
+    down: migration_20261005_000000_drop_waline_url.down,
+    name: '20261005_000000_drop_waline_url'
   },
 ];

@@ -19,6 +19,7 @@ import { PostComposeView as PostComposeView_c48bc1412d48efbcf260795811a628d2 } f
 import { NoteComposeView as NoteComposeView_af4b37b184560c1455536f139ac92696 } from '../../../../src/admin/views/write/NoteComposeView.tsx'
 import { DraftsView as DraftsView_e8ffb8e11909aedb00bac5188e12dcc7 } from '../../../../src/admin/views/drafts/DraftsView.tsx'
 import { TrashView as TrashView_dfd0e9988da2b44465fe388ce4eeaedf } from '../../../../src/admin/views/trash/TrashView.tsx'
+import { CommentsView as CommentsView_bca6cb4e0718965f747bf2b12956b35b } from '../../../../src/admin/views/comments/CommentsView.tsx'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -44,5 +45,6 @@ export const importMap = {
   "/src/admin/views/write/NoteComposeView.tsx#NoteComposeView": NoteComposeView_af4b37b184560c1455536f139ac92696,
   "/src/admin/views/drafts/DraftsView.tsx#DraftsView": DraftsView_e8ffb8e11909aedb00bac5188e12dcc7,
   "/src/admin/views/trash/TrashView.tsx#TrashView": TrashView_dfd0e9988da2b44465fe388ce4eeaedf,
+  "/src/admin/views/comments/CommentsView.tsx#CommentsView": CommentsView_bca6cb4e0718965f747bf2b12956b35b,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
 }

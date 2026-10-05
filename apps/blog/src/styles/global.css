@@ -2836,54 +2836,7 @@ p {
   color: var(--text-muted);
 }
 
-/* ---------- Selection quote comments ---------- */
-.qc-pop {
-  position: absolute;
-  inset: 0 auto auto 0;
-  z-index: 30;
-  padding: 0.38rem 0.72rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--button-text-on-accent);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1.35;
-  box-shadow: var(--shadow);
-  cursor: pointer;
-  transition: opacity var(--t-fast) var(--ease-out),
-    scale var(--t-fast) var(--ease-spring);
-}
-
-.qc-pop[hidden] {
-  display: none;
-}
-
-.qc-pop:hover {
-  opacity: 0.92;
-}
-
-.qc-pop:active {
-  scale: 0.94;
-}
-
-/* Springy pop-in when the selection button appears */
-@media (prefers-reduced-motion: no-preference) {
-  .qc-pop:not([hidden]) {
-    animation: qc-pop-in 0.34s var(--ease-spring) both;
-  }
-}
-
-@keyframes qc-pop-in {
-  from {
-    opacity: 0;
-    translate: 0 0.45rem;
-    scale: 0.82;
-  }
-}
-
-/* ---------- Custom comments (Twikoo backend, our own UI) ---------- */
+/* ---------- Comments (official Waline client) ---------- */
 .cbox {
   width: min(100%, 46rem);
   margin-top: 3.5rem;
@@ -2892,334 +2845,22 @@ p {
   border-top: 1px solid var(--border);
 }
 
-.cbox__head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.cbox__title {
-  font-size: 1.25rem;
-  font-weight: 750;
-  letter-spacing: -0.01em;
-}
-
-.cbox__count {
-  color: var(--text-faint);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.cform {
-  display: flex;
-  gap: 0.85rem;
-}
-
-.cform__avatar {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: var(--surface-muted);
-  color: var(--text-faint);
-}
-
-.cform__avatar svg {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-
-.cform__main {
-  flex: 1;
-  min-width: 0;
-}
-
-.cform__text {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 2.9rem;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  line-height: 1.6;
-  resize: vertical;
-  transition: border-color var(--t-fast) var(--ease-out),
-    box-shadow var(--t-fast) var(--ease-out);
-}
-
-.cform__text:focus {
-  outline: none;
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--brand-soft);
-}
-
-.cform__extra {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height var(--t-base) var(--ease-out),
-    opacity var(--t-base) var(--ease-out), margin-top var(--t-base) var(--ease-out);
-}
-
-.cform.is-open .cform__extra {
-  max-height: 14rem;
-  opacity: 1;
-  margin-top: 0.6rem;
-}
-
-.cform__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.cform__meta input {
-  flex: 1 1 8rem;
-  min-width: 0;
-  padding: 0.45rem 0.95rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.9rem;
-  transition: border-color var(--t-fast) var(--ease-out),
-    box-shadow var(--t-fast) var(--ease-out);
-}
-
-.cform__meta input:focus {
-  outline: none;
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--brand-soft);
-}
-
-.cform__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.65rem;
-}
-
-.cform__hint {
-  color: var(--text-faint);
-  font-size: 0.78rem;
-}
-
-.cform__cancel {
-  margin-left: 0.5rem;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--brand);
-  font: inherit;
-  font-size: 0.78rem;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.cform__send {
-  border: none;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--button-text-on-accent);
-  padding: 0.5rem 1.5rem;
-  font: inherit;
-  font-weight: 650;
-  cursor: pointer;
-  transition: opacity var(--t-fast) var(--ease-out),
-    translate var(--t-fast) var(--ease-spring), scale var(--t-fast) var(--ease-spring);
-}
-
-.cform__send:hover {
-  opacity: 0.9;
-  translate: 0 -1px;
-}
-
-.cform__send:active {
-  scale: 0.95;
-  translate: 0 0;
-}
-
-/* Accent buttons carry a whisper of light from above — Apple-style depth */
-.cform__send,
-.search-box button,
-.qc-pop {
-  background-image: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.16),
-    rgba(255, 255, 255, 0) 60%
-  );
-}
-
-.cform__status {
-  margin: 0.7rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.88rem;
-}
-
-.cform__status.is-error {
-  color: var(--brand);
-}
-
-.clist {
-  list-style: none;
-  margin: 2rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.7rem;
-}
-
-.citem {
-  display: flex;
-  gap: 0.85rem;
-}
-
-.citem__avatar {
-  flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: var(--surface-muted);
-  object-fit: cover;
-}
-
-.citem__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.citem__meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.citem__nick {
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.citem__badge {
-  padding: 0.05rem 0.45rem;
-  border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand);
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.citem__re {
-  color: var(--text-faint);
-  font-size: 0.82rem;
-}
-
-.citem__time {
-  color: var(--text-faint);
-  font-size: 0.8rem;
-}
-
-.citem__content {
-  margin: 0.35rem 0 0;
-  color: var(--text);
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-
-.citem__content p {
-  margin: 0.4rem 0;
-}
-
-.citem__content a {
-  color: var(--brand);
-}
-
-.citem__content img {
-  max-width: 100%;
-  border-radius: var(--radius-sm);
-}
-
-.citem__actions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 0.5rem;
-}
-
-.citem__act {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-faint);
-  font: inherit;
-  font-size: 0.82rem;
-  cursor: pointer;
-  transition: color var(--t-fast) var(--ease-out);
-}
-
-.citem__act:hover,
-.citem__act.is-liked {
-  color: var(--brand);
-}
-
-.citem__replies {
-  list-style: none;
-  margin: 1.2rem 0 0;
-  padding: 0 0 0 0.6rem;
-  border-left: 2px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-}
-
-.citem--reply .citem__avatar {
-  width: 2rem;
-  height: 2rem;
-}
-
-.cbox__empty {
-  margin: 1.5rem 0 0;
-  color: var(--text-faint);
-}
-
-.cbox__empty[hidden],
-.cbox__more[hidden] {
-  display: none;
-}
-
-.cbox__more {
-  display: block;
-  margin: 1.6rem auto 0;
-  padding: 0.45rem 1.4rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 0.88rem;
-  cursor: pointer;
-  transition: color var(--t-fast) var(--ease-out),
-    border-color var(--t-fast) var(--ease-out),
-    scale var(--t-fast) var(--ease-spring);
-}
-
-.cbox__more:active {
-  scale: 0.96;
-}
-
-.cbox__more:hover {
-  border-color: var(--brand);
-  color: var(--brand);
+/* 官方组件配色映射到手账纸面色板；主题绿保持官方默认（与验收截图一致）。
+   站点变量本身随 html[data-theme] 切换，深色模式无需 Waline 自带 dark 逻辑 */
+.cbox [data-waline] {
+  --waline-color: var(--text);
+  --waline-bg-color: var(--surface);
+  --waline-bg-color-light: var(--surface-muted);
+  --waline-bg-color-hover: var(--surface-muted);
+  --waline-border-color: var(--border);
+  --waline-disable-bg-color: var(--surface-muted);
+  --waline-disable-color: var(--text-faint);
+  --waline-bq-color: var(--surface-muted);
+  --waline-info-bg-color: var(--surface-muted);
+  --waline-info-color: var(--text-faint);
+  --waline-light-grey: var(--text-faint);
+  --waline-dark-grey: var(--text-muted);
+  --waline-badge-color: var(--brand);
 }
 
 /* ---------- Motion: scroll reveal + theme crossfade ---------- */
@@ -3264,36 +2905,6 @@ p {
 
   .js.js :is(.hero__intro > *, .article__header > *):not(.is-revealed) {
     filter: blur(7px);
-  }
-}
-
-/* Newly rendered comments cascade in (browsers with @starting-style) */
-@media (prefers-reduced-motion: no-preference) {
-  .citem {
-    transition: opacity 0.55s var(--ease-out-soft), translate 0.55s var(--ease-out-soft);
-  }
-
-  .clist > .citem:nth-child(2) {
-    transition-delay: 0.05s;
-  }
-
-  .clist > .citem:nth-child(3) {
-    transition-delay: 0.1s;
-  }
-
-  .clist > .citem:nth-child(4) {
-    transition-delay: 0.15s;
-  }
-
-  .clist > .citem:nth-child(n + 5) {
-    transition-delay: 0.2s;
-  }
-
-  @starting-style {
-    .citem {
-      opacity: 0;
-      translate: 0 0.6rem;
-    }
   }
 }
 
@@ -3987,8 +3598,7 @@ html.theme-anim body {
 }
 
 /* 正文图片：手绘描边 */
-.post-content img,
-.citem__content img {
+.post-content img {
   border: 2px solid var(--ink);
   border-radius: 10px 16px 11px 15px;
   box-shadow: 3px 4px 0 var(--shadow-sm);
@@ -4136,19 +3746,12 @@ html.theme-anim body {
   border-radius: 10px 14px 11px 13px;
   background: var(--accent);
   box-shadow: 2px 3px 0 var(--shadow-sm);
-}
-
-/* 评论区表单 */
-.cform__text,
-.cform__meta input {
-  border: 2px solid var(--ink);
-  border-radius: 10px 14px 11px 13px;
-  background: var(--surface);
-}
-.cform__send {
-  border: 2px solid var(--ink);
-  border-radius: 10px 14px 11px 13px;
-  box-shadow: 2px 3px 0 var(--shadow-sm);
+  /* Accent buttons carry a whisper of light from above — Apple-style depth */
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0) 60%
+  );
 }
 
 /* 首页 Hero 名片卡片（参考图居中手账卡片） */

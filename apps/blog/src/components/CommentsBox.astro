@@ -1,23 +1,24 @@
 ---
-// Bottom comment box — custom UI on the Twikoo backend (shared module).
+// Waline 官方评论组件（构建时打包，表情图包本地化，运行时零外链）。
+// title 通过官方 locale.comment 覆盖计数头措辞（如 notes 页「留言」）。
 interface Props {
   title?: string;
 }
 const { title = '评论' } = Astro.props;
+import '@waline/client/style';
 ---
 
-<section class="cbox" data-cbox>
-  <div class="cbox__head">
-    <h2 class="cbox__title">{title}</h2>
-    <span class="cbox__count" data-c-count></span>
-  </div>
+<section class="cbox" data-cbox data-c-title={title}>
   <div data-c-mount></div>
 </section>
 
 <script>
-  import { mountComments } from '../lib/comments.js';
+  import { init, type WalineEmojiPresets } from '@waline/client';
 
-  const ENV_ID = import.meta.env.PUBLIC_TWIKOO_ENV_ID;
+  // BaseLayout 注入：env PUBLIC_WALINE_URL 优先，默认同域 /api/waline；空串 = 关闭评论
+  const getServer = () =>
+    document.querySelector('meta[name="waline-server"]')?.getAttribute('content') || '';
+
   let activeRoot: Element | null = null;
   let cleanup = () => {};
 
@@ -28,42 +29,46 @@ const { title = '评论' } = Astro.props;
     cleanup();
     activeRoot = root;
     if (!root) return;
-    if (!ENV_ID) {
+    if (!getServer()) {
       root.hidden = true;
       return;
     }
 
-    const controller = new AbortController();
-    const mountEl = root.querySelector('[data-c-mount]');
-    const countEl = root.querySelector('[data-c-count]');
-    let started = false;
-    let api: ReturnType<typeof mountComments> | null = null;
+    const mountEl = root.querySelector<HTMLElement>('[data-c-mount]');
+    const titleWord = root.dataset.cTitle || '评论';
+    let instance: ReturnType<typeof init> | null = null;
+    let emptySweeper: MutationObserver | null = null;
 
     const start = () => {
-      if (started) return api;
-      started = true;
-      if (!mountEl) return api;
-      api = mountComments(mountEl, {
-        envId: ENV_ID,
-        url: location.pathname,
-        onCount: (n) => {
-          if (countEl) countEl.textContent = n ? `· ${n}` : '';
-        },
+      if (instance || !mountEl) return;
+      instance = init({
+        el: mountEl,
+        serverURL: getServer(),
+        path: location.pathname,
+        lang: 'zh-CN',
+        locale: { comment: titleWord },
+        reaction: true,
+        pageview: false,
+        // 官方 v-if 开关：整行移除底部 RSS 订阅图标与「Powered by Waline」版权条
+        noRss: true,
+        noCopyright: true,
+        // 官方默认从 unpkg CDN 拉 weibo 表情，改指构建时落盘的本地副本（见 astro.config walineEmojiVendor）；
+        // 字符串形态运行时自动拉 <folder>/info.json，断言只是绕过 `//|https://` 字面量类型
+        emoji: ['/waline-emojis/weibo' as WalineEmojiPresets],
+        // GIF 搜索走第三方接口，按零外链口径关闭
+        search: false,
+        requiredMeta: ['nick'],
+        wordLimit: 500,
+        commentSorting: 'oldest',
       });
-      return api;
+      // 空列表的「来发评论吧~」是官方 v-else 分支、无开关 prop，
+      // 用 MutationObserver 把 .wl-empty 节点整个移出 DOM（代码级删除，非隐藏）
+      const sweep = () =>
+        mountEl.querySelectorAll('.wl-empty').forEach((n) => n.remove());
+      sweep();
+      emptySweeper = new MutationObserver(sweep);
+      emptySweeper.observe(mountEl, { childList: true, subtree: true });
     };
-
-    const quoteComment = (detail: { text?: string; returnY?: number }) => {
-      const instance = start();
-      root.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      window.setTimeout(() => instance?.quote(detail), 180);
-    };
-
-    window.addEventListener(
-      'blog:quote-comment',
-      (event) => quoteComment((event as CustomEvent<{ text?: string; returnY?: number }>).detail),
-      { signal: controller.signal },
-    );
 
     const io = new IntersectionObserver(
       (entries) => {
@@ -76,8 +81,11 @@ const { title = '评论' } = Astro.props;
     );
     io.observe(root);
     cleanup = () => {
-      controller.abort();
       io.disconnect();
+      emptySweeper?.disconnect();
+      emptySweeper = null;
+      instance?.destroy();
+      instance = null;
     };
   };
 

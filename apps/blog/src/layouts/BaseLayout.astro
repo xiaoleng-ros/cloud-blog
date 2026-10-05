@@ -59,6 +59,15 @@ const pageTitle = title === defaultInfo.name ? title : `${title} - ${defaultInfo
 const canonicalUrl = absoluteUrl(canonicalPath ?? Astro.url.pathname);
 const imageUrl = image ? absoluteUrl(image) : undefined;
 
+// 评论服务地址：构建期 env 注入（PUBLIC_WALINE_URL），默认同域 /api/waline；经 meta 标签传给客户端脚本
+const walineServer = import.meta.env.PUBLIC_WALINE_URL || '/api/waline';
+let walineOrigin = '';
+try {
+  if (walineServer) walineOrigin = new URL(walineServer).origin;
+} catch {
+  walineOrigin = '';
+}
+
 const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
@@ -119,9 +128,8 @@ const routeMotion = {
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" type="image/png" href="/avatars/avatar.png" />
     <link rel="apple-touch-icon" href="/avatars/avatar.png" />
-    {import.meta.env.PUBLIC_TWIKOO_ENV_ID && (
-      <link rel="preconnect" href={import.meta.env.PUBLIC_TWIKOO_ENV_ID} crossorigin />
-    )}
+    {walineServer && <meta name="waline-server" content={walineServer} />}
+    {walineOrigin && <link rel="preconnect" href={walineOrigin} crossorigin />}
     <link rel="preconnect" href="https://cravatar.cn" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

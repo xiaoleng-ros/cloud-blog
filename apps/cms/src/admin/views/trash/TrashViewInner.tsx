@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
+import { DateRangeField } from '../../components/DateField'
 import { clip, extractNames, fmt, tagPill } from '../lib/format'
 import {
   deleteTrashedDoc,
@@ -184,31 +185,15 @@ export const TrashViewInner = () => {
           onChange={(e) => setTitleInput(e.target.value)}
           aria-label="搜索标题"
         />
-        <div className="trash__daterange">
-          <input
-            type="date"
-            className="trash__date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => {
-              setFrom(e.target.value)
-              setPage(1)
-            }}
-            aria-label="开始日期"
-          />
-          <span className="trash__date-sep" aria-hidden="true">→</span>
-          <input
-            type="date"
-            className="trash__date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => {
-              setTo(e.target.value)
-              setPage(1)
-            }}
-            aria-label="结束日期"
-          />
-        </div>
+        <DateRangeField
+          from={from}
+          to={to}
+          onChange={(range) => {
+            setFrom(range.from)
+            setTo(range.to)
+            setPage(1)
+          }}
+        />
       </div>
 
       <div className="drafts__list">

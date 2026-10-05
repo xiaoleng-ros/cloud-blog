@@ -433,6 +433,11 @@ export default buildConfig({
           Component: '/src/admin/views/trash/TrashView.tsx#TrashView',
           path: '/trash',
         },
+        // 评论管理：审核 Waline 评论（路由 /admin/comments）
+        comments: {
+          Component: '/src/admin/views/comments/CommentsView.tsx#CommentsView',
+          path: '/comments',
+        },
       },
     },
     // 自定义 favicon（浏览器标签页图标，统一使用透明底深色云）

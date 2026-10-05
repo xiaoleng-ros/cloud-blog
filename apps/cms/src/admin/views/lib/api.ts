@@ -250,3 +250,76 @@ export async function updateGlobal<T>(slug: string, data: Record<string, unknown
   if (res && typeof res === 'object' && 'result' in res) return (res as { result: T }).result
   return res as T
 }
+
+/* ---------------- 评论管理（转调进程内 Waline，见 src/app/api/comments） ---------------- */
+
+/** 后台评论状态筛选：待审 / 已通过 / 垃圾 / 全部 */
+export type CommentFilter = 'waiting' | 'approved' | 'spam' | 'all'
+
+/** 评论行（服务端已归一化，text 是原始文本非 HTML）；根评论带回复树 */
+export interface CommentRow {
+  id: number
+  nick: string
+  mail: string
+  link: string
+  url: string
+  text: string
+  status: string
+  like: number
+  createdAt: string | null
+  addr: string
+  browser: string
+  os: string
+  avatar: string
+  parentId: number | null
+  rootId: number | null
+  replies: CommentRow[]
+  /** 后代总数（不是本页条数） */
+  replyCount: number
+}
+
+export interface CommentListResult {
+  rows: CommentRow[]
+  page: number
+  totalPages: number
+  pageSize: number
+  /** 命中线程数（分页单位是线程） */
+  total: number
+  waitingCount: number
+  spamCount: number
+  /** 评论挂靠的 url → 文章标题；缺失时前端回退显示裸路径 */
+  posts: Record<string, string>
+}
+
+export interface CommentListQuery {
+  filter: CommentFilter
+  page: number
+  pageSize: number
+  keyword?: string
+  /** YYYY-MM-DD，两端都可留空 */
+  from?: string
+  to?: string
+}
+
+/** 拉取评论列表（仅文章评论；分页 + 状态筛选 + 关键词 + 日期范围） */
+export async function listComments(query: CommentListQuery): Promise<CommentListResult> {
+  const params = new URLSearchParams({
+    status: query.filter,
+    page: String(query.page),
+    pageSize: String(query.pageSize),
+  })
+  if (query.keyword) params.set('keyword', query.keyword)
+  if (query.from) params.set('from', query.from)
+  if (query.to) params.set('to', query.to)
+  return request<CommentListResult>('GET', `/api/comments?${params.toString()}`)
+}
+
+/** 单条改状态：approved 上线 / spam 收进垃圾 / waiting 退回待审 */
+export async function setCommentStatus(id: number, status: 'approved' | 'spam' | 'waiting'): Promise<void> {
+  await request<unknown>('PUT', `/api/comments/${id}`, { status })
+}
+
+/** 单条彻底删除 */
+export async function deleteComment(id: number): Promise<void> {
+  await request<unknown>('DELETE', `/api/comments/${id}`)
+}

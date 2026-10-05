@@ -47,13 +47,7 @@ export const SiteSettings: GlobalConfig = {
                 { name: 'githubRepo', type: 'text', label: 'GitHub 仓库地址', admin: { width: '50%' } },
               ],
             },
-            {
-              type: 'row',
-              fields: [
-                { name: 'twikooEnvId', type: 'text', label: 'Twikoo 评论服务地址', admin: { width: '50%' } },
-                { name: 'neteasePlaylistId', type: 'text', label: '网易云歌单 ID', admin: { width: '50%' } },
-              ],
-            },
+            { name: 'neteasePlaylistId', type: 'text', label: '网易云歌单 ID', admin: { width: '50%' } },
             { name: 'siteDescription', type: 'textarea', label: '站点简介' },
           ],
         },

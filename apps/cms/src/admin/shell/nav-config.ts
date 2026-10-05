@@ -15,6 +15,7 @@ export type ShellIconKey =
   | 'categories'
   | 'tags'
   | 'media'
+  | 'comments'
   | 'navigation'
   | 'settings'
   | 'account'
@@ -55,6 +56,7 @@ export const navSections: NavSection[] = [
       { label: '分类管理', path: '/collections/categories', icon: 'categories', keywords: 'categories fenlei' },
       { label: '标签管理', path: '/collections/tags', icon: 'tags', keywords: 'tags biaoqian' },
       { label: '图片管理', path: '/collections/media', icon: 'media', keywords: 'media image tupian' },
+      { label: '评论管理', path: '/comments', icon: 'comments', keywords: 'comments reply pinglun shenhe' },
       { label: '导航管理', path: '/globals/navigation', icon: 'navigation', keywords: 'navigation daohang' },
     ],
   },

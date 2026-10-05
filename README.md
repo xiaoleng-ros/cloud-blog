@@ -121,7 +121,7 @@ npm run dev:cms          # 或 npm run dev:local --prefix apps/cms —— 自动
 | --- | --- |
 | `SITE_URL` | 站点正式域名（RSS / sitemap / canonical），构建时写入静态产物 |
 | `PUBLIC_PAYLOAD_URL` | Payload 后台地址，本地默认 `http://localhost:9527`；线上填**真实域名**（不带 `/api`） |
-| `PUBLIC_TWIKOO_ENV_ID` | Twikoo 评论后端，不配则评论隐藏 |
+| `PUBLIC_WALINE_URL` | 💬 Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置） |
 | `PUBLIC_NETEASE_PLAYLIST_ID` / `PUBLIC_MUSIC_API` | 🎵 音乐播放器歌单 |
 
 > 前台取数地址的优先级：`PUBLIC_PAYLOAD_URL` → `SITE_URL`（一体化部署前后台同域）→ `http://localhost:9527`。

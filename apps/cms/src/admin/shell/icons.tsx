@@ -78,6 +78,12 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M4.5 17.5l5-4.5 4 3.5 3-2.5 3.5 3" />
     </>
   ),
+  comments: (
+    <>
+      <path d="M4 5.5h16v10.5H10l-4.5 3.5V16H4z" />
+      <path d="M7.5 9.5h9M7.5 12.5h6" />
+    </>
+  ),
   navigation: (
     <>
       <path d="M4 6.5h16M4 12h16M4 17.5h10" />

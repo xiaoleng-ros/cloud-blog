@@ -253,7 +253,6 @@ async function main() {
       siteAuthor: siteConfig.siteAuthor,
       githubUser: siteConfig.githubUser,
       githubRepo: siteConfig.githubRepo,
-      twikooEnvId: siteConfig.twikooEnvId as string | undefined,
       neteasePlaylistId:
         (siteConfig.neteasePlaylistId as string | undefined) ??
         Number(siteConfig.neteasePlaylistId)?.toString(),

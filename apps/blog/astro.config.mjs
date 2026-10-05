@@ -1,6 +1,6 @@
 import { defineConfig } from 'astro/config';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, cpSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from 'vite';
 // Markdown 插件经 cloud-blog 包名导入（该包 file: 指向仓库根，与 CMS 共用同一份实现）
@@ -111,6 +111,36 @@ function emptySiteGuard() {
   };
 }
 
+/**
+ * Waline 表情图包本地化：官方默认从 unpkg CDN 拉 weibo 表情，
+ * 这里在 dev/build 启动时把 npm 依赖里的图包拷进 public/，运行时零外链。
+ */
+function walineEmojiVendor() {
+  const src = path.join(process.cwd(), 'node_modules', '@waline', 'emojis', 'weibo');
+  const dest = path.join(process.cwd(), 'public', 'waline-emojis', 'weibo');
+  const sync = (logger) => {
+    if (!existsSync(src)) {
+      throw new Error(`[astro.config] 缺少 @waline/emojis（${src}），先 npm install；评论区表情依赖本地图包。`);
+    }
+    if (!existsSync(dest) || Date.now() - statSync(dest).mtimeMs > 60_000) {
+      mkdirSync(dest, { recursive: true });
+      cpSync(src, dest, { recursive: true });
+      logger?.info?.('waline-emoji-vendor: weibo 表情已落盘 public/waline-emojis/');
+    }
+  };
+  return {
+    name: 'waline-emoji-vendor',
+    hooks: {
+      'astro:server:setup'({ logger }) {
+        sync(logger);
+      },
+      'astro:build:start'({ logger }) {
+        sync(logger);
+      },
+    },
+  };
+}
+
 export default defineConfig({
   site: SITE,
   base: '/',
@@ -127,7 +157,7 @@ export default defineConfig({
       rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], mdIframeHostGuard, rehypeImgAttrs],
     }),
   },
-  integrations: [payloadHotReload(), siteUrlGuard(), emptySiteGuard()],
+  integrations: [payloadHotReload(), siteUrlGuard(), emptySiteGuard(), walineEmojiVendor()],
   // 把唯一来源的 SITE 注入 import.meta.env.SITE_URL：
   // payload-api.ts / site-defaults.ts（→ rss/sitemap/robots 的 absoluteUrl）全部读同一个值，
   // 彻底消除「astro.config 用 process.env、feed 用 import.meta.env」的双源分歧。

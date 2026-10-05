@@ -29,6 +29,7 @@ import {
   type SkillItem,
 } from 'cloud-blog/shared/about-format'
 import { PageHeader } from '../../components/PageHeader'
+import { DateField } from '../../components/DateField'
 import { CoverUploader } from '../../components/CoverUploader'
 import {
   parseSocials,
@@ -86,7 +87,6 @@ const SECTIONS: SectionDef[] = [
       { name: 'siteAuthor', label: '作者', type: 'text' },
       { name: 'githubUser', label: 'GitHub 用户名', type: 'text' },
       { name: 'githubRepo', label: 'GitHub 仓库地址', type: 'text' },
-      { name: 'twikooEnvId', label: 'Twikoo 评论服务地址', type: 'text' },
       { name: 'neteasePlaylistId', label: '网易云歌单 ID', type: 'text' },
       { name: 'siteDescription', label: '站点简介', type: 'textarea', span: 2, rows: 3 },
     ],
@@ -983,172 +983,6 @@ function FooterLineEditor({
   )
 }
 
-/* ---------- 自定义日期选择器（网站创建时间） ----------
- * 原生 input[type=date] 的弹层样式不可控，改成周一起始的日历面板；
- * 值仍是 'YYYY-MM-DD' 文本，与后端存储格式一致。
- */
-const WEEK_LABELS = ['一', '二', '三', '四', '五', '六', '日']
-const pad2 = (n: number) => String(n).padStart(2, '0')
-const toDateText = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-const parseDateText = (s: string): Date | null => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
-  if (!m) return null
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
-const dpIcon = (paths: ReactNode) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {paths}
-  </svg>
-)
-
-const DateField: React.FC<{ value: string; onChange: (v: string) => void; placeholder?: string }> = ({
-  value,
-  onChange,
-  placeholder = '请选择日期',
-}) => {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const [panelPos, setPanelPos] = useState<React.CSSProperties>({ position: 'fixed', top: 0, left: 0 })
-  const selected = useMemo(() => parseDateText(value), [value])
-  const [view, setView] = useState(() => {
-    const base = selected ?? new Date()
-    return new Date(base.getFullYear(), base.getMonth(), 1)
-  })
-
-  // 打开瞬间对齐到已选值（无值则当月）；不放 effect 里，否则会吞掉同批的月份导航点击
-  const toggle = () => {
-    if (!open) {
-      const base = parseDateText(value) ?? new Date()
-      setView(new Date(base.getFullYear(), base.getMonth(), 1))
-    }
-    setOpen(!open)
-  }
-
-  // 点外部 / Esc 关闭
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  // fixed 定位：躲开「卡内滚动」容器的裁剪；下方放不下就翻到上方
-  useIsoLayoutEffect(() => {
-    if (!open) return
-    const r = rootRef.current?.getBoundingClientRect()
-    if (!r) return
-    const H = 384
-    const W = 300
-    const spaceBelow = window.innerHeight - r.bottom
-    const top = spaceBelow >= H + 12 ? r.bottom + 6 : Math.max(12, r.top - H - 6)
-    const left = Math.min(Math.max(12, r.left), window.innerWidth - W - 12)
-    setPanelPos({ position: 'fixed', top, left, width: W })
-  }, [open])
-
-  // 6 行 × 7 列，前后月补白
-  const days = useMemo(() => {
-    const first = new Date(view.getFullYear(), view.getMonth(), 1)
-    const offset = (first.getDay() + 6) % 7
-    return Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(first.getFullYear(), first.getMonth(), 1 - offset + i)
-      return { text: toDateText(d), day: d.getDate(), out: d.getMonth() !== view.getMonth() }
-    })
-  }, [view])
-
-  const todayText = toDateText(new Date())
-  const pick = (text: string) => {
-    onChange(text)
-    setOpen(false)
-  }
-  const shiftMonth = (delta: number) => setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1))
-  const shiftYear = (delta: number) => setView((v) => new Date(v.getFullYear() + delta, v.getMonth(), 1))
-
-  return (
-    <div className="date-field" ref={rootRef}>
-      <button
-        type="button"
-        className={`date-field__trigger${open ? ' date-field__trigger--open' : ''}`}
-        onClick={toggle}
-      >
-        <span className={value ? 'date-field__text' : 'date-field__placeholder'}>{value || placeholder}</span>
-        {dpIcon(
-          <>
-            <rect x="3" y="5" width="18" height="16" rx="2" />
-            <path d="M8 3v4M16 3v4M3 10h18" />
-          </>,
-        )}
-      </button>
-      {open && (
-        <div className="date-picker" style={panelPos}>
-          <div className="date-picker__head">
-            <span className="date-picker__nav">
-              <button type="button" className="date-picker__nav-btn" onClick={() => shiftYear(-1)} aria-label="上一年">
-                {dpIcon(<><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></>)}
-              </button>
-              <button type="button" className="date-picker__nav-btn" onClick={() => shiftMonth(-1)} aria-label="上个月">
-                {dpIcon(<path d="m15 18-6-6 6-6" />)}
-              </button>
-            </span>
-            <span className="date-picker__title">
-              {view.getFullYear()}年 {view.getMonth() + 1}月
-            </span>
-            <span className="date-picker__nav">
-              <button type="button" className="date-picker__nav-btn" onClick={() => shiftMonth(1)} aria-label="下个月">
-                {dpIcon(<path d="m9 18 6-6-6-6" />)}
-              </button>
-              <button type="button" className="date-picker__nav-btn" onClick={() => shiftYear(1)} aria-label="下一年">
-                {dpIcon(<><path d="m13 17 5-5-5-5" /><path d="m6 17 5-5-5-5" /></>)}
-              </button>
-            </span>
-          </div>
-          <div className="date-picker__weekdays">
-            {WEEK_LABELS.map((w) => (
-              <span key={w}>{w}</span>
-            ))}
-          </div>
-          <div className="date-picker__grid">
-            {Array.from({ length: 6 }, (_, w) => (
-              <div className="date-picker__week" key={w}>
-                {days.slice(w * 7, w * 7 + 7).map((cell) => (
-                  <button
-                    type="button"
-                    key={cell.text}
-                    className={[
-                      'date-picker__day',
-                      cell.out && 'date-picker__day--out',
-                      cell.text === todayText && 'date-picker__day--today',
-                      cell.text === value && 'date-picker__day--selected',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onClick={() => pick(cell.text)}
-                  >
-                    {cell.day}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="date-picker__foot">
-            <button type="button" className="date-picker__foot-btn" onClick={() => pick(todayText)}>
-              今天
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+/* ---------- 自定义日期选择器：见 components/DateField.tsx（与评论管理页共用） ---------- */
 
 export default SettingsEditView

@@ -1,0 +1,30 @@
+diff --git a/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.js b/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.js
+index 6c7bd73..ae09d74 100644
+--- a/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.js
++++ b/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.js
+@@ -432,8 +432,8 @@ const createCommentHandler = (runtime) => {
+ 				if (!isAdmin(ctx) && old.user_id !== user.objectId) forbidden();
+ 			}
+ 			const data = isAdmin(ctx) ? { ...input.data } : {
+-				comment: input.data.comment,
+-				like: input.data.like
++				...input.data.comment !== undefined && { comment: input.data.comment },
++				...input.data.like !== undefined && { like: input.data.like }
+ 			};
+ 			if (typeof input.data.like === "boolean") data.like = Math.max((Number(old.like) || 0) + (input.data.like ? Math.ceil(random() * (config.likeIncMax ?? 1)) : -1), 0);
+ 			const rejected = await hook("preUpdate", {
+diff --git a/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.cjs b/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.cjs
+index 541cbf9..4f53ae6 100644
+--- a/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.cjs
++++ b/node_modules/@waline/vercel/node_modules/@waline/core/dist/index.cjs
+@@ -433,8 +433,8 @@ const createCommentHandler = (runtime) => {
+ 				if (!isAdmin(ctx) && old.user_id !== user.objectId) forbidden();
+ 			}
+ 			const data = isAdmin(ctx) ? { ...input.data } : {
+-				comment: input.data.comment,
+-				like: input.data.like
++				...input.data.comment !== undefined && { comment: input.data.comment },
++				...input.data.like !== undefined && { like: input.data.like }
+ 			};
+ 			if (typeof input.data.like === "boolean") data.like = Math.max((Number(old.like) || 0) + (input.data.like ? Math.ceil(random() * (config.likeIncMax ?? 1)) : -1), 0);
+ 			const rejected = await hook("preUpdate", {
