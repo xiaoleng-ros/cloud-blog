@@ -1,0 +1,211 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import Icon from '../../components/Icon.astro';
+import PostSummary from '../../components/PostSummary.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import {
+  ARCHIVE_PAGE_SIZE,
+  getArchivePageNumbers,
+  getArchivePagePath,
+  getArchivePageYears,
+  getArchiveTotalPages,
+  parseArchivePage,
+} from 'cloud-blog/shared/post-utils';
+import {
+  getCategories,
+  getCategoryPath,
+  getTagPath,
+  getTags,
+  sortPosts,
+} from '../../lib/posts';
+
+export async function getStaticPaths() {
+  const all = sortPosts(await getCollection('posts'));
+  const total = getArchiveTotalPages(all.length);
+  // rest 参数：第 1 页不产出 page 段（落在 /archive/），其余为 /archive/N/
+  return Array.from({ length: total }, (_, index) => ({
+    params: { page: index === 0 ? undefined : String(index + 1) },
+    props: { all },
+  }));
+}
+
+const { all } = Astro.props as { all: CollectionEntry<'posts'>[] };
+
+const page = parseArchivePage(Astro.url.pathname);
+const categories = getCategories(all);
+const tags = getTags(all);
+const years = getArchivePageYears(all, page);
+const totalPages = getArchiveTotalPages(all.length);
+const pageNumbers = getArchivePageNumbers(page, totalPages);
+
+// 本页区间（第几篇 ~ 第几篇），用于告诉读者这一页覆盖了什么
+const firstIndex = (page - 1) * ARCHIVE_PAGE_SIZE + 1;
+const lastIndex = Math.min(page * ARCHIVE_PAGE_SIZE, all.length);
+const rangeLabel = all.length === 0 ? '暂无文章' : `${firstIndex} - ${lastIndex}`;
+
+// Show the frequently-used tags; collapse the long tail behind a toggle.
+const primaryTags = tags.slice(0, 16);
+const restTags = tags.slice(16);
+---
+
+<BaseLayout
+  title={totalPages > 1 ? `归档 - 第 ${page} 页` : '归档'}
+  description="按时间、分类和标签浏览站内的全部文章。"
+  pageClass="content-page"
+>
+  <section class="archive-page">
+    <header class="page-header" data-sync-block="archiveHeader">
+      <p class="eyebrow">Archive</p>
+      <h1>文章归档</h1>
+      <p>目前收录 {all.length} 篇文章，可以按时间、分类或标签浏览。</p>
+      {totalPages > 1 && (
+        <p class="archive-page__meta">
+          第 {page} / {totalPages} 页 · 本页 {rangeLabel} 篇
+        </p>
+      )}
+    </header>
+
+    <section class="archive-summary" aria-label="内容索引" data-sync-block="archiveSummary">
+      <div class="taxonomy-panel">
+        <h2><Icon name="layers" size={16} />分类</h2>
+        <div class="term-list">
+          {categories.map((category) => (
+            <a href={getCategoryPath(category.name)}>
+              <span>{category.name}</span>
+              <small>{category.count}</small>
+            </a>
+          ))}
+        </div>
+      </div>
+      <div class="taxonomy-panel">
+        <h2><Icon name="hash" size={16} />标签</h2>
+        <div class="term-list">
+          {primaryTags.map((tag) => (
+            <a href={getTagPath(tag.name)}>
+              <span>{tag.name}</span>
+              <small>{tag.count}</small>
+            </a>
+          ))}
+        </div>
+        {restTags.length > 0 && (
+          <div class="term-more" data-term-more>
+            <div class="term-list term-list--rest">
+              {restTags.map((tag) => (
+                <a href={getTagPath(tag.name)}>
+                  <span>{tag.name}</span>
+                  <small>{tag.count}</small>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+        {restTags.length > 0 && (
+          <button type="button" class="term-toggle" data-term-toggle aria-expanded="false">
+            <span class="term-toggle__text">展开其余 {restTags.length} 个</span>
+            <svg
+              class="term-toggle__chev"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </section>
+
+    <div class="archive-years" data-sync-block="archiveYears" data-archive-page={page}>
+      {years.length === 0 ? (
+        <p class="archive-empty">这一页还没有文章。</p>
+      ) : (
+        years.map((group) => (
+          <section class="archive-year">
+            <header class="archive-year__head">
+              <h2 class="archive-year__num">{group.year}</h2>
+              {/* 跨页时同一年会出现在多页，这里显示该年全站总数，而非本页条数 */}
+              <span class="archive-year__count">{group.yearCount} 篇</span>
+            </header>
+            <div class="post-list">
+              {group.posts.map((post) => <PostSummary post={post} hideYear compact />)}
+            </div>
+          </section>
+        ))
+      )}
+    </div>
+
+    {totalPages > 1 && (
+      <nav class="archive-pager" aria-label="归档分页" data-archive-pager>
+        {page > 1 ? (
+          <a class="archive-pager__step" href={getArchivePagePath(page - 1)} rel="prev">
+            <Icon name="arrow-left" size={16} />
+            <span>上一页</span>
+          </a>
+        ) : (
+          <span class="archive-pager__step is-disabled" aria-hidden="true">
+            <Icon name="arrow-left" size={16} />
+            <span>上一页</span>
+          </span>
+        )}
+
+        <ol class="archive-pager__list">
+          {pageNumbers.map((num) =>
+            num === 0 ? (
+              <li class="archive-pager__gap" aria-hidden="true">…</li>
+            ) : num === page ? (
+              <li>
+                <span class="archive-pager__num is-current" aria-current="page">{num}</span>
+              </li>
+            ) : (
+              <li>
+                <a class="archive-pager__num" href={getArchivePagePath(num)}>{num}</a>
+              </li>
+            ),
+          )}
+        </ol>
+
+        {page < totalPages ? (
+          <a class="archive-pager__step" href={getArchivePagePath(page + 1)} rel="next">
+            <span>下一页</span>
+            <Icon name="arrow-right" size={16} />
+          </a>
+        ) : (
+          <span class="archive-pager__step is-disabled" aria-hidden="true">
+            <span>下一页</span>
+            <Icon name="arrow-right" size={16} />
+          </span>
+        )}
+      </nav>
+    )}
+  </section>
+
+  <script is:inline data-astro-rerun>
+    (() => {
+      // 绑定「展开其余标签」交互；区块被轮询更新后需重新绑定
+      const bind = () => {
+        const btn = document.querySelector('[data-term-toggle]');
+        const more = document.querySelector('[data-term-more]');
+        if (!btn || !more) return;
+        if (btn.dataset.termBound) return;
+        btn.dataset.termBound = '1';
+        const label = btn.querySelector('.term-toggle__text');
+        const rest = more.querySelectorAll('a').length;
+        btn.addEventListener('click', () => {
+          const open = !more.classList.contains('is-open');
+          more.classList.toggle('is-open', open);
+          btn.classList.toggle('is-open', open);
+          btn.setAttribute('aria-expanded', String(open));
+          if (label) label.textContent = open ? '收起标签' : `展开其余 ${rest} 个`;
+        });
+      };
+      bind();
+      document.addEventListener('blog:sync-updated', bind);
+    })();
+  </script>
+</BaseLayout>

@@ -84,16 +84,20 @@ import {
   getTagPath,
   getPostsByCategory,
   getPostsByTag,
-  groupPostsByYear,
+  ARCHIVE_PAGE_SIZE,
+  getArchivePagePath,
+  getArchivePageYears,
+  getArchiveTotalPages,
+  parseArchivePage,
   toShanghaiParts,
 } from 'cloud-blog/shared/post-utils'
 
 // 站点默认值（后台 SiteSettings 缺失时兜底）。原 site.config.json 已移除，统一在此维护。
 const SITE_DEFAULTS = {
   name: '云岫的博客',
-  description: '记录 AI、代码、网站搭建和技术观察。',
+  description: '记录 AI、代码、剪辑和生活观察。',
   url: process.env.NEXT_PUBLIC_SERVER_URL ?? 'https://example.com',
-  author: '段枫',
+  author: '小冷',
 }
 
 const site = { ...SITE_DEFAULTS }
@@ -512,10 +516,16 @@ function renderNavLinks(
     .join('')
 }
 
-/** 页脚主体内容（锚点 Footer.astro 的 div[data-sync-block="footerInner"]） */
+/** ICP 备案号：后台留空则整块不渲染（与 Footer.astro 的守卫一致） */
+function icpOf(settings: SyncData['settings'] | null | undefined): string {
+  return settings?.siteIcp?.trim() ?? ''
+}
+
+/** 页脚主体内容（锚点Footer.astro 的 div[data-sync-block="footerInner"]） */
 function renderFooterInner(
   footer: { subtitle: string; channels: Array<{ name: string; icon: string; href: string }>; groups: Array<{ name: string; icon: string; href: string }> },
   author: string,
+  icp = '',
 ): string {
   // 图标表里没有的名字不渲染空 svg，只留文字（与 Footer.astro 的条件渲染一致）
   const glyph = (name: string) => (hasIcon(name) ? iconSvg(name, 15) : '')
@@ -546,6 +556,7 @@ function renderFooterInner(
       <strong>${escapeHtml(author)}</strong>
       ${footer.subtitle ? `<span>${escapeHtml(footer.subtitle)}</span>` : ''}
     </div>
+    ${icp ? `<a class="site-footer__icp" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer nofollow">${iconSvg('shield', 14)}${escapeHtml(icp)}</a>` : ''}
   </div>
   ${
     hasLinks
@@ -560,8 +571,6 @@ function renderFooterInner(
 /** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]） */
 function renderFooterBar(author: string, year: number): string {
   return `<span>© ${year} ${escapeHtml(author)}</span>
-  <span aria-hidden="true">·</span>
-  <a href="${escapeAttr(site.url)}">${escapeHtml(site.url.replace('https://', ''))}</a>
   <span aria-hidden="true">·</span>
   <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>`
 }
@@ -678,11 +687,18 @@ function renderArticleFooter(
   ${relatedHtml}`
 }
 
-/** 归档页头部内容（锚点 archive.astro 的 header[data-sync-block="archiveHeader"]） */
-function renderArchiveHeader(count: number): string {
+/** 归档页 header（分页时补上页码信息，与 archive/[page].astro 的文案保持一致） */
+function renderArchiveHeader(count: number, page: number, totalPages: number): string {
+  const rangeLabel =
+    count === 0
+      ? '暂无文章'
+      : `${(page - 1) * ARCHIVE_PAGE_SIZE + 1} - ${Math.min(page * ARCHIVE_PAGE_SIZE, count)}`
+  const meta =
+    totalPages > 1 ? `<p class="archive-page__meta">第 ${page} / ${totalPages} 页 · 本页 ${rangeLabel} 篇</p>` : ''
   return `<p class="eyebrow">Archive</p>
   <h1>文章归档</h1>
-  <p>目前收录 ${count} 篇文章，可以按时间、分类或标签浏览。</p>`
+  <p>目前收录 ${count} 篇文章，可以按时间、分类或标签浏览。</p>
+  ${meta}`
 }
 
 /** 归档页分类/标签索引面板内容（锚点 archive.astro 的 section[data-sync-block="archiveSummary"]） */
@@ -732,14 +748,17 @@ function renderArchiveSummary(
   </div>`
 }
 
-/** 归档页按年份分组列表 */
-function renderArchiveYears(years: Array<{ year: string; posts: MdEntry[] }>): string {
+/** 归档页按年份分组列表（只渲染当前页的切片，页大小与前台共用 shared 口径） */
+function renderArchiveYears(
+  years: Array<{ year: string; posts: MdEntry[]; yearCount: number }>,
+): string {
+  if (years.length === 0) return '<p class="archive-empty">这一页还没有文章。</p>'
   return years
     .map(
       (group) => `<section class="archive-year">
   <header class="archive-year__head">
     <h2 class="archive-year__num">${escapeHtml(group.year)}</h2>
-    <span class="archive-year__count">${group.posts.length} 篇</span>
+    <span class="archive-year__count">${group.yearCount} 篇</span>
   </header>
   <div class="post-list">
     ${group.posts.map((p) => renderPostSummary(p, { hideYear: true, compact: true })).join('')}
@@ -1109,7 +1128,10 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
   const { posts, settings } = ctx
   const sorted = sortPosts(posts)
   const featured = sorted.filter((p) => Number(p.data.sticky ?? 0) > 0)
-  const latest = sortPostsByDate(sorted).slice(0, 8)
+  // 与前台 index.astro 保持一致：latestPosts 输出**全量**，
+  // 分批展开由页内脚本完成（前台 PAGE=5）。这里若再 slice(0, 8)，
+  // 后台同步一次就会把首页列表打回 8 条，与构建产物对不上。
+  const latest = sortPostsByDate(sorted)
   const heroPicks = [
     ...featured,
     ...latest.filter((p) => !featured.some((f) => f.id === p.id)),
@@ -1123,7 +1145,7 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     heroCard: renderHeroCard({ ...hero, bio: heroBio }, socials),
     heroPicks: renderHeroPicks(heroPicks),
@@ -1161,7 +1183,7 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     // 标题保持原始文本（未转义）：客户端直接赋给 document.title，
     // 服务端注入 <title> 时再统一做一次 HTML 转义。
@@ -1173,21 +1195,25 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
   }
 }
 
-/** 归档页 */
-async function archiveBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
+/** 归档页。path 形如 /archive/ 或 /archive/2/，只渲染该页的切片。 */
+async function archiveBlocks(ctx: SyncData, path: string): Promise<Record<string, string | null>> {
   const posts = sortPosts(ctx.posts)
-  const years = groupPostsByYear(posts)
+  const page = parseArchivePage(path)
+  const totalPages = getArchiveTotalPages(posts.length)
+  const pageYears = getArchivePageYears(posts, page)
   const settings = ctx.settings
   const siteName = settings?.siteName ?? site.name
+  const pagePath = getArchivePagePath(page)
 
   return {
     brandName: siteName,
-    navLinks: renderNavLinks(ctx.nav, '/archive/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    // 导航高亮按当前分页路径判定，否则在第 2 页会丢掉「归档」高亮
+    navLinks: renderNavLinks(ctx.nav, pagePath),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
-    archiveHeader: renderArchiveHeader(posts.length),
+    archiveHeader: renderArchiveHeader(posts.length, page, totalPages),
     archiveSummary: renderArchiveSummary(getCategories(posts), getTags(posts)),
-    archiveYears: renderArchiveYears(years),
+    archiveYears: renderArchiveYears(pageYears),
   }
 }
 
@@ -1200,7 +1226,7 @@ async function notesBlocks(ctx: SyncData): Promise<Record<string, string | null>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/notes/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     notesFeed: feed,
     notesAside: aside,
@@ -1225,7 +1251,7 @@ async function termBlocks(
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     termSwitcher: renderTermSwitcher(terms, term, kind),
     termPostList: renderPostList(posts, true),
@@ -1251,7 +1277,7 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/about/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author),
+    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
     footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
     aboutProfile: renderAboutProfile(about, postCount, firstYear),
     aboutSkills: renderAboutSkills(about.skills),
@@ -1325,9 +1351,11 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
   } else if (path === '/notes/') {
     blocks = await notesBlocks(ctx)
     title = `随笔 - ${siteName}`
-  } else if (path === '/archive/') {
-    blocks = await archiveBlocks(ctx)
-    title = `归档 - ${siteName}`
+  } else if (path === '/archive/' || /^\/archive\/\d+\/$/.test(path)) {
+    // 归档已分页：/archive/、/archive/2/ … 都要按 path 里的页码切出对应那页
+    blocks = await archiveBlocks(ctx, path)
+    const page = parseArchivePage(path)
+    title = page > 1 ? `归档 - 第 ${page} 页 - ${siteName}` : `归档 - ${siteName}`
   } else if (path === '/about/') {
     blocks = await aboutBlocks(ctx)
     title = `关于 - ${siteName}`

@@ -11,7 +11,7 @@
  */
 export const SITE_DEFAULTS = {
   siteName: '云岫的博客',
-  siteDescription: '记录 AI、代码、网站搭建和技术观察。',
-  siteAuthor: '段枫',
+  siteDescription: '记录 AI、代码、剪辑和生活观察。',
+  siteAuthor: '小冷',
   siteUrl: import.meta.env.SITE_URL || 'http://localhost:4321',
 } as const

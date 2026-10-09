@@ -39,11 +39,27 @@ export interface OfflineAbout {
   skills: SkillItem[];
 }
 
+/**
+ * 「站点运行时间」的起始日期。
+ *
+ * 已接后台：真实来源是站点设置的 siteCreatedAt（后台留空则整块不渲染）。
+ * 这个常量只在「后台整体不可用」时兜底，保证宕机时这块不至于空掉。
+ */
+export const PLACEHOLDER_SITE_SINCE = '2026-10-06';
+
+/**
+ * ICP 备案号的离线兜底 —— 默认留空。
+ *
+ * 与其他文案不同：备案号写错等于给网站引入合规问题，宁可空着也不猜。
+ * 需要在无后台环境下看到这一块，把真实备案号填进来（或启动后台在「站点设置 → 网站配置」填）。
+ */
+export const OFFLINE_ICP = '豫ICP备2020031049-1';
+
 export const OFFLINE_HERO: OfflineHero = {
   greeting: '嗨，我是',
-  name: '段枫',
-  subtitle: '又名 DUAN FENG · 爱折腾的创作者',
-  bio: '别人叫我「AI 实践者」，我觉得自己只是个爱画画、爱写代码的孩子。把屏幕当画板，把代码当蜡笔，在这里画了 {count} 篇笔记。',
+  name: '云岫',
+  subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
+  bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
   buttonLabel: '浏览文章',
 };
 
@@ -74,6 +90,10 @@ const ICON_ALIASES: Record<string, string> = {
   网易云: 'netease-cloud-music',
   网易云音乐: 'netease-cloud-music',
   github: 'github',
+  mail: 'mail',
+  邮箱: 'mail',
+  邮件: 'mail',
+  电子邮件: 'mail',
 };
 
 function resolveIconName(raw: string): string {
@@ -92,19 +112,20 @@ export function socialIconFor(platform: string): string {
 }
 
 export const OFFLINE_SOCIALS: Array<{ platform: string; href: string; label: string }> = [
-  { platform: 'bilibili', href: 'https://space.bilibili.com/46377861', label: 'Bilibili' },
+  { platform: 'bilibili', href: 'https://space.bilibili.com/1459419286', label: 'Bilibili' },
   { platform: 'douyin', href: 'https://www.douyin.com/user/self', label: '抖音' },
-  { platform: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg', label: 'YouTube' },
-  { platform: 'x', href: 'https://x.com/shenfanlaogou', label: 'X' },
+  { platform: 'github', href: 'https://github.com/xiaoleng-ros', label: 'GitHub' },
+  { platform: '邮箱', href: 'mailto:1873048956@qq.com', label: '邮箱' },
   { platform: 'rss', href: '/rss.xml', label: 'RSS 订阅' },
 ];
 
 /** 群组没有兜底：后台不填，前台就不该出现任何群组标签 */
 export const OFFLINE_FOOTER: OfflineFooter = {
-  subtitle: 'AI · Code · Web',
+  subtitle: '剪辑 · AI · Code',
   channels: [
-    { name: 'Bilibili', icon: 'bilibili', href: 'https://space.bilibili.com/46377861' },
-    { name: 'YouTube', icon: 'youtube', href: 'https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg' },
+    { name: 'Bilibili', icon: 'bilibili', href: 'https://space.bilibili.com/1459419286' },
+    { name: 'GitHub', icon: 'github', href: 'https://github.com/xiaoleng-ros' },
+    { name: '邮箱', icon: 'mail', href: 'mailto:1873048956@qq.com' },
     { name: 'RSS', icon: 'rss', href: '/rss.xml' },
   ],
   groups: [],
@@ -114,21 +135,20 @@ export const OFFLINE_ABOUT: OfflineAbout = {
   lead: '关于我',
   // 与在线路径同源的 ==高亮== 记号，渲染交给 formatAboutLine，避免默认值成为唯一一段裸 HTML
   paragraphs: [
-    '我喜欢==歪一点==的东西——太正了反而不真实。',
-    '白天：==前端工程师 + 视觉设计师==，做正经的项目。',
-    '晚上：==画涂鸦==、写小工具、做声音装置。',
-    '梦想是让互联网上多一点==好玩的角落==。',
+    '我喜欢==神秘感==——云雾之间。',
+    '白天：每天起床==剪视频==。',
+    '晚上：幻想==挣大钱==。',
+    '梦想是想去看祖国的==大好河山==。',
   ].map(formatAboutLine),
   notes: [
-    { title: '坐标广州', subtitle: '1995 年生', color: 'yellow' },
-    { title: '独立创作者', subtitle: '8 年经验', color: 'cyan' },
-    { title: '一天三杯咖啡', subtitle: '（不是广告）', color: 'pink' },
+    { title: '坐标成都', subtitle: '2003 年出生', color: 'yellow' },
+    { title: '剪辑师', subtitle: '1 年经验', color: 'green' },
+    { title: '内容创作者', subtitle: '挣大钱', color: 'purple' },
   ],
   skills: [
-    { label: 'HTML / CSS', sublabel: '画框搭的', value: 95, color: 'yellow' },
-    { label: 'JavaScript', sublabel: '会耍魔术', value: 90, color: 'cyan' },
-    { label: 'AI 工具', sublabel: '乱点乱用', value: 88, color: 'pink' },
-    { label: 'Astro', sublabel: '让人省点', value: 85, color: 'purple' },
-    { label: '视觉设计', sublabel: '爱涂爱画', value: 82, color: 'yellow' },
+    { label: '剪辑', sublabel: '易学难入', value: 30, color: 'green' },
+    { label: 'HTML / CSS', sublabel: '全靠 AI', value: 60, color: 'purple' },
+    { label: 'AI 工具', sublabel: '听之任之', value: 75, color: 'pink' },
+    { label: 'JavaScript', sublabel: '会点魔术', value: 65, color: 'yellow' },
   ],
 };

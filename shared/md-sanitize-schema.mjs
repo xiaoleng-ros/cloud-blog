@@ -26,7 +26,7 @@ export const MD_EXTRA_TAGS = [
 /**
  * iframe 允许嵌入的 host 白名单（精确匹配或子域）。
  * 全仓 grep 无任何现存 iframe 嵌入：博客音乐播放器是 fetch + <audio> 自研实现
- * （Meting API host：meting.mikus.ink），不经过 iframe，净化规则不会影响它；
+ * （Meting API host：api.injahow.cn），不经过 iframe，净化规则不会影响它；
  * 这里保留音乐/常见视频平台的官方嵌入 host，供后台作者在正文里手动嵌歌单/视频。
  */
 export const MD_IFRAME_HOSTS = [

@@ -2,6 +2,7 @@
 import { getCollection } from 'astro:content';
 import Icon from '../components/Icon.astro';
 import PostSummary from '../components/PostSummary.astro';
+import SiteAge from '../components/SiteAge.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { getHero, getSiteSettings, getSocials } from '../lib/site-settings';
 import { hasIcon } from 'cloud-blog/shared/icon-paths';
@@ -18,7 +19,9 @@ import {
 
 const posts = sortPosts(await getCollection('posts'));
 const featuredPosts = posts.filter((post) => (post.data.sticky ?? 0) > 0);
-const latestPosts = sortPostsByDate(posts).slice(0, 8);
+// 「最新文章」全量输出，显隐交给页内脚本分批展开（见文件末尾 PAGE 常量）。
+// 之前是 slice(0, 8) 硬截断：文章超过 8 篇后剩下的永远看不到，也没有入口。
+const latestPosts = sortPostsByDate(posts);
 
 // Hero "精选" picks: sticky posts first, topped up with the latest, max 5.
 const heroPicks = [
@@ -89,93 +92,188 @@ const coverHue = (value: string) => {
         </div>
       )}
     </div>
+  </section>
 
-    {/* 精选区块：锚点始终渲染（即使构建时后台还没有文章），
-        这样响应时注入 / 客户端同步才有落脚点；内容为空时由 CSS 隐藏。 */}
-    <aside class="hero__picks" aria-label="精选文章" data-sync-block="heroPicks">
-      {heroPicks.length > 0 && (
-        <>
-          <p class="hero__picks-label">精选</p>
-          <div class="picks">
-          <a class="pick-hero" href={getPostPath(heroPicks[0])}>
-            {getPostCover(heroPicks[0]) ? (
-              <span class="pick-hero__thumb">
-                <img
-                  src={getPostCover(heroPicks[0])}
-                  alt={heroPicks[0].data.coverAlt ?? ''}
-                  width="800"
-                  height="400"
-                  loading="eager"
-                  fetchpriority="high"
-                  referrerpolicy="no-referrer"
-                />
-              </span>
-            ) : (
-              <span
-                class="pick-hero__thumb pick__thumb--fallback"
-                style={`--h:${coverHue(heroPicks[0].data.title)}`}
-              />
-            )}
-            <span class="post-meta">
-              {getPostCategory(heroPicks[0]) && <span>{getPostCategory(heroPicks[0])}</span>}
-              {heroPicks[0].data.date && (
-                <time datetime={heroPicks[0].data.date.toISOString()}>
-                  {formatDate(heroPicks[0].data.date)}
-                </time>
+  <div class="home-layout">
+    <div class="home-main">
+      {/* 精选区块：锚点始终渲染（即使构建时后台还没有文章），
+          这样响应时注入 / 客户端同步才有落脚点；内容为空时由 CSS 隐藏。 */}
+      <aside class="hero__picks" aria-label="精选文章" data-sync-block="heroPicks">
+        {heroPicks.length > 0 && (
+          <>
+            <p class="hero__picks-label">精选</p>
+            <div class="picks">
+              <a class="pick-hero" href={getPostPath(heroPicks[0])}>
+                {getPostCover(heroPicks[0]) ? (
+                  <span class="pick-hero__thumb">
+                    <img
+                      src={getPostCover(heroPicks[0])}
+                      alt={heroPicks[0].data.coverAlt ?? ''}
+                      width="800"
+                      height="400"
+                      loading="eager"
+                      fetchpriority="high"
+                      referrerpolicy="no-referrer"
+                    />
+                  </span>
+                ) : (
+                  <span
+                    class="pick-hero__thumb pick__thumb--fallback"
+                    style={`--h:${coverHue(heroPicks[0].data.title)}`}
+                  />
+                )}
+                <span class="post-meta">
+                  {getPostCategory(heroPicks[0]) && <span>{getPostCategory(heroPicks[0])}</span>}
+                  {heroPicks[0].data.date && (
+                    <time datetime={heroPicks[0].data.date.toISOString()}>
+                      {formatDate(heroPicks[0].data.date)}
+                    </time>
+                  )}
+                </span>
+                <span class="pick-hero__title">{heroPicks[0].data.title}</span>
+                <span class="pick-hero__desc">{getPostDescription(heroPicks[0])}</span>
+              </a>
+
+              {heroPicks.length > 1 && (
+                <ul class="pick-side">
+                  {heroPicks.slice(1, 5).map((post) => (
+                    <li>
+                      <a class="pick-side__item" href={getPostPath(post)}>
+                        {getPostCover(post) ? (
+                          <span class="pick-side__thumb">
+                            <img src={getPostCover(post)} alt={post.data.coverAlt ?? ''} width="400" height="200" loading="lazy" referrerpolicy="no-referrer" />
+                          </span>
+                        ) : (
+                          <span
+                            class="pick-side__thumb pick__thumb--fallback"
+                            style={`--h:${coverHue(post.data.title)}`}
+                          />
+                        )}
+                        <span class="pick-side__text">
+                          <span class="pick-side__title">{post.data.title}</span>
+                          {post.data.date && (
+                            <time class="pick-side__date" datetime={post.data.date.toISOString()}>
+                              {formatDate(post.data.date)}
+                            </time>
+                          )}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </span>
-            <span class="pick-hero__title">{heroPicks[0].data.title}</span>
-            <span class="pick-hero__desc">{getPostDescription(heroPicks[0])}</span>
-          </a>
+            </div>
+          </>
+        )}
+      </aside>
 
-          {heroPicks.length > 1 && (
-            <ul class="pick-side">
-              {heroPicks.slice(1, 5).map((post) => (
-                <li>
-                  <a class="pick-side__item" href={getPostPath(post)}>
-                    {getPostCover(post) ? (
-                      <span class="pick-side__thumb">
-                        <img src={getPostCover(post)} alt={post.data.coverAlt ?? ''} width="400" height="200" loading="lazy" referrerpolicy="no-referrer" />
-                      </span>
-                    ) : (
-                      <span
-                        class="pick-side__thumb pick__thumb--fallback"
-                        style={`--h:${coverHue(post.data.title)}`}
-                      />
-                    )}
-                    <span class="pick-side__text">
-                      <span class="pick-side__title">{post.data.title}</span>
-                      {post.data.date && (
-                        <time class="pick-side__date" datetime={post.data.date.toISOString()}>
-                          {formatDate(post.data.date)}
-                        </time>
-                      )}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
+      <section class="section">
+        <div class="section__header section__header--row">
+          <div>
+            <h2>最新文章</h2>
           </div>
-        </>
-      )}
+          <a class="section__more" href="/archive/">
+            <span data-sync-block="heroCount">全部 {posts.length} 篇</span>
+            <Icon name="arrow-right" size={16} />
+          </a>
+        </div>
+        <div class="post-list" aria-label="文章列表" data-sync-block="latestPosts">
+          {latestPosts.map((post) => <PostSummary post={post} />)}
+        </div>
+      </section>
+    </div>
+
+    {/* 右侧模块栏：站点运行时间打头，后续要加的模块顺次往下堆 */}
+    <aside class="home-aside" aria-label="站点模块">
+      <SiteAge />
     </aside>
-  </section>
+  </div>
 
+  <script is:inline data-astro-rerun>
+    (() => {
+      // 首页「最新文章」分批展开：默认只露出最近 5 条，点「加载更多」再展开 5 条。
+      // 沿用随笔页 notes.astro 的做法 —— 服务端渲染完整列表，纯前端控制显隐，
+      // 这样后台同步整块替换 latestPosts 后，重新分批即可，不用服务端再分一份。
+      window.__blogHomeMoreCleanup?.();
+      const PAGE = 5;
+      const list = document.querySelector('[data-sync-block="latestPosts"]');
+      if (!list) return;
 
-  <section class="section">
-    <div class="section__header section__header--row">
-      <div>
-        <h2>最新文章</h2>
-        <p>持续更新 AI、开发和建站相关笔记。</p>
-      </div>
-      <a class="section__more" href="/archive/">
-        <span data-sync-block="heroCount">全部 {posts.length} 篇</span>
-        <Icon name="arrow-right" size={16} />
-      </a>
-    </div>
-    <div class="post-list" aria-label="文章列表" data-sync-block="latestPosts">
-      {latestPosts.map((post) => <PostSummary post={post} />)}
-    </div>
-  </section>
+      const section = list.closest('.section');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'latest-more';
+      button.setAttribute('aria-label', '加载更多文章');
+      const label = document.createElement('span');
+      button.appendChild(label);
+      section.appendChild(button);
+
+      let shown = PAGE;
+
+      const apply = () => {
+        const rows = [...list.children];
+        rows.forEach((el, i) => {
+          const visible = i < shown;
+          el.hidden = !visible;
+          if (visible) {
+            // 新展开的行直接标记已显现，否则会被滚动显现规则的初始隐藏态挡住
+            el.classList.add('is-revealed');
+            el.dataset.revealed = '1';
+          }
+        });
+        const rest = rows.length - shown;
+        button.hidden = rest <= 0;
+        if (rest > 0) label.textContent = `加载更多（还有 ${rest} 篇）`;
+      };
+
+      button.addEventListener('click', () => {
+        shown += PAGE;
+        apply();
+      });
+
+      const onSync = () => apply();
+      document.addEventListener('blog:sync-updated', onSync);
+      apply();
+
+      window.__blogHomeMoreCleanup = () => {
+        document.removeEventListener('blog:sync-updated', onSync);
+        button.remove();
+      };
+    })();
+  </script>
+
+  <style is:global>
+    /* 「加载更多」由页面脚本创建，模板作用域样式够不到，需全局样式。
+       沿用随笔页 .notes-more 的手账纸片形态，位置贴住列表末尾。 */
+    .latest-more {
+      display: block;
+      margin: 1.75rem auto 0;
+      padding: 0.6rem 1.5rem;
+      border: 2px solid var(--ink);
+      border-radius: 12px 16px 13px 15px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--font-hand-cn);
+      font-size: 0.95rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      box-shadow: 2px 3px 0 var(--shadow-sm);
+      cursor: pointer;
+      transform: rotate(-0.5deg);
+      transition: transform var(--t-fast) var(--ease-out),
+        box-shadow var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+    }
+
+    .latest-more:hover {
+      background: var(--sticky-yellow);
+      border-color: var(--on-sticky-line);
+      color: var(--on-sticky);
+      transform: rotate(0deg) translateY(-2px);
+      box-shadow: 2px 5px 0 var(--shadow-sm);
+    }
+
+    .latest-more[hidden] {
+      display: none;
+    }
+  </style>
 </BaseLayout>

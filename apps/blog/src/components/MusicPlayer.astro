@@ -102,6 +102,9 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
     </div>
 
     <div class="music-player__timeline">
+      <p class="music-player__lyric" data-music-lyric aria-live="off">
+        <span class="music-player__lyric-line" data-music-lyric-line>♪</span>
+      </p>
       <div class="music-player__seek">
         <span class="music-player__seek-track" aria-hidden="true">
           <span class="music-player__seek-fill"></span>
@@ -340,7 +343,8 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
     flex-direction: column;
     width: min(22.5rem, calc(100vw - 2rem));
     max-height: min(76vh, 39rem);
-    overflow: hidden;
+    overflow: hidden; /* 旧浏览器兜底 */
+    overflow: clip; /* 不用 hidden：hidden 会自建滚动容器干扰滚轮；clip 视觉同上但不建容器 */
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: color-mix(in srgb, var(--surface) 94%, transparent);
@@ -620,7 +624,7 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
     margin: 0;
     padding: 0 0.55rem;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    /* 不设 overscroll-behavior: contain：滚轮统一由面板的 wheel 处理器接管（preventDefault + 手动滚列表），原生命中不了 */
     list-style: none;
     scrollbar-gutter: stable;
   }
@@ -1597,7 +1601,6 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
     margin: 0;
     padding: 0.2rem 0.72rem 0.78rem;
     overflow-y: auto;
-    overscroll-behavior: contain;
     list-style: none;
     scrollbar-gutter: stable;
   }
@@ -1835,6 +1838,79 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
       translate: 0 0;
     }
   }
+
+  /* ---------- 歌词单行 ---------- */
+  /* 放在 timeline 里、进度条上方。刻意不跟 .music-player__timeline 一起写：
+     那条规则在三档断点里被反复覆写（padding 各不相同），新样式跟着它走会被覆掉。 */
+  .music-player__lyric {
+    display: flex;
+    align-items: center;
+    min-height: 1.9rem;
+    margin: 0;
+    padding: 0 1.1rem 0.35rem;
+    /* 固定两行高：歌词长短切换时面板不会上下跳 */
+    overflow: hidden;
+  }
+
+  .music-player__lyric-line {
+    /* -webkit-box + line-clamp 限制两行；两个前缀都要写，Safari 只认前者 */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    width: 100%;
+    font-family: var(--font-hand-cn);
+    font-size: 0.92rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+    text-align: center;
+    transition: color 0.2s var(--ease-out-soft), opacity 0.2s var(--ease-out-soft);
+  }
+
+  /* 就绪后才是「正在唱的那句」：占位文案（加载中/暂无歌词）用弱化色区分 */
+  .music-player__lyric.is-ready .music-player__lyric-line {
+    color: var(--text);
+  }
+
+  .music-player__lyric:not(.is-ready) .music-player__lyric-line {
+    color: var(--text-faint);
+    font-family: inherit;
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 640px) {
+    .music-player__lyric {
+      padding-inline: 1rem;
+    }
+
+    .music-player__lyric-line {
+      font-size: 0.85rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .music-player__lyric-line {
+      transition: none;
+    }
+  }
+
+  /* 面板内元素不建滚动容器：以下元素原本 overflow: hidden——每个都会自建滚动容器、
+     悬停时可能干扰滚轮。clip 视觉裁剪与 hidden 相同但不建容器；
+     旧浏览器（不支持 clip）忽略本块、自动回退各自原先的 hidden。歌单列表保持 auto，
+     滚轮去向由脚本里面板的 wheel 处理器统一决定：只滚歌单列表，页面不跟着动。 */
+  .music-player__panel,
+  .music-player__disc,
+  .music-player__cover,
+  .music-player__status,
+  .music-player__meta strong,
+  .music-player__meta > span:last-child,
+  .music-player__track-copy strong,
+  .music-player__track-copy small,
+  .music-player__lyric,
+  .music-player__lyric-line {
+    overflow: clip;
+  }
 </style>
 
 <script is:inline>
@@ -1871,8 +1947,28 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
       const list = root.querySelector('[data-music-list]');
       const cover = root.querySelector('[data-music-cover]');
       const dockCover = root.querySelector('[data-music-dock-cover]');
+      const lyricBox = root.querySelector('[data-music-lyric]');
+      const lyricLine = root.querySelector('[data-music-lyric-line]');
       const playlistId = root.dataset.playlistId || '';
       const apiBase = root.dataset.apiBase || 'https://meting.mikus.ink/api';
+      /**
+       * 备用端点列表。公共 Meting 服务都不稳定（限流 429 / 上游 500 / CDN 抖动），
+       * 主端点失败时自动往后试。顺序即优先级，不去重是为了兼容主端点与备用同源的情况。
+       *
+       * 注意：端点只影响「能不能取到数据」，**不影响音质**——
+       * 各镜像返回的音频时长一致（都受网易云版权限制），
+       * 但实测 injahow 只给 30-60 秒试听切片，mikus 给完整音频，
+       * 所以完整音频的端点排在最前面。
+       */
+      const apiBases = Array.from(
+        new Set(
+          [apiBase, 'https://meting.mikus.ink/api', 'https://api.injahow.cn/meting/']
+            .map((value) => String(value ?? '').trim())
+            .filter(Boolean),
+        ),
+      );
+      // 本次会话实际命中的端点；音频/歌词的相对地址都要按它重写
+      let activeApiBase = apiBases[0] || apiBase;
       const storageKey = `blog-music-player:${playlistId}`;
 
       if (
@@ -1970,6 +2066,43 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
         });
       };
 
+      // 打开面板时按按钮落点重排面板，保证整块可见（不允许只露一半）：
+      // 上边放得下 → 向上（默认形态）；上边不够、下边放得下 → 向下；
+      // 两边都放不下 → 压到空间更大的一侧的高度（歌单区 flex:1 会先缩、内部滚动）。
+      // 横向：面板右缘对齐按钮右缘，越界就整体平移到视口留边处。
+      const applyPanelDirection = () => {
+        const rect = root.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const panelW = panel.offsetWidth;
+        const panelH = panel.offsetHeight;
+        const GAP = 12;
+        const MARGIN = 12;
+
+        const left = Math.min(
+          Math.max(rect.right - panelW, MARGIN),
+          Math.max(MARGIN, vw - panelW - MARGIN),
+        );
+        panel.style.left = `${left - rect.left}px`;
+        panel.style.right = 'auto';
+
+        const spaceAbove = rect.top - GAP - MARGIN;
+        const spaceBelow = vh - rect.bottom - GAP - MARGIN;
+        let down = false;
+        if (spaceAbove < panelH) down = spaceBelow >= panelH || spaceBelow > spaceAbove;
+        const space = down ? spaceBelow : spaceAbove;
+        const fits = space >= panelH;
+
+        panel.style.top = down ? `calc(100% + ${GAP}px)` : '';
+        panel.style.bottom = down ? 'auto' : '';
+        panel.style.maxHeight = fits ? '' : `${Math.floor(space)}px`;
+        // 高度被压时放开歌单区最小高度，让可滚动的部分先让位
+        list.style.minHeight = fits ? '' : '0';
+        panel.style.transformOrigin = `${left + panelW / 2 < rect.left + rect.width / 2 ? '92%' : '8%'} ${
+          down ? '0' : '100%'
+        }`;
+      };
+
       const setOpen = (open) => {
         root.classList.toggle('is-open', open);
         panel.setAttribute('aria-hidden', String(!open));
@@ -1979,6 +2112,7 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
         toggle.setAttribute('aria-label', open ? '收起音乐播放器' : '打开音乐播放器');
         toggle.title = open ? '收起音乐' : '音乐';
         if (open) {
+          applyPanelDirection();
           window.requestAnimationFrame(() => {
             scrollActiveTrack();
             closeButton?.focus({ preventScroll: true });
@@ -2021,6 +2155,276 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
 
       const getTrackKey = (track) => `${track.title}\u0000${track.artist}\u0000${track.url}`;
 
+      // ---------- 歌词 ----------
+      // 数据来源：Meting 的 track.lrc 不是歌词正文，而是一条「再请求一次拿歌词」的地址
+      // （形如 .../api?server=tencent&type=lrc&id=xxx），正文是标准 LRC 纯文本。
+      // 实测整份歌单 30 首里 25 首能拿到（纯人声/纯音乐拿不到，属正常）。
+      //
+      // 策略：懒加载 + 内存缓存。
+      //  - 懒加载：只在切到该曲时拉，不预取整张歌单（30 个请求太浪费）
+      //  - 缓存：同一首歌反复切回不再请求，缓存到刷新为止
+      //  - 竞态：切歌快于歌词返回时，用 generation 丢弃过期响应，避免显示上一首的歌词
+      const lyricCache = new Map();
+      let lyricLines = [];
+      let lyricIndex = -1;
+      /** 界面是否已渲染过歌词行（与 lyricIndex 分开，见 syncLyric 注释） */
+      let lyricRendered = false;
+      let lyricGeneration = 0;
+
+      const LRC_TIME = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
+
+      /**
+       * 制作信息行：不是歌词，只是唱片信息。
+       * 实测很多 LRC 把它放在时间戳后面（"[00:00.00] 作词 : 赵雷"），
+       * 不滤掉的话前奏几十秒全在滚「作词 / 作曲 / 编曲 / 制作人」，
+       * 真正的第一句要等到 40 秒后才出现。
+       *
+       * 光枚举词不够用：实际还有「演唱 : 陈一豪」「音乐团队 : 名至音乐」
+       * 「官方指定音乐合作伙伴：韶愔音乐娱乐（北京）有限公司」这类，
+       * 冒号前是任意名称、冒号后是机构，枚举不出来。
+       * 所以再加一条结构规则：冒号前是个短名目、冒号后是一段没有句读的机构名
+       * （整行 ≤ 40 字），判定为信息行。
+       *
+       * 单纯「≤ N 字 + 含冒号」会误伤真歌词里的对句（「你望着我：用一只散漫的眼角」），
+       * 因此额外要求：冒号前不以人称代词结尾（歌词的冒号几乎都在「我/你/他…」之后，
+       * 而信息行的冒号前是「作词」「官方指定音乐合作伙伴」这类固定名目），
+       * 且冒号后不含逗号句号——歌词的补语是完整句子，会带句读。
+       */
+      const CREDIT_WORD =
+        /^\s*(作词|作曲|编曲|制作人|出品|发行|录音|混音|母带|监制|和声|吉他|贝斯|鼓|弦乐|演唱|歌手|音乐团队|企划|统筹|封面|词|曲|特别鸣谢|营销|推广|吉他手|贝斯手|鼓手|键盘|钢琴|弦乐编写|弦乐监制|配唱制作人|主唱|低音|和音|人声|录音师|录音室|混音师|混音室|第一小提琴|第二小提琴|小提琴|大提琴|中提琴|长笛|萨克斯|打击乐|电吉他|木吉他|原声吉他|贝斯|弦乐|管弦乐|人声录制|录音棚|混音棚|母带棚|合音|推广|统筹)\s*[:：]/i;
+      // 中英混写的制作字段：「弦乐监制 Strings Directed by：胡静成」「Composed by：Vincent」
+      // 「Electric guitar : 谷粟」「PGM吉他：王传统」
+      const CREDIT_EN =
+        /^\s*(electric\s+)?(guitar|piano|bass|drum|vocal|voice|string|strings|cello|violin|viola|flute|sax|percussion|keyboards?|program|pgm|choir|orchestra|mixing|master|arrang|record|engineer|producer|production|written|writer|compos|perform)\w*\s*[:：]/i;
+      const CREDIT_EN_WORD =
+        /\b(produced|producer|composed|composer|arranged|arrangement|recorded|mixing|mastered|engineer|directed|vocal|choir|strings|performer|lyrics?|written|mixed|session|master)\b/i;
+      const CREDIT_SHAPE = /^[^:：]{1,14}[:：][^,，。.？?！!]{1,24}$/;
+      // 歌词对句的冒号几乎都跟在「我/你/他…」或「某人说」之后，不是名目分隔
+      const LYRIC_COLON_TAIL =
+        /[我你他她它咱谁啥哪哦啊呢吧了吗呀嘛的说问答叫喊笑哭走来回想看]$/;
+      // 外文机构名 + 短中文说明：「Orchestra dei Misantropi：管弦乐」
+      const CREDIT_FOREIGN = /^[A-Za-z][A-Za-z\s.'&/-]{2,40}[:：][^\x00-\x7F]{1,8}$/;
+
+      const isCreditLine = (text) => {
+        if (CREDIT_WORD.test(text) || CREDIT_EN.test(text) || CREDIT_FOREIGN.test(text)) return true;
+        const head = text.split(/[:：]/)[0];
+        if (CREDIT_EN_WORD.test(head)) return true;
+        if (text.length > 40 || !CREDIT_SHAPE.test(text)) return false;
+        return !LYRIC_COLON_TAIL.test(head.trim());
+      };
+
+      /**
+       * 解析 LRC：返回按时间升序的 [{ time: 秒, text }]，解析不出来返回空数组。
+       *
+       * 有一类歌的 lrc 是**纯文本**、一个时间戳都没有（外文歌、老歌很常见，
+       * 实测歌单里 30 首有 4 首是这种）。以前这情况会返回空数组 → 显示「暂无歌词」，
+       * 明明有歌词。所以这里给个兜底：按歌曲时长把歌词行均分成时间轴，
+       * 至少能做到「播放时逐行往下走」，而不是一句都不显示。
+       */
+      const parseLrc = (raw, duration = 0) => {
+        const lines = [];
+        const plain = [];
+        let stamped = 0;
+        for (const line of String(raw).split(/\r?\n/)) {
+          // 一行可能有多个时间戳（副歌重复段），逐个收集
+          const stamps = [];
+          let match;
+          LRC_TIME.lastIndex = 0;
+          while ((match = LRC_TIME.exec(line)) !== null) {
+            const [, mm, ss, frac] = match;
+            // 三段式 [mm:ss.xxx] 的毫秒：".5" 是 500ms，要补零成 "500"
+            const millis = frac ? Number(frac.padEnd(3, '0')) : 0;
+            stamps.push(Number(mm) * 60 + Number(ss) + millis / 1000);
+          }
+          const text = line.replace(LRC_TIME, '').trim();
+          if (!text || isCreditLine(text)) continue;
+          if (!stamps.length) {
+            plain.push(text);
+            continue;
+          }
+          stamped += 1;
+          for (const time of stamps) lines.push({ time, text });
+        }
+        // 有时间戳就用真的；一条都没有才走等距兜底
+        if (!stamped && plain.length) {
+          const total = Number.isFinite(duration) && duration > plain.length * 2 ? duration : 0;
+          // 有时长就铺满整首歌，没时长就按 4 秒一句走
+          const step = total ? total / plain.length : 4;
+          plain.forEach((text, index) => lines.push({ time: index * step, text }));
+        }
+        lines.sort((a, b) => a.time - b.time);
+        return lines;
+      };
+
+      const setLyricText = (value) => {
+        if (lyricLine) lyricLine.textContent = value;
+      };
+
+      /**
+       * 清空歌词状态、切到占位文案。
+       *
+       * 注意：这里**不能**碰 lyricGeneration。它是 loadLyric 的在途请求作废凭证，
+       * 由 loadLyric 自己递增。之前这函数里也 ++，而 loadLyric 是「先 ++ 拿到
+       * generation、再调 resetLyric」，等于每个请求都把自己作废，
+       * `generation !== lyricGeneration` 恒成立，所有响应都被丢弃 ——
+       * 表现就是歌词永远停在「歌词加载中…」。
+       */
+      const resetLyric = (placeholder) => {
+        lyricLines = [];
+        lyricIndex = -1;
+        lyricRendered = false;
+        if (lyricBox) lyricBox.classList.remove('is-ready');
+        setLyricText(placeholder);
+      };
+
+      function applyLyric(parsed) {
+        lyricLines = parsed;
+        lyricIndex = -1;
+        lyricRendered = false;
+        if (lyricBox) lyricBox.classList.add('is-ready');
+        // 切歌后立刻定位一次：多数歌第一句时间戳在 0 附近，
+        // 不先渲染的话要等第一次 timeupdate 才出字
+        syncLyric(0);
+      }
+
+      /**
+       * 按当前播放时间找到该高亮的行。
+       *
+       * `rendered` 记录「当前界面是否已经渲染过」，跟 lyricIndex 分开：
+       * lyricIndex 用 -1 同时表示「还没定位」和「位于首句之前」，两者需要的
+       * 显示内容不同（`♪` vs 首句）。之前只用 lyricIndex 去重，导致首句
+       * 时间戳 > 0.15 的歌（实测一大半）永远停在「歌词加载中…」。
+       */
+      function syncLyric(time) {
+        if (!lyricLines.length) return;
+        let next = -1;
+        for (let i = 0; i < lyricLines.length; i += 1) {
+          if (lyricLines[i].time <= time + 0.15) next = i;
+          else break;
+        }
+        if (lyricRendered && next === lyricIndex) return;
+        lyricIndex = next;
+        lyricRendered = true;
+        setLyricText(next < 0 ? '♪' : lyricLines[next].text);
+      }
+
+      /**
+       * 只负责「把歌词数据取回来并进缓存」，不碰界面。
+       * 拆出来是为了让 prefetchUpcoming 能在后台静默跑 —— 预取和正式加载共用同一份
+       * 请求与解析逻辑，不会出现「预取的格式和实际用的不一样」。
+       *
+       * 返回 parsed；失败返回 null（**不写缓存**）。
+       * 故意不缓存失败结果：预取是「尽力而为」的，网络抖动不该让正式加载
+       * 命中一个空缓存 —— 那样切歌时会永远停在「歌词加载中…」，且再也没有重试机会。
+       */
+      const fetchLyric = async (track, duration = 0) => {
+        const id = track.id;
+        if (!id) return [];
+        // 缓存键用歌曲 id 而不是 URL —— 换端点后 URL 会变，但 id 不变，
+        // 否则每次切端点都会把已有缓存全部作废
+        const key = `id:${id}`;
+        if (lyricCache.has(key)) return lyricCache.get(key);
+
+        /**
+         * 歌词也必须走端点回退链。
+         *
+         * 实测 meting.mikus.ink 是**间歇性丢 CORS 头**的：同一个 URL，
+         * Node 里能读到 Access-Control-Allow-Origin: *，浏览器里却被拒
+         * （"No 'Access-Control-Allow-Origin' header"）。
+         * 所以歌词不能只认歌单那一个端点，逐个试到成功为止。
+         */
+        for (const base of apiBases) {
+          const endpoint = new URL(base, window.location.href);
+          endpoint.searchParams.set('server', 'netease');
+          endpoint.searchParams.set('type', 'lrc');
+          endpoint.searchParams.set('id', String(id));
+          try {
+            const response = await fetch(endpoint.href, { mode: 'cors', credentials: 'omit' });
+            if (!response.ok) continue;
+            const parsed = parseLrc(await response.text(), duration);
+            lyricCache.set(key, parsed);
+            return parsed;
+          } catch {
+            // 这个端点不可用（多半是 CORS 或超时），试下一个
+          }
+        }
+        return null;
+      };
+
+      const loadLyric = async (track) => {
+        const key = track.id ? `id:${track.id}` : '';
+        if (!key) {
+          resetLyric('这首歌暂无歌词');
+          return;
+        }
+        // 预取可能已经把这首歌的歌词拉好了，直接用，切歌零等待
+        if (lyricCache.has(key)) {
+          applyLyric(lyricCache.get(key));
+          void prefetchUpcoming();
+          return;
+        }
+        const generation = ++lyricGeneration;
+        resetLyric('歌词加载中…');
+        // 预取的标记要清掉：万一预取失败过，正式加载必须能真正发起请求
+        prefetchedKeys.delete(key);
+        const parsed = await fetchLyric(track, audio?.duration ?? 0);
+        if (generation !== lyricGeneration) return;
+        if (parsed === null) {
+          setLyricText('歌词加载失败');
+          return;
+        }
+        if (!parsed.length) {
+          setLyricText('这首歌暂无歌词');
+          return;
+        }
+        applyLyric(parsed);
+        void prefetchUpcoming();
+      };
+
+      /**
+       * 预取后续歌曲的歌词。
+       *
+       * 为什么需要：歌词接口本身很快（实测几十毫秒），但之前是「切了歌才发请求」，
+       * 用户会先看到「歌词加载中…」再看到字。提前把当前歌之后的几首拉好，
+       * 切歌时基本直接命中缓存。
+       *
+       * 有两个坑：
+       * 1. 必须走 fetchLyric（不能走 loadLyric），否则会踩 lyricGeneration ——
+       *    预取的 generation 会把当前歌的在途请求作废掉。
+       * 2. 必须有并发上限，否则 198 首会一次性发出上百个请求把接口打限流
+       *    （实测 meting 接口有频率限制）。
+       */
+      let prefetchInFlight = 0;
+      const PREFETCH_AHEAD = 3;
+      const PREFETCH_MAX_CONCURRENT = 2;
+      const prefetchedKeys = new Set();
+
+      async function prefetchUpcoming() {
+        if (!tracks.length) return;
+        for (let step = 1; step <= PREFETCH_AHEAD; step += 1) {
+          const next = tracks[(currentIndex + step) % tracks.length];
+          const key = next?.id ? `id:${next.id}` : '';
+          if (!key || prefetchedKeys.has(key)) continue;
+          if (lyricCache.has(key)) {
+            prefetchedKeys.add(key);
+            continue;
+          }
+          prefetchedKeys.add(key);
+          if (prefetchInFlight >= PREFETCH_MAX_CONCURRENT) return;
+          prefetchInFlight += 1;
+          // 时长此刻多半还不可知，纯文本歌词的等距兜底会退化成 4 秒一句；
+          // 但纯文本歌单比例极低，且切歌时若命中缓存会用不上时间轴 —— 可接受
+          void fetchLyric(next, 0)
+            .then((parsed) => {
+              // 失败就撤销标记，留给正式加载或下一轮预取重试
+              if (parsed === null) prefetchedKeys.delete(key);
+            })
+            .finally(() => {
+              prefetchInFlight -= 1;
+            });
+        }
+      }
+
       const updateFavoriteState = () => {
         if (!favoriteButton || !tracks.length) return;
         const active = favorites.has(getTrackKey(tracks[currentIndex]));
@@ -2055,6 +2459,9 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
         if (count) count.textContent = `${currentIndex + 1}/${tracks.length}`;
         if (root.classList.contains('is-open')) window.requestAnimationFrame(scrollActiveTrack);
         updateMediaSession(track);
+        // 歌词跟着切歌一起换。放在 showTrack 而不是 selectTrack：
+        // showTrack 也被 loadPlaylist 首次调用，那样首屏就有歌词
+        void loadLyric(track);
         persist();
       };
 
@@ -2068,19 +2475,64 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
         if (duration) duration.textContent = '0:00';
       };
 
+      /**
+       * 换源重试：同一个曲目的音频地址在多个端点下都取得到（按歌曲 id 拼即可），
+       * 某一路CDN 抽风时可以换一路再试，不必直接判定这首歌不可播。
+       * 存的是「相对当前 endpoint 的 type=url&id=xxx 形式」，由 resolveAudioUrl 还原。
+       */
+      let audioRetry = 0;
+      // 最多每个备用端点各试一次，别让失败的曲目无限重试
+      const MAX_AUDIO_RETRY = Math.max(1, apiBases.length - 1);
+
+      /**
+       * 按歌曲 id 在某个端点上重建音频地址。
+       * 换源重试要换**端点**，不是换同一个端点的参数 —— 实测各镜像的
+       * CDN 会各自抽风，只有换域名才可能绕开。
+       */
+      const resolveAudioUrl = (track, base = activeApiBase) => {
+        if (!track?.id) return '';
+        const url = new URL(base, window.location.href);
+        url.searchParams.set('server', 'netease');
+        url.searchParams.set('type', 'url');
+        url.searchParams.set('id', String(track.id));
+        return url.href;
+      };
+
       const loadCurrentAudio = () => {
         if (!tracks.length) return false;
         if (loadedIndex === currentIndex && audio.src) return true;
         loadedIndex = currentIndex;
         resetTimeline();
-        audio.src = tracks[currentIndex].url;
+        const track = tracks[currentIndex];
+        // 首次用歌单里已命中的地址；重试时按 audioRetry 轮换端点重建
+        const retryBase = apiBases[audioRetry % apiBases.length];
+        const url = audioRetry > 0 ? resolveAudioUrl(track, retryBase) : track.url;
+        audio.src = url || resolveAudioUrl(track);
         audio.load();
         return true;
       };
 
       const scheduleSkip = () => {
         if (skipScheduled || !wantsPlayback || !tracks.length) return;
+
+        // 先换源重试：公共端点的 CDN 偶尔抽风，同一首歌换个端点往往就能播。
+        // 直接跳下一首会让好歌被误判成「不可播」。
+        if (tracks[currentIndex]?.id && audioRetry < MAX_AUDIO_RETRY) {
+          audioRetry += 1;
+          setStatus('正在换个线路重试…');
+          loadedIndex = -1;
+          skipScheduled = true;
+          skipTimer = window.setTimeout(() => {
+            skipTimer = 0;
+            skipScheduled = false;
+            loadCurrentAudio();
+            void playCurrent();
+          }, 260);
+          return;
+        }
+
         skipScheduled = true;
+        audioRetry = 0;
         failedTracks.add(currentIndex);
         root.classList.remove('is-playing', 'is-loading');
 
@@ -2132,6 +2584,8 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
           skipScheduled = false;
         }
         if (userInitiated) failedTracks.delete(((index % tracks.length) + tracks.length) % tracks.length);
+        // 手动切歌或换源重试成功时，重置换源计数，让新歌重新享受重试机会
+        audioRetry = 0;
         const changed = currentIndex !== ((index % tracks.length) + tracks.length) % tracks.length;
         if (changed) {
           playGeneration += 1;
@@ -2214,25 +2668,98 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
           endpoint.searchParams.set('server', 'netease');
           endpoint.searchParams.set('type', 'playlist');
           endpoint.searchParams.set('id', playlistId);
-          const response = await fetch(endpoint, {
-            signal: fetchController.signal,
-            mode: 'cors',
-            credentials: 'omit',
-            headers: { Accept: 'application/json' },
-          });
-          if (!response.ok) throw new Error(`Playlist request failed: ${response.status}`);
-          const data = await response.json();
-          if (!Array.isArray(data)) throw new Error('Invalid playlist response');
 
-          tracks = data
+          /**
+           * 公共 Meting 端点都会间歇性抽风（限流 429、上游 500、CDN 抖动），
+           * 实测同一个端点可能上一秒 200、下一秒 500。所以按顺序逐个试，
+           * 第一个拿到数据的就用它。
+           *
+           * 关键细节：Meting 返回的 item.url / item.lrc 是**绝对地址**，
+           * 但仍指向被命中的那个端点 —— 所以不能只换歌单请求的域名，
+           * 否则音频和歌词会指回已经失败的主源。命中哪个端点，
+           * 就把它记为本次会话的 activeApiBase，音频/歌词地址由它兜底重写。
+           */
+          let data = null;
+          let lastError = null;
+          for (const base of apiBases) {
+            const endpointUrl = new URL(base, window.location.href);
+            endpointUrl.searchParams.set('server', 'netease');
+            endpointUrl.searchParams.set('type', 'playlist');
+            endpointUrl.searchParams.set('id', playlistId);
+            try {
+              const response = await fetch(endpointUrl, {
+                signal: fetchController.signal,
+                mode: 'cors',
+                credentials: 'omit',
+                headers: { Accept: 'application/json' },
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const payload = await response.json();
+              if (!Array.isArray(payload) || !payload.length) throw new Error('Empty playlist');
+              data = payload;
+              activeApiBase = base;
+              break;
+            } catch (error) {
+              if (error?.name === 'AbortError') throw error;
+              lastError = error;
+            }
+          }
+          if (!data) throw lastError ?? new Error('All endpoints failed');
+          if (activeApiBase !== apiBases[0]) {
+            console.warn('[music-player] 主端点不可用，已切换到备用端点', activeApiBase, lastError);
+          }
+
+          const baseUrl = new URL(activeApiBase, window.location.href);
+          /** 把 Meting 返回的相对/绝对地址重写到实际命中的端点上 */
+          const resolveTrackUrl = (raw) => {
+            const value = String(raw ?? '').trim();
+            if (!value) return '';
+            try {
+              return new URL(value, baseUrl).href;
+            } catch {
+              return '';
+            }
+          };
+
+          /**
+       * 从 Meting 返回的地址里挖歌曲 id。
+       *
+               * 各镜像都不直接给 `id` 字段（实测 mikus 只有 title/author/pic/url/lrc，
+       * injahow 只有 name/artist/url/pic/lrc），但 type=url&id=xxx 这个形式里
+               * 一定带着歌曲 id —— 换端点重建音频/歌词全靠它。
+       */
+      const extractTrackId = (item) => {
+        const direct = String(item?.id ?? '').trim();
+        if (direct) return direct;
+        for (const raw of [item?.url, item?.src, item?.lrc]) {
+          const value = String(raw ?? '').trim();
+          if (!value) continue;
+          try {
+            const found = new URL(value, window.location.href).searchParams.get('id');
+            if (found && /^\d+$/.test(found)) return found;
+          } catch {
+            // 不是合法 URL，跳过
+          }
+        }
+        return '';
+      };
+
+      tracks = data
             .slice(0, 250)
             .map((item) => ({
               title: cleanText(item.title ?? item.name, '未知歌曲'),
               artist: cleanText(item.author ?? item.artist, '未知歌手'),
               cover: safeUrl(item.pic ?? item.cover ?? item.image),
-              url: safeUrl(item.url ?? item.src),
+              url: resolveTrackUrl(item.url ?? item.src),
+              // 歌曲 id：换端点重建音频/歌词地址全靠它（接口不直接给，要从 url 里挖）
+              id: extractTrackId(item),
+              // Meting 的 lrc 字段不是歌词正文，而是「再来一次 HTTP 请求拿歌词」的地址。
+              // 存下来作为 id 缺失时的兜底（主路径按 id 走端点回退）。
+              lyricUrl: resolveTrackUrl(item.lrc),
             }))
-            .filter((track) => track.url);
+            // 有 url 直接用；只有 id 也能玩（loadCurrentAudio 会按 id 重建地址），
+            // 两者都没有才真的没法播
+            .filter((track) => track.url || track.id);
 
           if (!tracks.length) throw new Error('Playlist is empty');
           const requestedIndex = Number(saved.index);
@@ -2241,6 +2768,9 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
             : 0;
           loadedIndex = -1;
           failedTracks = new Set();
+          // 歌单变了（换 ID 或后台改了歌单），旧的歌词缓存对应的是上一份数据，
+          // 不清会命中同名 URL 的过期内容
+          lyricCache.clear();
           renderTracks();
           showTrack(currentIndex);
           setControlsDisabled(false);
@@ -2251,6 +2781,8 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
           title.textContent = '稍后再试';
           artist.textContent = '也可以前往网易云查看歌单';
           count.textContent = '0/0';
+          // 歌单都没了，歌词留着上一首会误导
+          resetLyric('♪');
           list.innerHTML = '<li class="music-player__empty">公共音乐接口暂时不可用，请稍后重试。</li>';
           retryButton?.removeAttribute('hidden');
         } finally {
@@ -2260,6 +2792,13 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
 
       toggle.addEventListener('click', () => {
         setOpen(!root.classList.contains('is-open'));
+      });
+
+      // 浮动按钮拖拽自由摆放：位置存 localStorage，整页刷新时由 create 内部还原
+      window.__blogUiDrag?.create({
+        root,
+        handle: toggle,
+        storageKey: 'blog-ui-pos:music-player',
       });
 
       closeButton?.addEventListener('click', () => {
@@ -2277,6 +2816,18 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
           toggle.focus();
         }
       });
+
+      // 面板是自成一体的表面：打开后鼠标在面板任意处滚轮都只滚歌单列表，页面不跟着动。
+      // 原生滚动用 preventDefault 掐掉，deltaMode 归一成像素后手动应用（列表没设 smooth，赋值即时生效）。
+      panel.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault();
+          const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? list.clientHeight : 1;
+          list.scrollTop += event.deltaY * unit;
+        },
+        { passive: false },
+      );
 
       playButton.addEventListener('click', () => {
         if (audio.paused) playCurrent();
@@ -2343,6 +2894,8 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
           'aria-valuetext',
           `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`,
         );
+        // 拖动后 timeupdate 要等下一拍才来，这里先同步一次，歌词不会滞后一秒
+        syncLyric(audio.currentTime);
       });
 
       audio.addEventListener('loadstart', () => {
@@ -2354,6 +2907,8 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
 
       audio.addEventListener('playing', () => {
         wantsPlayback = true;
+        // 真播上了就清掉换源计数，否则后面偶发失败会立刻用光重试次数
+        audioRetry = 0;
         root.classList.remove('is-loading');
         root.classList.add('is-playing');
         playButton.setAttribute('aria-label', '暂停');
@@ -2396,6 +2951,9 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
             'aria-valuetext',
             `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`,
           );
+          // 歌词跟随进度。timeupdate 约 250ms 一跳，歌词时间戳精度到 0.1s，够用；
+          // 不另开 rAF 轮询是为了不给空闲标签页白烧 CPU。
+          syncLyric(audio.currentTime);
         }
       });
 

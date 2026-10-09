@@ -2,6 +2,7 @@
 import Footer from '../components/Footer.astro';
 import MusicPlayer from '../components/MusicPlayer.astro';
 import Nav from '../components/Nav.astro';
+import SearchPalette from '../components/SearchPalette.astro';
 import { ClientRouter } from 'astro:transitions';
 import { defaultSchema } from 'rehype-sanitize';
 import { getMdSanitizeLists } from 'cloud-blog/shared/md-sanitize-schema.mjs';
@@ -178,7 +179,7 @@ const routeMotion = {
       (() => {
         const storageKey = 'blog-theme';
         const lightColor = '#fbf7ed';
-        const darkColor = '#4a4034';
+        const darkColor = '#1e2229';
         const getTheme = () => {
           try {
             const stored = localStorage.getItem(storageKey);
@@ -201,6 +202,128 @@ const routeMotion = {
         // ClientRouter swaps the <html> attributes. Restore the chosen theme
         // synchronously inside the swap callback, before the new frame paints.
         document.addEventListener('astro:after-swap', restoreTheme);
+      })();
+    </script>
+    <script is:inline>
+      // 浮动按钮拖拽（回到顶部 / 音乐播放器）：按住拖动可摆到视口内任意位置，
+      // 位置各自记进 localStorage（刷新、切页、下次打开都还原），窗口变小自动收回可视区。
+      // 移动超过 5px 才算拖拽，其后的松手不触发按钮原有点击行为；未超阈值仍是普通点击。
+      (() => {
+        const THRESHOLD = 5;
+        const INSET = 6;
+        let suppressClick = false;
+
+        // 拖拽收尾的那一次 click 在捕获阶段吞掉，别触发原有行为
+        document.addEventListener(
+          'click',
+          (event) => {
+            if (!suppressClick) return;
+            suppressClick = false;
+            event.stopPropagation();
+            event.preventDefault();
+          },
+          true,
+        );
+
+        const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+        const create = ({ root, handle, storageKey, signal }) => {
+          if (!root || !handle || handle.dataset.dragReady === 'true') return;
+          handle.dataset.dragReady = 'true';
+          // 触摸从手柄起手时不滚页面；鼠标不受影响
+          handle.style.touchAction = 'none';
+          handle.addEventListener('dragstart', (event) => event.preventDefault(), { signal });
+
+          let pointerId = null;
+          let dragging = false;
+          let startX = 0;
+          let startY = 0;
+          let originLeft = 0;
+          let originTop = 0;
+
+          const apply = (left, top) => {
+            if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+            const maxLeft = Math.max(INSET, window.innerWidth - root.offsetWidth - INSET);
+            const maxTop = Math.max(INSET, window.innerHeight - root.offsetHeight - INSET);
+            root.style.left = `${clamp(left, INSET, maxLeft)}px`;
+            root.style.top = `${clamp(top, INSET, maxTop)}px`;
+            root.style.right = 'auto';
+            root.style.bottom = 'auto';
+          };
+
+          try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+              apply(saved.left, saved.top);
+            }
+          } catch {}
+
+          window.addEventListener(
+            'resize',
+            () => {
+              if (!root.style.left) return;
+              apply(parseFloat(root.style.left), parseFloat(root.style.top));
+            },
+            { signal },
+          );
+
+          handle.addEventListener(
+            'pointerdown',
+            (event) => {
+              if (event.button !== 0) return;
+              const rect = root.getBoundingClientRect();
+              suppressClick = false;
+              dragging = false;
+              startX = event.clientX;
+              startY = event.clientY;
+              originLeft = rect.left;
+              originTop = rect.top;
+              pointerId = event.pointerId;
+              try {
+                handle.setPointerCapture(event.pointerId);
+              } catch {}
+            },
+            { signal },
+          );
+
+          handle.addEventListener(
+            'pointermove',
+            (event) => {
+              if (pointerId !== event.pointerId) return;
+              if (!dragging) {
+                if (Math.hypot(event.clientX - startX, event.clientY - startY) < THRESHOLD) return;
+                dragging = true;
+                document.body.classList.add('is-dragging-floating');
+              }
+              apply(originLeft + event.clientX - startX, originTop + event.clientY - startY);
+            },
+            { signal },
+          );
+
+          const finish = (event) => {
+            if (pointerId !== event.pointerId) return;
+            if (dragging) {
+              suppressClick = true;
+              document.body.classList.remove('is-dragging-floating');
+              try {
+                localStorage.setItem(
+                  storageKey,
+                  JSON.stringify({
+                    left: parseFloat(root.style.left),
+                    top: parseFloat(root.style.top),
+                  }),
+                );
+              } catch {}
+            }
+            pointerId = null;
+            dragging = false;
+          };
+
+          handle.addEventListener('pointerup', finish, { signal });
+          handle.addEventListener('pointercancel', finish, { signal });
+        };
+
+        window.__blogUiDrag = { create };
       })();
     </script>
   </head>
@@ -232,6 +355,7 @@ const routeMotion = {
         <path d="M12 19V5M6 11l6-6 6 6" />
       </svg>
     </button>
+    <SearchPalette />
     <script is:inline data-astro-rerun>
       (() => {
         window.__blogRevealController?.abort();
@@ -606,6 +730,16 @@ const routeMotion = {
         toTop?.addEventListener('click', () => {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }, { signal });
+
+        // 拖动自由摆放；位置记忆与拖拽后的点击抑制在 __blogUiDrag 内
+        if (toTop) {
+          window.__blogUiDrag?.create({
+            root: toTop,
+            handle: toTop,
+            storageKey: 'blog-ui-pos:to-top',
+            signal,
+          });
+        }
       })();
 
       (() => {
@@ -1051,11 +1185,12 @@ const routeMotion = {
           }
 
           event.preventDefault();
-          const input = document.querySelector('#search-input');
+          // 本脚本是 is:inline，不经过转译：这里不能写 TypeScript 泛型标注
+          const trigger = document.querySelector('[data-search-open]');
 
-          if (input) {
-            input.focus();
-            input.select?.();
+          if (trigger) {
+            // 交给浮层自己的委托监听：开面板、记触发元素、关闭后把焦点还回来
+            trigger.click();
           } else {
             window.location.href = '/search/';
           }

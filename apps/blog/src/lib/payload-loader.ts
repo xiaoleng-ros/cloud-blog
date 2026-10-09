@@ -3,7 +3,9 @@
  *
  * 数据流通：构建/开发时优先从后台 API 拉取文章与随笔；
  * 后台不可用（API 失败）时自动回退到本地 src/content 下的 .md 文件，
- * 保证前台在后台未启动时仍可开发。构建不允许产出空站：文章详情页一条都没有时
+ * 保证前台在后台未启动时仍可开发。dev 下若连本地兜底文件也没有，则改用 dev-fixtures/
+ * 里的假数据（仅 dev，build 与 astro check 一律不读），让 UI 阶段能看到满数据形态。
+ * 构建不允许产出空站：文章详情页一条都没有时
  * 由 astro.config 的 empty-site-guard 集成让构建非零退出（「0 篇文章」的产物
  * 会照常打印 Complete!，发现不了，还可能被 build:all 带上线）。
  *
@@ -228,6 +230,42 @@ function localEntries(files: Array<{ id: string; file: string }>): MdEntry[] {
 }
 
 /**
+ * dev 假数据目录（`dev-fixtures/`）：后台没起时也让前台呈现「满数据形态」，
+ * 否则列表、详情、归档这些区块在 UI 阶段根本没有内容可调。
+ *
+ * 只在 dev 生效，判据复用 ctx.watcher —— build / astro check 下它是 undefined。
+ * 这条边界不能省：假文章一旦被构建产物带上线，empty-site-guard 数得清清楚楚、照样放行。
+ */
+const FIXTURE_BASE = path.join(process.cwd(), 'dev-fixtures');
+
+/** 真实本地兜底（src/content/*）为空时，dev 才改用同名假数据目录 */
+function markdownBaseFor(ctx: LoaderContext, realBase: string): string {
+  if (!ctx.watcher) return realBase;
+  if (collectLocalMarkdown(realBase).length > 0) return realBase;
+  return path.join(FIXTURE_BASE, path.basename(realBase));
+}
+
+function sourceLabelOf(base: string): string {
+  return base.startsWith(FIXTURE_BASE) ? 'dev 假数据' : '本地 markdown';
+}
+
+/** dev 假数据项目：结构与 /api/projects 归一化后的 ProjectEntry 一致，直接喂 parseData */
+async function storeFixtureProjects(ctx: LoaderContext): Promise<void> {
+  const file = path.join(FIXTURE_BASE, 'projects.json');
+  if (!existsSync(file)) return;
+  const list = JSON.parse(readFileSync(file, 'utf-8')) as Array<Record<string, unknown>>;
+  for (const [index, item] of list.entries()) {
+    const id = String(item.id ?? `fx-${index}`);
+    try {
+      ctx.store.set({ id, data: await ctx.parseData({ id, data: item }) });
+    } catch (error) {
+      ctx.logger.warn(`[payload-loader] dev 假数据项目校验失败，跳过 ${id}: ${(error as Error).message}`);
+    }
+  }
+  ctx.logger.info(`[payload-loader] 项目：dev 假数据载入 ${list.length} 条`);
+}
+
+/**
  * 将条目写入数据仓库并渲染 markdown
  * @param ctx     loader 上下文
  * @param store   数据仓库（posts 与 notes 各用各的）
@@ -352,12 +390,13 @@ export const payloadPostsLoader: Loader = {
       ctx.meta.set(DIGEST_KEYS.posts, ctx.generateDigest(JSON.stringify(entries)));
       commitStamps(ctx, stamps, ['posts', 'media', 'settings', 'nav']);
     } else {
-      // 后台不可用 → 回退本地 markdown
-      const files = collectLocalMarkdown(localBase);
+      // 后台不可用 → 回退本地 markdown（dev 下没有真实兜底文件时改用 dev 假数据）
+      const base = markdownBaseFor(ctx, localBase);
+      const files = collectLocalMarkdown(base);
       files.forEach(({ id, file }) => urlsOf.set(id, file));
       const fallbackEntries = localEntries(files);
       ctx.logger.warn(
-        `[payload-loader] 后台不可用（${fetchError?.message}），回退本地 markdown：${fallbackEntries.length} 篇`,
+        `[payload-loader] 后台不可用（${fetchError?.message}），回退${sourceLabelOf(base)}：${fallbackEntries.length} 篇`,
       );
       if (fallbackEntries.length === 0) {
         ctx.logger.error(
@@ -407,12 +446,13 @@ export const payloadNotesLoader: Loader = {
       ctx.meta.set(DIGEST_KEYS.notes, ctx.generateDigest(JSON.stringify(entries)));
       commitStamps(ctx, stamps, ['notes', 'media']);
     } else {
-      // 后台不可用 → 回退本地 markdown
-      const files = collectLocalMarkdown(localBase);
+      // 后台不可用 → 回退本地 markdown（dev 下没有真实兜底文件时改用 dev 假数据）
+      const base = markdownBaseFor(ctx, localBase);
+      const files = collectLocalMarkdown(base);
       files.forEach(({ id, file }) => urlsOf.set(id, file));
       const fallbackEntries = localEntries(files);
       ctx.logger.warn(
-        `[payload-loader] 后台不可用（${fetchError?.message}），回退本地 markdown：${fallbackEntries.length} 条`,
+        `[payload-loader] 后台不可用（${fetchError?.message}），回退${sourceLabelOf(base)}：${fallbackEntries.length} 条`,
       );
       if (fallbackEntries.length === 0) {
         ctx.logger.error(
@@ -428,7 +468,7 @@ export const payloadNotesLoader: Loader = {
   },
 };
 
-/** 项目加载器：API 优先（项目已全部入库，无本地 markdown 兜底） */
+/** 项目加载器：API 优先；项目已全部入库，无本地 markdown 兜底，只有 dev 假数据 */
 export const payloadProjectsLoader: Loader = {
   name: 'payload-projects-loader',
   async load(ctx) {
@@ -449,6 +489,7 @@ export const payloadProjectsLoader: Loader = {
       commitStamps(ctx, stamps, ['projects']);
     } catch (error) {
       ctx.logger.warn(`[payload-loader] 项目后台不可用（${(error as Error).message}），跳过`);
+      if (ctx.watcher) await storeFixtureProjects(ctx);
     }
 
     schedulePolling(ctx, '项目', pollProjects);

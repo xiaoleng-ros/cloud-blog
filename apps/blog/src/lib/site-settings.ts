@@ -39,6 +39,8 @@ export interface SiteSettingsData {
   footerSubtitle?: string;
   footerChannels?: string;
   footerGroups?: string;
+  /** 页脚：ICP 备案号 */
+  siteIcp?: string;
   /** 关于页：标题/正文/便签/技能（textarea 字符串） */
   aboutLead?: string;
   aboutParagraphs?: string;

@@ -1,0 +1,177 @@
+---
+import Icon from './Icon.astro';
+import { siteAge } from 'cloud-blog/shared/site-age';
+import { PLACEHOLDER_SITE_SINCE } from 'cloud-blog/shared/site-defaults';
+
+// 起始日期目前是占位值（收在 site-defaults.ts）。接后台时换成 settings.siteCreatedAt，
+// 并按「填了才显示」规则：后台留空就整块不渲染。
+const since = PLACEHOLDER_SITE_SINCE;
+const age = siteAge(since);
+---
+
+{
+  age && (
+    <section class="site-age" data-site-age data-since={since}>
+      <div class="site-age__card">
+        <header class="site-age__head">
+          <Icon name="clock" size={15} />
+          <h2>站点运行时间</h2>
+        </header>
+
+        <div class="site-age__figure">
+          <Icon name="clock" size={30} class="site-age__glyph" />
+          <p class="site-age__count">
+            <span class="site-age__num" data-age="totalDays">{age.totalDays}</span>
+            <span class="site-age__unit">天</span>
+          </p>
+        </div>
+
+        <ul class="site-age__chips" aria-label="运行时长拆分">
+          <li class="site-age__chip site-age__chip--yellow">
+            <b data-age="years">{age.years}</b>年
+          </li>
+          <li class="site-age__chip site-age__chip--cyan">
+            <b data-age="months">{age.months}</b>月
+          </li>
+          <li class="site-age__chip site-age__chip--green">
+            <b data-age="days">{age.days}</b>天
+          </li>
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+<script>
+  import { siteAge } from 'cloud-blog/shared/site-age';
+
+  // 前台是静态构建：天数若在构建期算死，页面缓存多久就停在多久。
+  // SSR 那份只当无 JS 兜底，进页面立刻用同一套算法按当前时刻重算。
+  const root = document.querySelector<HTMLElement>('[data-site-age]');
+  const age = root ? siteAge(root.dataset.since) : null;
+  if (root && age) {
+    for (const [key, value] of Object.entries(age)) {
+      const node = root.querySelector(`[data-age="${key}"]`);
+      if (node) node.textContent = String(value);
+    }
+  }
+</script>
+
+<style>
+  .site-age__card {
+    position: relative;
+    /* 右栏只有 16.5rem，单列塌回时也不该拉成通栏，17rem 一档两种布局都刚好 */
+    width: min(100%, 17rem);
+    margin: 0 auto;
+    padding: 1.05rem 1.25rem 1.3rem;
+    text-align: center;
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    border-radius: 15px 245px 15px 235px / 235px 15px 255px 15px;
+    box-shadow: var(--shadow);
+    transform: rotate(0.5deg);
+  }
+
+  .site-age__head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 2px dashed var(--edge);
+    color: var(--text);
+  }
+
+  .site-age__head h2 {
+    margin: 0;
+    font-family: var(--font-hand);
+    font-size: 1.08rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+  }
+
+  .site-age__figure {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin: 0.95rem 0 0.85rem;
+  }
+
+  .site-age__glyph {
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+
+  .site-age__count {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+  }
+
+  .site-age__num {
+    font-family: var(--font-hand);
+    font-size: clamp(1.9rem, 5vw, 2.3rem);
+    line-height: 1.1;
+    color: var(--accent-strong);
+    /* 荧光笔底纹：只压住字的下半截，像拿记号笔随手划过 */
+    background: linear-gradient(transparent 62%, var(--sticky-green) 62%, var(--sticky-green) 92%, transparent 92%);
+    padding: 0 0.2em;
+  }
+
+  /* 夜下数字是浅色压在深色卡片上，实心绿条纹盖掉字的下半截反而看不清，
+     换成半透明：既能看见记号笔痕迹，又不挡住笔画 */
+  html[data-theme="dark"] .site-age__num {
+    background: linear-gradient(
+      transparent 62%,
+      color-mix(in srgb, var(--sticky-green) 55%, transparent) 62%,
+      color-mix(in srgb, var(--sticky-green) 55%, transparent) 92%,
+      transparent 92%
+    );
+  }
+
+  .site-age__unit {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  .site-age__chips {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-age__chip {
+    padding: 0.26rem 0.7rem;
+    border-radius: 12px 4px 14px 5px / 5px 14px 4px 12px;
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: 0.84rem;
+  }
+
+  .site-age__chip b {
+    font-family: var(--font-hand);
+    font-size: 1.02rem;
+    font-weight: 400;
+    margin-right: 0.12em;
+  }
+
+  /* 底色由下方 chip 变体覆盖成便利贴色，文字随之走 on-sticky 才不糊 */
+  .site-age__chip--yellow { background: var(--sticky-yellow); color: var(--on-sticky); transform: rotate(-1.4deg); }
+  .site-age__chip--cyan { background: var(--sticky-cyan); color: var(--on-sticky); transform: rotate(1deg); }
+  .site-age__chip--green { background: var(--sticky-green); color: var(--on-sticky); transform: rotate(-0.6deg); }
+
+  @media (max-width: 480px) {
+    .site-age__figure {
+      gap: 0.6rem;
+    }
+    .site-age__glyph {
+      display: none;
+    }
+  }
+</style>

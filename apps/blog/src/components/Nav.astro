@@ -1,7 +1,7 @@
 ---
 import Icon from './Icon.astro';
 import { SITE_DEFAULTS } from '../lib/site-defaults';
-import { getNavItems, getSiteSettings } from '../lib/site-settings';
+import { getNavItems, getSiteSettings, getSocials } from '../lib/site-settings';
 
 // 尾斜杠统一处理，避免跨文档视图切换时被主机 301 跳转
 const pathname = Astro.url.pathname.endsWith('/')
@@ -15,6 +15,22 @@ const isCurrent = (href: string) =>
 const settings = await getSiteSettings();
 const brandName = settings?.siteName ?? SITE_DEFAULTS.siteName;
 const navItems = await getNavItems();
+
+/**
+ * 「更多」面板条目。
+ *
+ * href 留空表示页面还没建，渲染成不可点的占位；
+ * 有 href 的会渲染成链接并在新标签打开（GitHub 走社交链接里同一份地址，
+ * 不在这里再抄一遍 —— 以后换 GitHub 用户名只需改后台/社交链接一处）。
+ */
+const githubHref = (await getSocials()).find((s) => s.icon === 'github')?.href ?? '';
+
+// 站内页面：交给 ClientRouter 走单页切换（data-more-link 让点击处理器放行默认行为）
+const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?: boolean }> = [
+  { label: '统计', emoji: '📊', href: '/stats/' },
+  { label: '标签墙', emoji: '🏷️', href: '/tags/' },
+  { label: 'GitHub', emoji: '🔥', href: githubHref, external: true },
+];
 ---
 
 <header
@@ -42,15 +58,60 @@ const navItems = await getNavItems();
           </a>
         ))}
       </span>
-      <a
-        href="/search/"
-        class:list={['site-nav__tag site-nav__tag--icon', isCurrent('/search/') && 'is-current']}
+      <!-- 「更多」：展开手账九宫格面板。nav 本身是 fixed 且 pointer-events:none，
+           面板要能盖住正文，所以显式把 auto 补回来。 -->
+      <div class="site-nav__more" data-more-root>
+        <button
+          type="button"
+          class="site-nav__tag site-nav__more-toggle"
+          data-more-toggle
+          aria-expanded="false"
+          aria-controls="site-more-panel"
+        >
+          <!-- 文字包一层 span：按钮是 flex 容器，裸文本节点会被拆成匿名 flex item，
+               再叠上 gap 就把「更 多」撑出缝。包起来后 gap 只作用在文字块与箭头之间。 -->
+          <span class="site-nav__more-text">更多</span>
+          <Icon name="chevron-down" size={13} class="site-nav__more-caret" />
+        </button>
+        <div class="site-more" id="site-more-panel" data-more-panel hidden>
+          <ul class="site-more__grid">
+            {MORE_ITEMS.map((item) =>
+              item.href ? (
+                <li>
+                  <a
+                    class="site-more__item"
+                    href={item.href}
+                    data-more-link
+                    target={item.external ? '_blank' : undefined}
+                    rel={item.external ? 'noopener noreferrer' : undefined}
+                  >
+                    <span class="site-more__emoji" aria-hidden="true">{item.emoji}</span>
+                    <span class="site-more__label">{item.label}</span>
+                  </a>
+                </li>
+              ) : (
+                <li>
+                  <!-- 页面未建：渲染成不可点的占位条目，等有 href 后自动变链接 -->
+                  <span class="site-more__item is-disabled" aria-disabled="true">
+                    <span class="site-more__emoji" aria-hidden="true">{item.emoji}</span>
+                    <span class="site-more__label">{item.label}</span>
+                  </span>
+                </li>
+              ),
+            )}
+          </ul>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="site-nav__tag site-nav__tag--icon"
+        data-search-open
         aria-label="搜索"
         aria-keyshortcuts="/ Meta+K"
         title="搜索（/ 或 ⌘K）"
       >
         <Icon name="search" size={16} />
-      </a>
+      </button>
       <button
         type="button"
         class="site-nav__tag site-nav__tag--icon theme-toggle"
@@ -68,11 +129,13 @@ const navItems = await getNavItems();
   type NavMotionState = {
     pendingPath: string;
     initialized: boolean;
+    moreBound: boolean;
   };
 
   const navMotion = (window as Window & { __blogNavMotion?: NavMotionState }).__blogNavMotion ??= {
     pendingPath: '',
     initialized: false,
+    moreBound: false,
   };
 
   const normalizePath = (value: string) => {
@@ -123,5 +186,53 @@ const navItems = await getNavItems();
       syncCurrentNavItem();
     });
     navMotion.initialized = true;
+  }
+
+  // ---------- 「更多」面板 ----------
+  // 导航头是 transition:persist，ClientRouter 换页不会重建这段 DOM，
+  // 但 astro:after-swap 之后要把开合状态复位，否则面板会跨页残留。
+  const setMoreOpen = (open: boolean) => {
+    const root = document.querySelector<HTMLElement>('[data-more-root]');
+    const toggle = root?.querySelector<HTMLButtonElement>('[data-more-toggle]');
+    const panel = root?.querySelector<HTMLElement>('[data-more-panel]');
+    if (!root || !toggle || !panel) return;
+    root.classList.toggle('is-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+  };
+
+  const isMoreOpen = () =>
+    document.querySelector('[data-more-root]')?.classList.contains('is-open') ?? false;
+
+  if (!navMotion.moreBound) {
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('[data-more-toggle]')) {
+        setMoreOpen(!isMoreOpen());
+        return;
+      }
+      // 点面板外 → 收起
+      if (isMoreOpen() && !target.closest('[data-more-panel]')) {
+        setMoreOpen(false);
+        return;
+      }
+      // 点面板内的任何条目都收起：
+      //  - 链接（GitHub 外链在新标签打开，本页不会跳走，面板留着会挡住新页面的对应位置）
+      //  - 占位条目（页面还没建，点了没有任何反应，不收起用户会以为没点上）
+      if (isMoreOpen() && target.closest('.site-more__item')) {
+        setMoreOpen(false);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && isMoreOpen()) {
+        setMoreOpen(false);
+        document.querySelector<HTMLButtonElement>('[data-more-toggle]')?.focus();
+      }
+    });
+
+    document.addEventListener('astro:after-swap', () => setMoreOpen(false));
+    navMotion.moreBound = true;
   }
 </script>

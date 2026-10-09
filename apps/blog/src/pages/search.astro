@@ -4,14 +4,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
   title="搜索"
-  description="搜索站内的文章、分类和标签。"
+  description="搜索站内的文章、随笔、项目、分类和标签。"
   pageClass="content-page"
 >
   <section class="search-page">
     <header class="page-header">
       <p class="eyebrow">Search</p>
-      <h1>搜索文章</h1>
-      <p>输入关键词，快速找到标题、摘要、分类或标签匹配的内容。</p>
+      <h1>搜索站内内容</h1>
+      <p>
+        输入关键词，快速找到标题、摘要、分类或标签匹配的内容。日常搜索请用导航上的搜索按钮（/ 或
+        ⌘K）唤起的浮层，本页是浮层不可用时的兜底。
+      </p>
     </header>
 
     <form class="search-box" role="search">
@@ -32,123 +35,133 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="search-results post-list" data-search-results></div>
   </section>
 
-  <script is:inline data-astro-rerun>
-    // 必须包 IIFE：本脚本带 data-astro-rerun，ClientRouter 每次回到 /search/ 都会重放。
-    // 顶层 const 位于全局词法作用域，重放会抛
-    // 「SyntaxError: Identifier 'form' has already been declared」，搜索直接失效。
-    (() => {
-      const form = document.querySelector('.search-box');
-      const input = document.querySelector('#search-input');
-      const status = document.querySelector('[data-search-status]');
-      const results = document.querySelector('[data-search-results]');
-      const params = new URLSearchParams(window.location.search);
-      const initialQuery = params.get('q') ?? '';
-      let posts = [];
+  <script>
+    import {
+      KIND_LABEL,
+      SITE_INDEX_URL,
+      escapeHtml,
+      groupHits,
+      highlight,
+      searchEntries,
+      splitTerms,
+      type IndexEntry,
+      type SearchHit,
+    } from '../lib/search-match';
 
-      const escapeHtml = (value) =>
-        String(value)
-          .replaceAll('&', '&amp;')
-          .replaceAll('<', '&lt;')
-          .replaceAll('>', '&gt;')
-          .replaceAll('"', '&quot;')
-          .replaceAll("'", '&#039;');
+    type SearchPageState = { bound: boolean; entries: IndexEntry[] | null };
 
-      const normalize = (value) => value.trim().toLowerCase();
+    // 换页后模块脚本不重放，但状态留在 window 上：索引只拉一次
+    const state: SearchPageState = (
+      window as Window & { __blogSearchPage?: SearchPageState }
+    ).__blogSearchPage ??= { bound: false, entries: null };
 
-      const renderIdle = () => {
-        status.textContent = `已索引 ${posts.length} 篇文章。`;
+    const inputOf = () => document.querySelector<HTMLInputElement>('#search-input');
+    const statusOf = () => document.querySelector<HTMLElement>('[data-search-status]');
+    const resultsOf = () => document.querySelector<HTMLElement>('[data-search-results]');
+
+    function rowMarkup(hit: SearchHit, terms: string[]): string {
+      const { entry } = hit;
+      const tags = entry.tags
+        .slice(0, 4)
+        .map((tag) => `<span>${escapeHtml(tag)}</span>`)
+        .join('');
+
+      return `<article class="post-row post-row--plain is-revealed"><a href="${escapeHtml(entry.url)}"><div class="post-row__main"><div class="post-meta"><span>${escapeHtml(KIND_LABEL[entry.kind])}</span>${entry.meta ? `<span>${escapeHtml(entry.meta)}</span>` : ''}</div><h3>${highlight(entry.title, terms)}</h3>${entry.subtitle ? `<p>${highlight(entry.subtitle, terms)}</p>` : ''}${tags ? `<div class="tag-list" aria-label="标签">${tags}</div>` : ''}</div></a></article>`;
+    }
+
+    function render(query: string): void {
+      const status = statusOf();
+      const results = resultsOf();
+      if (!status || !results) return;
+
+      if (state.entries === null) {
+        status.textContent = '正在加载索引...';
         results.innerHTML = '';
-      };
+        return;
+      }
 
-      const renderResults = (query) => {
-        const normalizedQuery = normalize(query);
+      const terms = splitTerms(query);
 
-        if (!normalizedQuery) {
-          renderIdle();
-          return;
+      if (terms.length === 0) {
+        status.textContent = `已索引 ${state.entries.length} 条站内内容。`;
+        results.innerHTML = '';
+        return;
+      }
+
+      const groups = groupHits(searchEntries(state.entries, query));
+      const total = groups.reduce((sum, group) => sum + group.hits.length, 0);
+
+      status.textContent = total ? `找到 ${total} 条相关内容。` : '没有找到相关内容。';
+      results.innerHTML = groups
+        .map(
+          (group) =>
+            `<p class="search-group">${escapeHtml(KIND_LABEL[group.kind])}</p>` +
+            group.hits.map((hit) => rowMarkup(hit, terms)).join(''),
+        )
+        .join('');
+    }
+
+    function syncUrl(query: string): void {
+      const nextUrl = new URL(window.location.href);
+
+      if (query) {
+        nextUrl.searchParams.set('q', query);
+      } else {
+        nextUrl.searchParams.delete('q');
+      }
+
+      window.history.replaceState({}, '', nextUrl);
+    }
+
+    function runSearch(): void {
+      const input = inputOf();
+      if (!input) return;
+      const query = input.value.trim();
+      syncUrl(query);
+      render(query);
+    }
+
+    // 换页回到本页时输入框是空的，按 URL 上的 ?q= 复原
+    function restoreFromUrl(): void {
+      const input = inputOf();
+      if (!input) return;
+      const query = new URLSearchParams(window.location.search).get('q') ?? '';
+      input.value = query;
+      render(query);
+    }
+
+    if (!state.bound) {
+      state.bound = true;
+
+      document.addEventListener('submit', (event) => {
+        if (event.target instanceof HTMLFormElement && event.target.matches('.search-box')) {
+          event.preventDefault();
+          runSearch();
         }
-
-        const terms = normalizedQuery.split(/\s+/).filter(Boolean);
-        const matches = posts
-          .map((post) => ({
-            post,
-            score: terms.reduce((score, term) => {
-              if (post.title.toLowerCase().includes(term)) return score + 4;
-              if (post.category.toLowerCase().includes(term)) return score + 3;
-              if (post.tags.join(' ').toLowerCase().includes(term)) return score + 2;
-              if (post.text.includes(term)) return score + 1;
-              return score;
-            }, 0),
-          }))
-          .filter((item) => item.score > 0)
-          .sort((a, b) => b.score - a.score || a.post.title.localeCompare(b.post.title, 'zh-CN'));
-
-        status.textContent = matches.length
-          ? `找到 ${matches.length} 篇相关文章。`
-          : '没有找到匹配文章。';
-
-        results.innerHTML = matches
-          .map(({ post }) => {
-            const tags = post.tags
-              .slice(0, 4)
-              .map((tag) => `<span>${escapeHtml(tag)}</span>`)
-              .join('');
-
-            return `
-              <article class="post-row post-row--plain is-revealed">
-                <a href="${escapeHtml(post.url)}">
-                  <div class="post-row__main">
-                    <div class="post-meta">
-                      ${post.category ? `<span>${escapeHtml(post.category)}</span>` : ''}
-                      ${post.date ? `<span>${escapeHtml(post.date)}</span>` : ''}
-                    </div>
-                    <h3>${escapeHtml(post.title)}</h3>
-                    ${post.description ? `<p>${escapeHtml(post.description)}</p>` : ''}
-                    ${tags ? `<div class="tag-list" aria-label="标签">${tags}</div>` : ''}
-                  </div>
-                </a>
-              </article>
-            `;
-          })
-          .join('');
-      };
-
-      const syncUrl = (query) => {
-        const nextUrl = new URL(window.location.href);
-
-        if (query) {
-          nextUrl.searchParams.set('q', query);
-        } else {
-          nextUrl.searchParams.delete('q');
-        }
-
-        window.history.replaceState({}, '', nextUrl);
-      };
-
-      const runSearch = () => {
-        const query = input.value.trim();
-        syncUrl(query);
-        renderResults(query);
-      };
-
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        runSearch();
       });
 
-      input.addEventListener('input', runSearch);
+      document.addEventListener('input', (event) => {
+        const field = event.target;
+        if (field instanceof HTMLInputElement && field.id === 'search-input') {
+          runSearch();
+        }
+      });
 
-      input.value = initialQuery;
+      document.addEventListener('astro:after-swap', restoreFromUrl);
+    }
 
-      fetch('/search.json')
-        .then((response) => response.json())
-        .then((items) => {
-          posts = items;
-          renderResults(input.value);
-        })
-        .catch(() => {
-          status.textContent = '搜索索引加载失败。';
-        });
-    })();
+    fetch(SITE_INDEX_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<IndexEntry[]>;
+      })
+      .then((items) => {
+        state.entries = items;
+        restoreFromUrl();
+      })
+      .catch(() => {
+        const status = statusOf();
+        if (status) status.textContent = '搜索索引加载失败。';
+      });
   </script>
 </BaseLayout>

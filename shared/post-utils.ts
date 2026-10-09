@@ -197,6 +197,86 @@ export const groupPostsByYear = <T extends PostEntry>(
 };
 
 // ---------------------------------------------------------------------------
+// 归档分页
+//
+// 前台（Astro 静态构建）与后台（CMS 运行时同步）必须切出**完全相同**的那一页：
+// 两边各自写一份页大小/偏移，任何一侧漏改都会让同步回来的列表和构建产物对不上。
+// 故口径统一放在 shared，两端引用同一份实现。
+// ---------------------------------------------------------------------------
+
+/** 归档页每页文章数。前台分页与后台同步共用，改这里即可。 */
+export const ARCHIVE_PAGE_SIZE = 5;
+
+/** 归档分页路径：第 1 页是 /archive/，之后 /archive/2/、/archive/3/… */
+export const getArchivePagePath = (page: number): string =>
+  page <= 1 ? '/archive/' : `/archive/${page}/`;
+
+/**
+ * 从路径解析归档页码：`/archive/` → 1，`/archive/3/` → 3，非归档路径 → 1。
+ * 后台按 pathname 决定渲染哪一页时用它，保证与前台构建的页码口径一致。
+ */
+export const parseArchivePage = (pathname: string): number => {
+  const matched = /^\/archive\/(\d+)\/?$/.exec(pathname);
+  const page = matched ? Number(matched[1]) : 1;
+  return Number.isInteger(page) && page >= 1 ? page : 1;
+};
+
+/** 总页数（至少 1 页，空站也渲染出第一页） */
+export const getArchiveTotalPages = (
+  total: number,
+  pageSize: number = ARCHIVE_PAGE_SIZE,
+): number => Math.max(1, Math.ceil(Math.max(0, total) / pageSize));
+
+/** 取第 page 页的文章切片（已按传入顺序取，超出范围返回空数组） */
+export const getArchivePagePosts = <T extends PostEntry>(
+  posts: T[],
+  page: number,
+  pageSize: number = ARCHIVE_PAGE_SIZE,
+): T[] => {
+  const safePage = Number.isInteger(page) && page >= 1 ? page : 1;
+  const start = (safePage - 1) * pageSize;
+  return posts.slice(start, start + pageSize);
+};
+
+/**
+ * 某一页的年份分组。
+ * 注意 yearCount 给的是该年**全站**总数而非本页数量：跨页时列表里会看到同一年出现两次，
+ * 若按本页条数显示「N 篇」会与实际不符，也和后台渲染出来的数字对不上。
+ */
+export const getArchivePageYears = <T extends PostEntry>(
+  allPosts: T[],
+  page: number,
+  pageSize: number = ARCHIVE_PAGE_SIZE,
+): Array<{ year: string; posts: T[]; yearCount: number }> => {
+  const totals = new Map(groupPostsByYear(allPosts).map((g) => [g.year, g.posts.length]));
+  return groupPostsByYear(getArchivePagePosts(allPosts, page, pageSize)).map(
+    (group) => ({
+      ...group,
+      yearCount: totals.get(group.year) ?? group.posts.length,
+    }),
+  );
+};
+
+/** 紧凑页码序列：1 … 4 5 [6] 7 8 … 20，always 至少含首末与当前页 ±1 */
+export const getArchivePageNumbers = (
+  current: number,
+  total: number,
+): number[] => {
+  if (total <= 1) return [1];
+  const pages = new Set<number>([1, total, current, current - 1, current + 1]);
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  // 0 用来占位省略号，渲染时按需跳过
+  const out: number[] = [];
+  let prev = 0;
+  for (const page of sorted) {
+    if (prev && page - prev > 1) out.push(0);
+    out.push(page);
+    prev = page;
+  }
+  return out;
+};
+
+// ---------------------------------------------------------------------------
 // 分类 / 标签工具
 // ---------------------------------------------------------------------------
 

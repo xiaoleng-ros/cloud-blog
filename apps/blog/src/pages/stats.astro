@@ -1,0 +1,593 @@
+---
+import { getCollection } from 'astro:content';
+import Icon from '../components/Icon.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { formatDate, getCategoryPath, getTagPath, sortPosts } from '../lib/posts';
+import { getSiteSettings } from '../lib/site-settings';
+import { buildSiteStats } from 'cloud-blog/shared/site-stats';
+import { siteAge } from 'cloud-blog/shared/site-age';
+import { PLACEHOLDER_SITE_SINCE } from 'cloud-blog/shared/site-defaults';
+
+const posts = sortPosts(await getCollection('posts'));
+const notes = await getCollection('notes');
+const stats = buildSiteStats(posts);
+const age = siteAge(PLACEHOLDER_SITE_SINCE);
+
+const settings = await getSiteSettings();
+const authorName = settings?.siteAuthor ?? '我';
+
+// 最近一次更新：取文章与随笔里较新的那个日期。
+// （原想放「站点已运行 N 天」，但起始日就设在昨天，显示「1 天」没有信息量。）
+const latestUpdate = [
+  ...posts.map((p) => p.data.date).filter((d): d is Date => d instanceof Date),
+  ...notes.map((n) => n.data.date),
+].sort((a, b) => b.getTime() - a.getTime())[0];
+
+// 环形图的配色：与站点现有便利贴色同源，逐个错开
+const CATEGORY_COLORS = [
+  'var(--brand)',
+  'var(--sticky-cyan)',
+  'var(--sticky-purple)',
+  'var(--sticky-green)',
+  'var(--sticky-pink)',
+  'var(--sticky-yellow)',
+  'var(--border-strong)',
+];
+
+// 环形图用 conic-gradient 画：每个分类按占比切一段。
+// 段与段之间留一道透明缝（像参考图里的分隔线）。缝隙不能写死 1.5%——
+// 占比只有 1.5% 的分类会被整段吃掉反而消失，所以取「段宽的 22%」且不超过 1.5%。
+const GAP_MAX = 1.5;
+const donutStops = stats.categories
+  .map((cat, index) => {
+    const from = stats.categories
+      .slice(0, index)
+      .reduce((sum, c) => sum + c.ratio, 0);
+    const start = from * 100;
+    const span = cat.ratio * 100;
+    const end = start + span;
+    const gap = Math.min(GAP_MAX, span * 0.22);
+    const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+    // 单分类时首尾相接会留下一道缝，这里让最后一段补回来
+    const isLast = index === stats.categories.length - 1;
+    return `${color} ${start.toFixed(2)}% ${(isLast ? end : end - gap).toFixed(2)}%`;
+  })
+  .join(', ');
+
+// 逐年归档：字数转成「万字 / 千字」更好读
+const formatWords = (words: number) => {
+  if (words >= 10_000) return `${(words / 10_000).toFixed(1)} 万字`;
+  if (words >= 1_000) return `${(words / 1_000).toFixed(1)} 千字`;
+  return `${words} 字`;
+};
+---
+
+<BaseLayout
+  title="数据统计"
+  description={`${authorName}的博客数据统计：文章、字数、分类与标签分布，以及逐年归档。`}
+  pageClass="content-page"
+>
+  <section class="stats-page">
+    <header class="page-header">
+      <p class="eyebrow">Statistics</p>
+      <h1>数据统计</h1>
+      <p>博客网站的后台数据统计</p>
+    </header>
+
+    <!-- 概览数字 -->
+    <div class="stats-cards" data-sync-block="statsCards">
+      <div class="stats-card stats-card--blue">
+        <span class="stats-card__icon" aria-hidden="true"><Icon name="archive" size={20} /></span>
+        <div class="stats-card__body">
+          <b>{stats.postCount}</b>
+          <span>文章统计</span>
+        </div>
+      </div>
+      <div class="stats-card stats-card--yellow">
+        <span class="stats-card__icon" aria-hidden="true"><Icon name="spark" size={20} /></span>
+        <div class="stats-card__body">
+          <b>{stats.wordCount.toLocaleString('zh-CN')}</b>
+          <span>字数统计</span>
+        </div>
+      </div>
+      <div class="stats-card stats-card--green">
+        <span class="stats-card__icon" aria-hidden="true"><Icon name="hash" size={20} /></span>
+        <div class="stats-card__body">
+          <b>{stats.tagCount}</b>
+          <span>标签统计</span>
+        </div>
+      </div>
+      <div class="stats-card stats-card--pink">
+        <span class="stats-card__icon" aria-hidden="true"><Icon name="layers" size={20} /></span>
+        <div class="stats-card__body">
+          <b>{notes.length}</b>
+          <span>随笔统计</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分类一瞥 + 标签墙 -->
+    <div class="stats-split">
+      <section class="stats-panel" aria-labelledby="stats-cat-title">
+        <h2 id="stats-cat-title" class="stats-panel__title">
+          <Icon name="spark" size={16} />分类一瞥
+          <small>共 {stats.categoryCount} 个分类</small>
+        </h2>
+        {stats.categories.length === 0 ? (
+          <p class="stats-empty">还没有文章。</p>
+        ) : (
+          <div class="stats-donut">
+            <div
+              class="stats-donut__ring"
+              style={`background: conic-gradient(${donutStops})`}
+              role="img"
+              aria-label={`分类占比：${stats.categories
+                .map((c) => `${c.name} ${c.count} 篇`)
+                .join('，')}`}
+            >
+              <div class="stats-donut__hole">
+                <b>{stats.postCount}</b>
+                <span>篇</span>
+              </div>
+            </div>
+            <ul class="stats-legend">
+              {stats.categories.map((cat, index) => (
+                <li class="stats-legend__row">
+                  <span
+                    class="stats-legend__dot"
+                    style={`background: ${CATEGORY_COLORS[index % CATEGORY_COLORS.length]}`}
+                    aria-hidden="true"
+                  ></span>
+                  <a href={getCategoryPath(cat.name)} class="stats-legend__name">
+                    {cat.name}
+                  </a>
+                  <span class="stats-legend__pct">{(cat.ratio * 100).toFixed(1)}%</span>
+                  <small>{cat.count} 篇</small>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section class="stats-panel" aria-labelledby="stats-tag-title">
+        <h2 id="stats-tag-title" class="stats-panel__title">
+          <Icon name="hash" size={16} />标签墙
+          <small>共 {stats.tagCount} 个标签</small>
+        </h2>
+        {stats.tags.length === 0 ? (
+          <p class="stats-empty">还没有标签。</p>
+        ) : (
+          <div class="stats-tagwall">
+            {stats.tags.map((tag) => (
+              <a
+                href={getTagPath(tag.name)}
+                class="stats-tag"
+                style={`--tag-scale: ${Math.min(1, 0.78 + tag.count * 0.06).toFixed(2)}`}
+                title={`${tag.count} 篇`}
+              >
+                {tag.name}
+                <b>{tag.count}</b>
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+
+    <!-- 逐年归档 -->
+    <section class="stats-panel" aria-labelledby="stats-year-title" data-sync-block="statsYears">
+      <h2 id="stats-year-title" class="stats-panel__title">
+        <Icon name="clock" size={16} />文章归档
+        <small>
+          {stats.firstYear} — {stats.lastYear}
+        </small>
+      </h2>
+      {stats.years.length === 0 ? (
+        <p class="stats-empty">还没有带日期的文章。</p>
+      ) : (
+        <ol class="stats-years">
+          {stats.years.map((row) => (
+            <li class="stats-years__row">
+              <b class="stats-years__year">{row.year}</b>
+              <span class="stats-years__cell">
+                <Icon name="archive" size={13} />
+                {row.posts} 篇
+              </span>
+              <span class="stats-years__cell stats-years__cell--tags">
+                <Icon name="hash" size={13} />
+                {row.tags} 标签
+              </span>
+              <span class="stats-years__cell stats-years__cell--words">
+                <Icon name="download" size={13} />
+                {formatWords(row.words)}
+              </span>
+              <a href="/archive/" class="stats-years__more" aria-label={`查看 ${row.year} 年归档`}>
+                <Icon name="arrow-right" size={14} />
+              </a>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+
+    <p class="stats-since">
+      {latestUpdate ? (
+        <>
+          <Icon name="clock" size={14} />
+          最近更新于 <b>{formatDate(latestUpdate)}</b>
+        </>
+      ) : (
+        age && (
+          <>
+            <Icon name="clock" size={14} />
+            站点已运行 <b>{age.totalDays}</b> 天（{age.years} 年 {age.months} 月 {age.days} 天）
+          </>
+        )
+      )}
+    </p>
+  </section>
+</BaseLayout>
+
+<style>
+  .stats-page {
+    max-width: 62rem;
+  }
+
+  /* ---------- 概览数字卡 ---------- */
+  .stats-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stats-card {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.95rem 1rem;
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    border-radius: 14px 18px 15px 17px / 17px 15px 18px 14px;
+    box-shadow: 3px 4px 0 var(--shadow-sm);
+  }
+
+  .stats-card:nth-child(2n) { transform: rotate(0.5deg); }
+  .stats-card:nth-child(3n) { transform: rotate(-0.6deg); }
+
+  .stats-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px 14px 11px 13px;
+  }
+
+  /* 底色跟着卡片走，文字走 on-sticky 才不糊 */
+  .stats-card--blue .stats-card__icon { background: var(--sticky-cyan); color: var(--on-sticky); }
+  .stats-card--yellow .stats-card__icon { background: var(--sticky-yellow); color: var(--on-sticky); }
+  .stats-card--green .stats-card__icon { background: var(--sticky-green); color: var(--on-sticky); }
+  .stats-card--pink .stats-card__icon { background: var(--sticky-pink); color: var(--on-sticky); }
+
+  .stats-card__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .stats-card__body b {
+    font-family: var(--font-hand);
+    font-size: 1.5rem;
+    font-weight: 400;
+    line-height: 1.15;
+    color: var(--text);
+  }
+
+  .stats-card__body span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ---------- 面板 ---------- */
+  .stats-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .stats-panel {
+    padding: 1.1rem 1.25rem 1.3rem;
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    border-radius: 16px 22px 14px 24px / 22px 14px 24px 16px;
+    box-shadow: 3px 4px 0 var(--shadow-sm);
+  }
+
+  .stats-panel__title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 2px dashed var(--edge);
+    font-family: var(--font-hand-cn);
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--text);
+  }
+
+  .stats-panel__title small {
+    margin-left: auto;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: var(--text-faint);
+  }
+
+  .stats-empty {
+    margin: 0;
+    padding: 1.5rem 0;
+    text-align: center;
+    color: var(--text-faint);
+  }
+
+  /* ---------- 分类环形图 ---------- */
+  .stats-donut {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1.1rem;
+    align-items: center;
+  }
+
+  .stats-donut__ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 8.5rem;
+    height: 8.5rem;
+    border-radius: 50%;
+    /* 甜甜圈的齿边：外圈加一圈同色描边，遮掉 conic-gradient 接缝的锯齿 */
+    box-shadow: 0 0 0 1.5px var(--ink);
+  }
+
+  .stats-donut__hole {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.15rem;
+    width: 5.2rem;
+    height: 5.2rem;
+    background: var(--surface);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1.5px var(--ink);
+  }
+
+  .stats-donut__hole b {
+    font-family: var(--font-hand);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--text);
+  }
+
+  .stats-donut__hole span {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .stats-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+  }
+
+  .stats-legend__row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+
+  .stats-legend__dot {
+    flex: none;
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 1.5px solid var(--ink);
+    border-radius: 50%;
+  }
+
+  .stats-legend__name {
+    color: var(--text);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stats-legend__name:hover {
+    text-decoration: underline;
+  }
+
+  .stats-legend__pct {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+  }
+
+  .stats-legend__row small {
+    flex: none;
+    min-width: 2.6rem;
+    text-align: right;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+  }
+
+  /* ---------- 标签墙 ---------- */
+  .stats-tagwall {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-content: flex-start;
+  }
+
+  .stats-tag {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    padding: 0.28rem 0.7rem;
+    border: 1.5px solid var(--ink);
+    border-radius: 12px 5px 14px 6px / 6px 14px 5px 12px;
+    background: var(--surface-muted);
+    color: var(--text);
+    /* 出现越多字号越大：用 --tag-scale 让排版跟着数据走 */
+    font-size: calc(0.8rem * var(--tag-scale, 1));
+    line-height: 1.4;
+    text-decoration: none;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+
+  .stats-tag:nth-child(3n) { transform: rotate(-1.2deg); }
+  .stats-tag:nth-child(3n + 1) { transform: rotate(0.8deg); }
+
+  .stats-tag:hover {
+    background: var(--sticky-yellow);
+    color: var(--on-sticky);
+    transform: rotate(0deg) translateY(-2px);
+  }
+
+  .stats-tag b {
+    font-family: var(--font-hand);
+    font-weight: 400;
+    font-size: 0.9em;
+    opacity: 0.75;
+  }
+
+  /* ---------- 逐年归档 ---------- */
+  .stats-years {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .stats-years__row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem 0.3rem;
+    border-bottom: 1px dashed var(--edge);
+  }
+
+  .stats-years__row:last-child {
+    border-bottom: 0;
+  }
+
+  .stats-years__year {
+    flex: none;
+    min-width: 3.4rem;
+    font-family: var(--font-hand);
+    font-size: 1.15rem;
+    font-weight: 400;
+    color: var(--text);
+  }
+
+  .stats-years__cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 桌面端靠右对齐；窄屏在媒体查询里改成换行布局 */
+  .stats-years__cell--words {
+    margin-left: auto;
+  }
+
+  .stats-years__more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 1.7rem;
+    height: 1.7rem;
+    border: 1.5px solid var(--ink);
+    border-radius: 50%;
+    color: var(--text);
+    text-decoration: none;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .stats-years__more:hover {
+    background: var(--sticky-yellow);
+    color: var(--on-sticky);
+    transform: translateX(2px);
+  }
+
+  .stats-since {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    margin: 1.5rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+  }
+
+  .stats-since b {
+    font-family: var(--font-hand);
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width: 900px) {
+    .stats-cards {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .stats-split {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-donut {
+      grid-template-columns: 1fr;
+      justify-items: center;
+    }
+
+    .stats-legend {
+      width: 100%;
+    }
+
+    /* 窄屏放不下四列，改成「图标 + 年份」一行、三个数字一行 */
+    .stats-years__row {
+      flex-wrap: wrap;
+      gap: 0.4rem 0.8rem;
+    }
+
+    .stats-years__year {
+      min-width: 100%;
+    }
+
+    .stats-years__cell--words {
+      margin-left: 0;
+    }
+
+    .stats-years__more {
+      margin-left: auto;
+    }
+  }
+</style>

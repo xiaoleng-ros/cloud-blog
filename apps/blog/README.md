@@ -98,7 +98,7 @@ npm run preview
 SITE_URL=https://example.com
 PUBLIC_PAYLOAD_URL=https://your-domain.example.com
 PUBLIC_WALINE_URL=/api/waline
-PUBLIC_NETEASE_PLAYLIST_ID=8792942606
+PUBLIC_NETEASE_PLAYLIST_ID=18387867575
 PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 ```
 
@@ -107,14 +107,19 @@ PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 | `SITE_URL` | 站点正式域名，用于 RSS、sitemap、canonical URL 和结构化数据 |
 | `PUBLIC_PAYLOAD_URL` | 后台 API 地址，默认 `http://localhost:9527`，构建时用于拉取内容 |
 | `PUBLIC_WALINE_URL` | Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置），跨域部署时填完整地址 |
-| `PUBLIC_NETEASE_PLAYLIST_ID` | 网易云音乐歌单 ID。未配置时使用默认歌单 `8792942606` |
-| `PUBLIC_MUSIC_API` | Meting 兼容的音乐 API 地址，默认 `https://meting.mikus.ink/api`，也可换成自建服务 |
+| `PUBLIC_NETEASE_PLAYLIST_ID` | 网易云音乐歌单 ID。留空则播放器整体不渲染（代码里没有模板默认歌单） |
+| `PUBLIC_MUSIC_API` | Meting 兼容的音乐 API 地址，默认 `https://meting.mikus.ink/api`，也可换成自建服务。注意**部分镜像只返回 30 秒试听切片**，换源前务必实测音频时长 |
 
 ---
 
 ## 🎵 音乐播放器
 
-全站右下角的悬浮播放器会在浏览器中**按需读取网易云歌单，不会自动播放**。替换歌单时，从网易云歌单链接中复制 `id` 数字，写入 `.env` 的 `PUBLIC_NETEASE_PLAYLIST_ID` 后重新启动开发服务。
+全站右下角的悬浮播放器会在浏览器中**按需读取网易云歌单，不会自动播放**。
+
+歌单 ID 有两个来源，**后台优先于环境变量**：后台「站点设置 → 网易云歌单 ID」→ `.env` 的 `PUBLIC_NETEASE_PLAYLIST_ID`。在后台改完存库即生效，不用重启；改 `.env` 则需要重启开发服务。两处都拿不到合法纯数字 ID 时，播放器**整体不渲染**（不会退回模板示例歌单）。
+
+> [!NOTE]
+> ID 必须匹配纯数字才会被采用 —— 这个字段历史上被填过 `NaN`，会把播放器导向一个不存在的歌单，比没有播放器更糟。
 
 > [!WARNING]
 > Meting 是非官方接入方式，受网易云版权、VIP 与地区限制影响，个别歌曲可能无法播放。生产环境若需要更稳定，建议将 `PUBLIC_MUSIC_API` 指向自建的 Meting 兼容服务。

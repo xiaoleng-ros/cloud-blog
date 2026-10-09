@@ -259,9 +259,9 @@ async function main() {
     }
     const hero = global?.name ? global : {
       greeting: '嗨，我是',
-      name: '段枫',
-      subtitle: '又名 DUAN FENG · 爱折腾的创作者',
-      bio: '别人叫我「AI 实践者」，我觉得自己只是个爱画画、爱写代码的孩子。把屏幕当画板，把代码当蜡笔，在这里画了 {count} 篇笔记。',
+      name: '云岫',
+      subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
+      bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
       buttonLabel: '浏览文章',
     }
     // 社交链接：textarea 字符串（每行「平台 链接」）
@@ -269,10 +269,10 @@ async function main() {
       global?.socials && String(global.socials).trim()
         ? global.socials
         : [
-            'bilibili https://space.bilibili.com/46377861',
+            'bilibili https://space.bilibili.com/1459419286',
             'douyin https://www.douyin.com/user/self',
-            'youtube https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg',
-            'x https://x.com/shenfanlaogou',
+            'github https://github.com/xiaoleng-ros',
+            '邮箱 mailto:1873048956@qq.com',
             'rss /rss.xml',
           ].join('\n')
 
@@ -299,42 +299,43 @@ async function main() {
 
     // ---- 页脚（均已拆到站点设置 Global，仅当为空时写入默认值，避免覆盖后台改动） ----
     const footerSubtitle =
-      global?.footerSubtitle ?? 'AI · Code · Web'
+      global?.footerSubtitle ?? '剪辑 · AI · Code'
     const footerChannels =
       global?.footerChannels
       ?? [
-        'Bilibili https://space.bilibili.com/46377861',
-        'YouTube https://www.youtube.com/channel/UCUuwwXFGK8Z3OBrq6PzkmUg',
+        'Bilibili https://space.bilibili.com/1459419286',
+        'GitHub https://github.com/xiaoleng-ros',
+        '邮箱 mailto:1873048956@qq.com',
         'RSS /rss.xml',
       ].join('\n')
     const footerGroups =
       global?.footerGroups
-      ?? ['QQ 交流群', '微信交流群'].join('\n')
+      ?? ''
 
     // ---- 关于页（同样仅当为空时写入默认值） ----
     const aboutLead = global?.aboutLead ?? '关于我'
     const aboutParagraphs =
       global?.aboutParagraphs
       ?? [
-        '我喜欢<span class="marker-highlight">歪一点</span>的东西——太正了反而不真实。',
-        '白天：<span class="marker-highlight">前端工程师 + 视觉设计师</span>，做正经的项目。<br />晚上：<span class="marker-highlight">画涂鸦</span>、写小工具、做声音装置。',
-        '梦想是让互联网上多一点<span class="marker-highlight">好玩的角落</span>。',
+        '我喜欢==神秘感==——云雾之间。',
+        '白天：每天起床==剪视频==。',
+        '晚上：幻想==挣大钱==。',
+        '梦想是想去看祖国的==大好河山==。',
       ].join('\n')
     const aboutNotes =
       global?.aboutNotes
       ?? [
-        '坐标广州|1995 年生|yellow',
-        '独立创作者|8 年经验|cyan',
-        '一天三杯咖啡|（不是广告）|pink',
+        '坐标成都|2003 年出生|yellow',
+        '剪辑师|1 年经验|green',
+        '内容创作者|挣大钱|purple',
       ].join('\n')
     const skills =
       global?.skills
       ?? [
-        'HTML / CSS|画框搭的|95|yellow',
-        'JavaScript|会耍魔术|90|cyan',
-        'AI 工具|乱点乱用|88|pink',
-        'Astro|让人省点|85|purple',
-        '视觉设计|爱涂爱画|82|yellow',
+        '剪辑|易学难入|30|green',
+        'HTML / CSS|全靠 AI|60|purple',
+        'AI 工具|听之任之|75|pink',
+        'JavaScript|会点魔术|65|yellow',
       ].join('\n')
 
     await payload.updateGlobal({

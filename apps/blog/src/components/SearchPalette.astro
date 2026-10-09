@@ -1,0 +1,289 @@
+---
+import Icon from './Icon.astro';
+import { KIND_ICON, KIND_ORDER } from '../lib/search-match';
+
+/**
+ * 命令面板式搜索浮层：每页挂一份（BaseLayout 里），入口是导航搜索按钮与 / 、⌘K。
+ * 结果行由脚本渲染，所以样式全部写在 global.css —— Astro 的 scoped style 只给
+ * 模板里存在的元素打属性，JS 造出来的节点匹配不上。
+ */
+---
+
+<dialog id="site-search" class="palette" aria-label="站内搜索">
+  <div class="palette__panel">
+    <div class="palette__field">
+      <Icon name="search" size={17} class="palette__field-icon" />
+      <input
+        id="site-search-input"
+        class="palette__input"
+        type="search"
+        placeholder="搜文章、随笔、项目、页面…"
+        autocomplete="off"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="site-search-results"
+        aria-autocomplete="list"
+      />
+    </div>
+
+    <div id="site-search-results" class="palette__results" role="listbox" aria-label="搜索结果"></div>
+
+    <footer class="palette__hints">
+      <span><kbd>↑</kbd><kbd>↓</kbd>切换</span>
+      <span><kbd>↵</kbd>打开</span>
+      <span><kbd>Esc</kbd>关闭</span>
+    </footer>
+  </div>
+
+  <!-- 每种结果类型的图标各渲染一份，脚本按 kind 克隆：
+       图标表因此留在构建期，不被拽进客户端 bundle -->
+  <template data-palette-icons>
+    {
+      KIND_ORDER.map((kind) => (
+        <span data-kind={kind}>
+          <Icon name={KIND_ICON[kind]} size={16} />
+        </span>
+      ))
+    }
+  </template>
+</dialog>
+
+<script>
+  import {
+    KIND_LABEL,
+    SITE_INDEX_URL,
+    entriesOfKind,
+    escapeHtml,
+    groupHits,
+    highlight,
+    searchEntries,
+    splitTerms,
+    type IndexEntry,
+    type SearchHit,
+  } from '../lib/search-match';
+
+  type PaletteState = {
+    bound: boolean;
+    entries: IndexEntry[] | null;
+    loading: Promise<void> | null;
+    failed: boolean;
+    trigger: HTMLElement | null;
+  };
+
+  // ClientRouter 换页会重建这段脚本与浮层 DOM，状态挂 window 上才留得住
+  const state: PaletteState = (
+    window as Window & { __blogSearchPalette?: PaletteState }
+  ).__blogSearchPalette ??= {
+    bound: false,
+    entries: null,
+    loading: null,
+    failed: false,
+    trigger: null,
+  };
+
+  const dialogOf = () => document.getElementById('site-search') as HTMLDialogElement | null;
+  const inputOf = () => document.getElementById('site-search-input') as HTMLInputElement | null;
+  const resultsOf = () => document.getElementById('site-search-results');
+  const rowsOf = () => [
+    ...(resultsOf()?.querySelectorAll<HTMLAnchorElement>('.palette__row') ?? []),
+  ];
+
+  const scrollLock = (on: boolean) =>
+    document.documentElement.classList.toggle('is-search-open', on);
+
+  function kindIcon(kind: string): string {
+    const source = document.querySelector<HTMLTemplateElement>('[data-palette-icons]');
+    const svg = source?.content?.querySelector(`[data-kind="${kind}"] svg`);
+    return svg ? svg.outerHTML : '';
+  }
+
+  function rowMarkup(hit: SearchHit, terms: string[], index: number): string {
+    const { entry } = hit;
+    const subtitle = entry.subtitle
+      ? `<span class="palette__row-sub">${highlight(entry.subtitle, terms)}</span>`
+      : '';
+    const meta = entry.meta
+      ? `<span class="palette__row-meta">${escapeHtml(entry.meta)}</span>`
+      : '';
+
+    return `<a class="palette__row" role="option" aria-selected="false" id="palette-opt-${index}" href="${escapeHtml(entry.url)}" tabindex="-1"><span class="palette__row-icon" aria-hidden="true">${kindIcon(entry.kind)}</span><span class="palette__row-main"><span class="palette__row-title">${highlight(entry.title, terms)}</span>${subtitle}</span>${meta}</a>`;
+  }
+
+  function activate(index: number): void {
+    const rows = rowsOf();
+    rows.forEach((row, i) => {
+      const on = i === index;
+      row.classList.toggle('is-active', on);
+      row.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    const input = inputOf();
+    const current = rows[index];
+    if (input) input.setAttribute('aria-activedescendant', current?.id ?? '');
+    current?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function render(query: string): void {
+    const results = resultsOf();
+    const input = inputOf();
+    if (!results || !input) return;
+
+    const collapse = () => {
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    };
+
+    if (state.entries === null) {
+      results.innerHTML = state.failed
+        ? `${escapeHtml('索引没加载出来，')}<a class="palette__link" href="/search/">试试搜索页</a>`
+        : escapeHtml('正在加载索引…');
+      collapse();
+      return;
+    }
+
+    const terms = splitTerms(query);
+    let markup: string;
+
+    if (terms.length === 0) {
+      // 空输入 = 站内导览：先把页面那一组列出来（对齐参考图的形态）
+      const pages = entriesOfKind(state.entries, 'page');
+      markup = pages
+        .map((entry, index) => rowMarkup({ entry, score: 0 }, [], index))
+        .join('');
+    } else {
+      const groups = groupHits(searchEntries(state.entries, query));
+      if (groups.length === 0) {
+        results.innerHTML = escapeHtml('没找到相关内容，换个词试试。');
+        collapse();
+        return;
+      }
+      let cursor = 0;
+      markup = groups
+        .map((group) => {
+          const label = `<p class="palette__group">${escapeHtml(KIND_LABEL[group.kind])}</p>`;
+          const items = group.hits
+            .map((hit, i) => rowMarkup(hit, terms, cursor + i))
+            .join('');
+          cursor += group.hits.length;
+          return label + items;
+        })
+        .join('');
+    }
+
+    results.innerHTML = markup;
+    input.setAttribute('aria-expanded', 'true');
+    activate(0);
+  }
+
+  function loadIndex(): Promise<void> {
+    if (state.entries) return Promise.resolve();
+    state.loading ??= fetch(SITE_INDEX_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<IndexEntry[]>;
+      })
+      .then((items) => {
+        state.entries = items;
+        state.failed = false;
+      })
+      .catch(() => {
+        state.failed = true;
+        state.loading = null;
+      });
+    return state.loading;
+  }
+
+  async function open(trigger: HTMLElement | null): Promise<void> {
+    const dialog = dialogOf();
+    if (!dialog) {
+      // 浮层没挂上（异常构建）：退回兜底搜索页
+      window.location.href = '/search/';
+      return;
+    }
+
+    state.trigger = trigger ?? (document.activeElement as HTMLElement | null);
+    if (!dialog.open) {
+      dialog.showModal();
+      scrollLock(true);
+    }
+
+    await loadIndex();
+    render(inputOf()?.value ?? '');
+    inputOf()?.focus();
+  }
+
+  // 收尾：解锁滚动 + 把焦点还给触发按钮。幂等，可被多条路径重复调用。
+  function restore(): void {
+    scrollLock(false);
+    state.trigger?.focus();
+    state.trigger = null;
+  }
+
+  if (!state.bound) {
+    state.bound = true;
+
+    document.addEventListener('click', (event) => {
+      const target =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>('[data-search-open]')
+          : null;
+      if (!target) return;
+      event.preventDefault();
+      void open(target);
+    });
+
+    // 点在面板外（dialog 自身铺满视口）即关闭
+    document.addEventListener('click', (event) => {
+      const dialog = dialogOf();
+      if (dialog?.open && event.target === dialog) {
+        dialog.close();
+        // 自己关的就自己收尾：页面处于隐藏态时 Chromium 会把 close 事件一直
+        // 扣着不放，只等事件的话滚动会永久锁死。
+        restore();
+      }
+    });
+
+    document.addEventListener('input', (event) => {
+      const field = event.target;
+      if (field instanceof HTMLInputElement && field.id === 'site-search-input') {
+        render(field.value);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (!dialogOf()?.open) return;
+      const rows = rowsOf();
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        if (rows.length === 0) return;
+        event.preventDefault();
+        const current = rows.findIndex((row) => row.classList.contains('is-active'));
+        const step = event.key === 'ArrowDown' ? 1 : -1;
+        activate((current + step + rows.length) % rows.length);
+        return;
+      }
+
+      if (event.key === 'Enter' && !event.isComposing) {
+        const active = rows.find((row) => row.classList.contains('is-active'));
+        if (!active) return;
+        // 用 click 而不是改 location：交给 ClientRouter 做同文档换页
+        event.preventDefault();
+        active.click();
+      }
+    });
+
+    // dialog 的 close 事件不冒泡，但捕获阶段仍能在 document 上收到
+    document.addEventListener(
+      'close',
+      (event) => {
+        if ((event.target as HTMLElement).id !== 'site-search') return;
+        restore();
+      },
+      true,
+    );
+
+    // 换页时旧 dialog 是被直接移除的，不会触发 close：手动补一次解锁
+    document.addEventListener('astro:after-swap', () => {
+      if (!dialogOf()?.open) scrollLock(false);
+    });
+  }
+</script>

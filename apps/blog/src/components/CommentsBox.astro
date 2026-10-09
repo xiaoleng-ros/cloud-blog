@@ -59,12 +59,22 @@ import '@waline/client/style';
         search: false,
         requiredMeta: ['nick'],
         wordLimit: 500,
-        commentSorting: 'oldest',
+        // 固定按时间排序：最新在上、越早越靠下（排序选项 UI 由下方 sweep 移除）
+        commentSorting: 'latest',
       });
-      // 空列表的「来发评论吧~」是官方 v-else 分支、无开关 prop，
-      // 用 MutationObserver 把 .wl-empty 节点整个移出 DOM（代码级删除，非隐藏）
-      const sweep = () =>
-        mountEl.querySelectorAll('.wl-empty').forEach((n) => n.remove());
+      // 官方组件无开关 prop 的节点，用 MutationObserver 整个移出 DOM（代码级删除，非隐藏）：
+      // - .wl-empty：「来发评论吧~」空列表文案（官方 v-else 分支）
+      // - .wl-sort：排序选项（定死按时间排，不给访客切换）
+      // - 加载失败的「刷新」重试按钮（与「加载更多」共用 .wl-operation，按按钮文案区分；lang 锁 zh-CN）
+      const sweep = () => {
+        mountEl
+          .querySelectorAll('.wl-empty, .wl-sort')
+          .forEach((n) => n.remove());
+        mountEl.querySelectorAll('.wl-operation').forEach((op) => {
+          if (op.querySelector('.wl-btn')?.textContent?.trim() === '刷新')
+            op.remove();
+        });
+      };
       sweep();
       emptySweeper = new MutationObserver(sweep);
       emptySweeper.observe(mountEl, { childList: true, subtree: true });

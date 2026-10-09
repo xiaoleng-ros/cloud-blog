@@ -3,6 +3,7 @@ import Icon from './Icon.astro';
 import { site, toShanghaiParts } from '../lib/posts';
 import { getFooter, getSiteSettings } from '../lib/site-settings';
 import { hasIcon } from 'cloud-blog/shared/icon-paths';
+import { OFFLINE_ICP } from 'cloud-blog/shared/site-defaults';
 
 // 构建年份仅作为无 JS 环境的静态兜底；按全仓统一的 Asia/Shanghai 定格（与 formatDate 同口径）
 const buildYear = toShanghaiParts(new Date())?.year ?? String(new Date().getFullYear());
@@ -16,9 +17,27 @@ const footer = await getFooter();
 const channels = footer.channels;
 const groups = footer.groups;
 const hasLinks = channels.length > 0 || groups.length > 0;
+
+// ICP 备案号：来自后台「网站配置」，留空则整块不渲染（工信部要求备案后才展示）。
+// 备案查询统一跳工信部官方站点，链接与号码都由后台填，前台不拼任何参数。
+const icp = settings === null ? OFFLINE_ICP : (settings.siteIcp?.trim() ?? '');
 ---
 
 <footer class="site-footer">
+  {/* 页脚虚线上的动物装饰条：坐在 .site-footer 的 border-top 上，
+      下半身由 CSS 渐变融进页面底色，所以明暗主题都自动跟随。
+      纯装饰，不参与无障碍树。 */}
+  <div class="site-footer__pets" aria-hidden="true">
+    <img
+      src="/images/footer-animals.png"
+      alt=""
+      width="1948"
+      height="236"
+      loading="lazy"
+      decoding="async"
+    />
+  </div>
+
   <div class="site-footer__inner" data-sync-block="footerInner">
     <div class="site-footer__id">
       <img
@@ -32,6 +51,17 @@ const hasLinks = channels.length > 0 || groups.length > 0;
         <strong>{author}</strong>
         {footer.subtitle && <span>{footer.subtitle}</span>}
       </div>
+      {icp && (
+        <a
+          class="site-footer__icp"
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+        >
+          <Icon name="shield" size={14} />
+          {icp}
+        </a>
+      )}
     </div>
 
     {hasLinks && (
@@ -82,8 +112,6 @@ const hasLinks = channels.length > 0 || groups.length > 0;
   <div class="site-footer__bar" data-sync-block="footerBar">
     <span>© <span data-copyright-year>{buildYear}</span> {author}</span>
     <span aria-hidden="true">·</span>
-    <a href={site.url}>{site.url.replace('https://', '')}</a>
-    <span aria-hidden="true">·</span>
     <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>
   </div>
 </footer>
@@ -100,9 +128,53 @@ const hasLinks = channels.length > 0 || groups.length > 0;
       });
     };
     setYear();
-    window.__blogFooterYearCleanup?.();
-    const onSync = () => setYear();
+
+    /* 动物装饰条浮动定位。
+       页脚在文档末尾，没滚到时这一队动物根本不在视口里 —— 所以未到页脚时
+       把容器切成 fixed 贴住视口底部，等滚到footer 顶边（虚线）再切回absolute 坐线上。
+       判据用 getBoundingClientRect 而非 IntersectionObserver：
+       需要的是 footer 顶边与视口底的距离（连续量），IO 只能给「进/没进」两态，
+       临界点会来回抖。滚动监听走 rAF 节流，且用 passive 免阻塞滚动。 */
+    const pets = document.querySelector('.site-footer__pets');
+    const footer = document.querySelector('.site-footer');
+    let ticking = false;
+
+    const update = () => {
+      ticking = false;
+      if (!pets || !footer) return;
+      // footer 顶边（虚线）在视口内的位置；>= 视口高说明还没滚到
+      const lineTop = footer.getBoundingClientRect().top;
+      const reached = lineTop <= window.innerHeight;
+      pets.classList.toggle('site-footer__pets--floating', !reached);
+    };
+
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(update);
+    };
+
+    window.__blogFooterPetsCleanup?.();
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+
+    const cleanup = () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+    window.__blogFooterPetsCleanup = cleanup;
+
+    // footerBar 会被后台同步整块替换，重跑本脚本时先解绑上一轮的监听，
+    // 否则 astro 的 is:inline + rerun 会让同一条滚动监听叠加多份。
+    const onSync = () => {
+      setYear();
+      update();
+    };
     document.addEventListener('blog:sync-updated', onSync);
-    window.__blogFooterYearCleanup = () => document.removeEventListener('blog:sync-updated', onSync);
+    window.__blogFooterYearCleanup = () => {
+      document.removeEventListener('blog:sync-updated', onSync);
+      cleanup();
+    };
   })();
 </script>

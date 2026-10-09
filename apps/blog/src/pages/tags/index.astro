@@ -1,0 +1,300 @@
+---
+import { getCollection } from 'astro:content';
+import Icon from '../../components/Icon.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getTagPath, sortPosts } from '../../lib/posts';
+import { getSiteSettings } from '../../lib/site-settings';
+import { buildSiteStats } from 'cloud-blog/shared/site-stats';
+
+const posts = sortPosts(await getCollection('posts'));
+const stats = buildSiteStats(posts);
+const tags = stats.tags;
+
+const settings = await getSiteSettings();
+const authorName = settings?.siteAuthor ?? '我';
+
+// 标签墙配色：与统计页环形图、卡片底色同源（都是便利贴色），
+// 逐个错开让相邻标签不同色。深色模式下这些变量会自动换成低饱和版本。
+// 顺序按「视觉轻重」排：先黄绿青（浅底上最跳），再粉紫brand（最重），
+// 免得出现「整行标签都是深粉色」这种扎眼组合。
+const TAG_COLORS = [
+  'var(--sticky-yellow)',
+  'var(--sticky-green)',
+  'var(--sticky-cyan)',
+  'var(--sticky-pink)',
+  'var(--sticky-purple)',
+  'var(--brand)',
+];
+
+// 字号随文章数走：三档够用，连续公式在 count=1 时会和 count=2 几乎一样大，看不出差别。
+// 1.34 这个上限是实测出来的——再大就撑破药丸的圆角比例，文字开始溢出胶囊。
+const scaleOf = (count: number) => {
+  if (count >= 3) return 1.34;
+  if (count === 2) return 1.16;
+  return 1;
+};
+
+// 按标签名散列出一个起始色下标。
+// 不用 index % 长度：标签数一多，同一颜色会连着排好几行，看起来像掉色了。
+// 散列保证同一个标签每次刷新颜色一致（不能每次随机，那墙面会「抖动」）。
+function hashOf(name: string): number {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.codePointAt(0)!) % 100_000;
+  return hash;
+}
+
+// 逐个分配颜色，并躲开前一颗的颜色。
+// 只靠散列不够：11 个标签挤 6 种颜色时，碰撞出来的相邻同色概率不低，
+// 连着两颗一样看着就像渲染坏了。这里每颗往后错一位，代价是颜色分布略微不均，
+// 换来的是整片没有相邻重复。
+// 必须用普通循环而不是 map：回调里读 colorSlots 会撞 const 的 TDZ。
+const colorSlots: number[] = [];
+let prevColor = -1;
+for (const tag of tags) {
+  const base = hashOf(tag.name) % TAG_COLORS.length;
+  const slot = base === prevColor ? (base + 1) % TAG_COLORS.length : base;
+  colorSlots.push(slot);
+  prevColor = slot;
+}
+---
+
+<BaseLayout
+  title="标签墙"
+  description={`${authorName}的博客标签墙：拾取标签，发现更多感兴趣的内容。`}
+  pageClass="content-page tagwall-page"
+>
+  <section class="tags-page">
+    <header class="tags-hero">
+      <div class="tags-hero__top">
+        <p class="eyebrow">Tags</p>
+        <h1 class="tags-hero__title">标签墙</h1>
+      </div>
+      <p class="tags-hero__sub">拾取标签，发现更多感兴趣的内容</p>
+      <div class="tags-hero__rule" aria-hidden="true"><i></i></div>
+      <p class="tags-hero__count">
+        共 <b>{tags.length}</b> 个标签
+      </p>
+    </header>
+
+    {tags.length === 0 ? (
+      <p class="tags-empty">还没有标签。</p>
+    ) : (
+      <div class="tagwall" data-sync-block="tagWall">
+        {tags.map((tag, index) => (
+          <a
+            href={getTagPath(tag.name)}
+            class="tagwall__chip"
+            style={`--chip-scale: ${scaleOf(tag.count)}; --chip-bg: ${TAG_COLORS[colorSlots[index]]}`}
+            title={`${tag.count} 篇文章`}
+          >
+            <span class="tagwall__icon" aria-hidden="true"><Icon name="tag" size={13} /></span>
+            <span class="tagwall__name">{tag.name}</span>
+            <b class="tagwall__count">{tag.count}</b>
+          </a>
+        ))}
+      </div>
+    )}
+  </section>
+</BaseLayout>
+
+<style>
+  /* main 在 BaseLayout 里，作用域样式够不着它，用 :global() 单独放宽这一页的正文宽度。
+     标签墙是「铺满」的布局，63rem 的通用限宽会让两侧空出一大片。 */
+  :global(body.tagwall-page main) {
+    width: min(100% - 2.5rem, 74rem);
+  }
+
+  .tags-page {
+    max-width: none;
+  }
+
+  /* ---------- 页头 ---------- */
+  .tags-hero {
+    margin-bottom: 2.2rem;
+    text-align: center;
+  }
+
+  /* eyebrow 与标题各自居中。标题是 inline-block（为了渐变贴合文字），
+     不套一层块容器的话它会和同为 inline 的 eyebrow 挤在同一行。 */
+  .tags-hero__top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .tags-hero__title {
+    /* 关键：必须收缩到文字宽度。h1 默认是 block，宽度会撑满整行（实测 1036px），
+       渐变于是横跨整行、而三个字只占最左边一小段，看起来整块都是同一个颜色。
+       inline-block 让渐变正好铺在文字上。 */
+    display: inline-block;
+    margin: 0;
+    /* 手写体要自己声明：全站把 --font-hand 挂在 .page-header h1 上，
+       而这里用的是自定义类名 .tags-hero__title，继承不到 —— 实测落回 system-ui。 */
+    font-family: var(--font-hand);
+    font-weight: 400;
+    font-size: clamp(2.4rem, 7vw, 3.6rem);
+    /* 手写体单字之间容易挤，这里放开一点字距 */
+    letter-spacing: 0.06em;
+    /* 参考图标题是橙→粉→紫的渐变。用 background-clip 而不是 color，
+       因为全站后来把 .page-header h1 的渐变填充统一关掉了（手写体要纯色），
+       这里只能自己再打开一次。 */
+    background: linear-gradient(96deg, #ff9a3c 0%, #f2588f 46%, #9b6bd6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .tags-hero__sub {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  /* 虚线中间嵌一颗小圆点：纯虚线太素，加个节点当视觉落点 */
+  .tags-hero__rule {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    max-width: 12rem;
+    margin: 1.1rem auto 0.9rem;
+  }
+
+  .tags-hero__rule::before,
+  .tags-hero__rule::after {
+    content: "";
+    flex: 1;
+    border-top: 2px dashed var(--edge);
+  }
+
+  .tags-hero__rule i {
+    flex: none;
+    width: 0.4rem;
+    height: 0.4rem;
+    background: var(--brand);
+    border-radius: 50%;
+  }
+
+  .tags-hero__count {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-faint);
+  }
+
+  .tags-hero__count b {
+    font-family: var(--font-hand);
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--brand);
+  }
+
+  /* ---------- 标签墙 ---------- */
+  .tagwall {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    /* 参考图的行距比列距宽，整片看起来更松散 */
+    gap: 0.85rem 1rem;
+    /* 标签少的时候别让整片贴着页头，顶部留一点呼吸 */
+    padding-bottom: 1rem;
+  }
+
+  .tagwall__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    /* padding 跟着 --chip-scale 走：字号变了内边距不变的话，
+       1 篇的标签会是一颗巨药丸包着小字 */
+    padding: calc(0.4rem * var(--chip-scale, 1)) calc(0.95rem * var(--chip-scale, 1));
+    background: var(--chip-bg, var(--surface-muted));
+    color: var(--on-sticky);
+    border: 1.5px solid var(--ink);
+    /* 全圆角：参考图里每颗标签都是药丸形，不是手绘便签的歪角 */
+    border-radius: 999px;
+    font-size: calc(0.95rem * var(--chip-scale, 1));
+    line-height: 1.35;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform 0.16s var(--ease-out-soft), box-shadow 0.16s var(--ease-out-soft);
+  }
+
+  .tagwall__icon {
+    display: inline-flex;
+    flex: none;
+    /* 图标不跟着缩放：2 篇的标签字号大了，图标若同步放大就头重脚轻 */
+    width: 0.92rem;
+    height: 0.92rem;
+    opacity: 0.62;
+  }
+
+  .tagwall__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tagwall__count {
+    font-family: var(--font-hand);
+    font-size: 0.82em;
+    font-weight: 400;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* nth-child 给相邻标签错开一点倾角，整片才不像复制粘贴。
+     rotate 会覆盖 transform，所以 hover 只能 translate，不能再叠 rotate(0)。 */
+  .tagwall__chip:nth-child(4n + 1) { transform: rotate(-1.4deg); }
+  .tagwall__chip:nth-child(4n + 2) { transform: rotate(0.9deg); }
+  .tagwall__chip:nth-child(4n + 3) { transform: rotate(-0.6deg); }
+
+  .tagwall__chip:hover {
+    box-shadow: 2px 3px 0 var(--shadow-sm);
+    transform: translateY(-2px);
+  }
+
+  .tagwall__chip:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  .tags-empty {
+    margin: 0;
+    padding: 3rem 0;
+    text-align: center;
+    color: var(--text-faint);
+  }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width: 560px) {
+    .tagwall {
+      gap: 0.6rem 0.65rem;
+    }
+
+    .tagwall__chip {
+      font-size: calc(0.88rem * var(--chip-scale, 1));
+    }
+  }
+
+  /* 窄屏下导航会换行成两排、变高，全站 main 的 7rem 上边距不够用，
+     页头会被压在导航底下（实测导航底 105px > main 上边距 87.5px）。
+     统计页等既有页面也有这问题，这里先给自己这页补足，不动全局规则。 */
+  @media (max-width: 760px) {
+    :global(body.tagwall-page main) {
+      padding-top: 9.5rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tagwall__chip,
+    .tagwall__chip:nth-child(4n + 1),
+    .tagwall__chip:nth-child(4n + 2),
+    .tagwall__chip:nth-child(4n + 3) {
+      transition: none;
+    }
+
+    .tagwall__chip:hover {
+      transform: none;
+    }
+  }
+</style>

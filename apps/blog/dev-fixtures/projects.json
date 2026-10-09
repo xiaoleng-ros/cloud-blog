@@ -1,0 +1,20 @@
+[
+  {
+    "id": "8001",
+    "group": "独立作品",
+    "groupDescription": "一个人从设计到上线的项目",
+    "title": "云岫的博客",
+    "owner": "小冷",
+    "description": "Astro 前台 + Payload 后台的双应用博客，含评论区与图片库。",
+    "icon": "globe",
+    "href": "https://blog.iceuu.icu",
+    "articleHref": "/posts/开发/9001/",
+    "stars": 128,
+    "tags": [
+      "Astro",
+      "Payload",
+      "TypeScript"
+    ],
+    "sortOrder": 10
+  }
+]
