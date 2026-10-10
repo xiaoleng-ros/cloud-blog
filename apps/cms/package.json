@@ -1,7 +1,7 @@
 {
   "name": "payload-blog",
   "version": "1.0.0",
-  "description": "Node22 兼容的 Payload CMS 博客后台（SQLite，适配 cloud-blog）",
+  "description": "基于 Payload CMS 3 + Next.js 的博客内容后台（Postgres，前后台一体化部署）",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,6 +11,7 @@
     "pg:stop": "node scripts/pg.mjs stop",
     "pg:status": "node scripts/pg.mjs status",
     "dev:local": "node scripts/pg.mjs start && npm run dev",
+    "dev:warm": "node scripts/dev-warm.mjs",
     "dev:supabase": "node scripts/with-env.mjs .env.supabase npm run dev",
     "payload:supabase": "node scripts/with-env.mjs .env.supabase npx payload",
     "build": "cross-env NODE_OPTIONS=--no-deprecation next build",

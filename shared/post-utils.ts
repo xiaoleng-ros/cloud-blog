@@ -22,6 +22,9 @@ export interface PostEntry<TData = any> {
   body?: string;
 }
 
+/** 项目图标兜底：前台 zod schema、前台 REST 映射、后台注入映射三处共用这一份 */
+export const DEFAULT_PROJECT_ICON = 'github';
+
 /** 从文章条目中获取字段值：优先 post.data.xxx，回退到 post.xxx（兼容两种数据源） */
 export const getVal = <T = any>(post: PostEntry, field: string): T | undefined => {
   if (post.data && typeof post.data === 'object') {

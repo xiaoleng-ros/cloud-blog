@@ -54,7 +54,7 @@ export const SiteSettings: GlobalConfig = {
         {
           label: '网站配置',
           fields: [
-            { name: 'siteIcon', type: 'text', label: '网站图标' },
+            { name: 'siteIcon', type: 'text', label: '网站图标', admin: { description: '用作浏览器标签页图标与页脚头像；留空则用站点默认头像。' } },
             { name: 'siteIcp', type: 'text', label: 'ICP 备案号' },
             // 创建时间存 'YYYY-MM-DD' 文本而非 date：date 落库是带时区时间戳，
             // 跨时区读回会整体偏一天，而它只需要按年/按日原样展示。
@@ -73,7 +73,6 @@ export const SiteSettings: GlobalConfig = {
             },
             { name: 'subtitle', type: 'text', label: '副标题' },
             { name: 'bio', type: 'textarea', label: '介绍文字' },
-            { name: 'buttonLabel', type: 'text', label: '浏览文章按钮文字', admin: { width: '50%' } },
           ],
         },
         {
@@ -121,7 +120,6 @@ export const SiteSettings: GlobalConfig = {
         {
           label: '关于页',
           fields: [
-            { name: 'aboutLead', type: 'text', label: '关于页大标题', admin: { width: '50%' } },
             {
               name: 'aboutParagraphs',
               type: 'textarea',

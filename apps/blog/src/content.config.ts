@@ -1,6 +1,7 @@
 import { defineCollection } from 'astro:content';
 // `z` 从 astro:content 导入已废弃（Astro 7 移除），改为直连 astro/zod（同源 zod v4）
 import { z } from 'astro/zod';
+import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils';
 import { payloadNotesLoader, payloadPostsLoader, payloadProjectsLoader } from './lib/payload-loader';
 
 const stringList = z.preprocess((value) => {
@@ -57,7 +58,7 @@ const projects = defineCollection({
       title: z.string(),
       owner: z.string().optional(),
       description: z.string().optional(),
-      icon: z.string().default('github'),
+      icon: z.string().default(DEFAULT_PROJECT_ICON),
       href: z.string().optional(),
       articleHref: z.string().optional(),
       stars: z.coerce.number().default(0),

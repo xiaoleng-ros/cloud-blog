@@ -14,18 +14,23 @@ import speakerSlashIcon from '@phosphor-icons/core/assets/regular/speaker-slash.
 import waveformIcon from '@phosphor-icons/core/assets/regular/waveform.svg?raw';
 import xIcon from '@phosphor-icons/core/assets/regular/x.svg?raw';
 
-// 歌单 ID：后台站点设置（SiteSettings.neteasePlaylistId）优先 → 环境变量兜底
-// 后台字段由 CMS SiteSettings 维护（无对应硬编码默认值），前台不再自带模板歌单 ID：
-// 两处都拿不到合法纯数字 ID 时整块不渲染，避免导向一个模板残留的不存在歌单。
+// 歌单 ID：后台站点设置（SiteSettings.neteasePlaylistId）优先 → 环境变量兜底。
+// 播放器现在「常驻渲染」，配置变化由运行时同步（BaseLayout applyRuntime）接住：
+//   - data-playlist-id       当前值（构建期是快照，运行时会被同步脚本改成最新）
+//   - data-playlist-fallback 构建期 env 兜底值（后台字段留空时生效）
+// 后台字段与 env 都拿不到合法纯数字 ID 时整块隐藏（hidden），避免导向不存在的歌单。
 import { getSiteSettings } from '../lib/site-settings';
 
 const settings = await getSiteSettings();
-// 后台站点设置的歌单 ID 只在「纯数字」时才采用：
-// 历史上这个字段被填过 "NaN"，会把播放器导向一个不存在的歌单，比没有播放器更糟。
-const rawPlaylistId = String(
-  settings?.neteasePlaylistId ?? import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID ?? '',
-).trim();
-const playlistId = /^\d+$/.test(rawPlaylistId) ? rawPlaylistId : '';
+// 合法 ID = 纯数字：历史上这个字段被填过 "NaN"，会把播放器导向一个不存在的歌单，比没有更糟。
+const validId = (value: string | undefined) => {
+  const raw = String(value ?? '').trim();
+  return /^\d+$/.test(raw) ? raw : '';
+};
+const envPlaylistId = validId(import.meta.env.PUBLIC_NETEASE_PLAYLIST_ID);
+const settingsRaw = String(settings?.neteasePlaylistId ?? '').trim();
+// 与 blog-render 的 runtime.playlist 口径一致：后台填了合法值用它；填了非法值=停用（不回退 env）；留空=env 兜底
+const playlistId = validId(settingsRaw) || (settingsRaw ? '' : envPlaylistId);
 
 const apiBase =
   String(import.meta.env.PUBLIC_MUSIC_API ?? 'https://meting.mikus.ink/api').trim() ||
@@ -33,7 +38,8 @@ const apiBase =
 const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(playlistId)}`;
 ---
 
-{playlistId && (
+{/* 常驻渲染（不再构建期条件渲染）：后台/运行时的歌单变化都要能被同步接住。
+     无歌单时用 hidden 隐藏（见样式里的 [hidden] 强制），运行时同步会按最新值切换。 */}
 <div
   class="music-player"
   transition:name="music-player"
@@ -42,7 +48,9 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
   data-music-player
   data-testid="music-player"
   data-playlist-id={playlistId}
+  data-playlist-fallback={envPlaylistId}
   data-api-base={apiBase}
+  hidden={!playlistId}
 >
   <section
     id="music-player-panel"
@@ -184,9 +192,13 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
 
   <audio data-music-audio preload="none"></audio>
 </div>
-)}
 
 <style is:global>
+  /* 播放器常驻渲染后用 hidden 控制显隐：组件样式会给 .music-player 设 display，需强制覆盖 */
+  .music-player[hidden] {
+    display: none !important;
+  }
+
   .music-player {
     position: fixed;
     right: var(--floating-edge, clamp(1rem, 4vw, 2rem));
@@ -1924,6 +1936,14 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
     const initPlayer = (root) => {
       if (root.dataset.ready === 'true') return;
       root.dataset.ready = 'true';
+      // 记录「启动时」的歌单值：运行期后台改歌单时，同步脚本据此判断要不要整页重载
+      root.dataset.bootPlaylistId = root.dataset.playlistId || '';
+      // 无歌单（后台留空且无 env 兜底）：保持隐藏，不初始化网络逻辑
+      if (!root.dataset.playlistId) {
+        root.hidden = true;
+        return;
+      }
+      root.hidden = false;
 
       const panel = root.querySelector('[data-music-panel]');
       const toggle = root.querySelector('[data-music-toggle]');
@@ -2985,6 +3005,44 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
       loadPlaylist();
     };
 
-    document.querySelectorAll('[data-music-player]').forEach(initPlayer);
+    const boot = () => document.querySelectorAll('[data-music-player]').forEach(initPlayer);
+
+    // 外壳里的 data-playlist-id 是上次构建的快照：等首次后台同步把运行时值刷进来再初始化，
+    // 否则刷新后会拿旧歌单（同步失败/过慢时最多等 2.5s 回退到快照值）。
+    const syncReady = window.__blogSyncReady;
+    if (syncReady && typeof syncReady.then === 'function') {
+      Promise.race([syncReady, new Promise((resolve) => setTimeout(resolve, 2500))]).then(boot, boot);
+    } else {
+      boot();
+    }
+
+    // 运行期间后台改了歌单：同步脚本会改写 dataset，这里整页重载一次
+    // （实例闭包全按旧 ID 建立，storageKey/外链都绑死，整体重载最稳）。
+    // sessionStorage 记住「已为这个值重载过」，防极端慢同步下反复重载。
+    const RELOAD_KEY = 'blog-music-playlist-reload';
+    document.addEventListener('blog:sync-updated', () => {
+      const root = document.querySelector('[data-music-player]');
+      if (!root) return;
+      const current = root.dataset.playlistId || '';
+      const booted = root.dataset.bootPlaylistId || '';
+      if (current === booted) {
+        try {
+          sessionStorage.removeItem(RELOAD_KEY);
+        } catch {
+        }
+        return;
+      }
+      let tried = null;
+      try {
+        tried = sessionStorage.getItem(RELOAD_KEY);
+      } catch {
+      }
+      if (tried === current) return;
+      try {
+        sessionStorage.setItem(RELOAD_KEY, current);
+      } catch {
+      }
+      location.reload();
+    });
   })();
 </script>

@@ -3,6 +3,7 @@ import Icon from './Icon.astro';
 import { site, toShanghaiParts } from '../lib/posts';
 import { getFooter, getSiteSettings } from '../lib/site-settings';
 import { hasIcon } from 'cloud-blog/shared/icon-paths';
+import { safeHref } from 'cloud-blog/shared/html-safety';
 import { OFFLINE_ICP } from 'cloud-blog/shared/site-defaults';
 
 // 构建年份仅作为无 JS 环境的静态兜底；按全仓统一的 Asia/Shanghai 定格（与 formatDate 同口径）
@@ -11,6 +12,9 @@ const buildYear = toShanghaiParts(new Date())?.year ?? String(new Date().getFull
 // 作者名：优先后台站点设置，后台不可用时回退本地配置
 const settings = await getSiteSettings();
 const author = settings?.siteAuthor ?? site.author;
+
+// 页脚头像：后台「网站配置 → 网站图标」优先，留空/不合法用站点默认头像
+const avatarSrc = safeHref(settings?.siteIcon, '/avatars/avatar.png');
 
 // 页脚副标题/链接/群组：以后台站点设置为准，后台留空前台就不出这一项
 const footer = await getFooter();
@@ -41,7 +45,7 @@ const icp = settings === null ? OFFLINE_ICP : (settings.siteIcp?.trim() ?? '');
   <div class="site-footer__inner" data-sync-block="footerInner">
     <div class="site-footer__id">
       <img
-        src="/avatars/avatar.png"
+        src={avatarSrc}
         alt={author}
         class="site-footer__avatar"
         width="40"
@@ -111,8 +115,6 @@ const icp = settings === null ? OFFLINE_ICP : (settings.siteIcp?.trim() ?? '');
 
   <div class="site-footer__bar" data-sync-block="footerBar">
     <span>© <span data-copyright-year>{buildYear}</span> {author}</span>
-    <span aria-hidden="true">·</span>
-    <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>
   </div>
 </footer>
 

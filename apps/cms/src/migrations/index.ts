@@ -8,6 +8,12 @@ import * as migration_20261001_000000_add_categories_tree_fields from './2026100
 import * as migration_20261002_000000_add_users_feishu_open_id_unique from './20261002_000000_add_users_feishu_open_id_unique';
 import * as migration_20261004_000000_add_site_config_fields from './20261004_000000_add_site_config_fields';
 import * as migration_20261005_000000_drop_waline_url from './20261005_000000_drop_waline_url';
+import * as migration_20261009_000000_add_page_copy_fields from './20261009_000000_add_page_copy_fields';
+import * as migration_20261010_000000_drop_home_copy_fields from './20261010_000000_drop_home_copy_fields';
+import * as migration_20261010_010000_drop_post_notes_archive_copy_fields from './20261010_010000_drop_post_notes_archive_copy_fields';
+import * as migration_20261010_020000_drop_tags_stats_search_notfound_copy_fields from './20261010_020000_drop_tags_stats_search_notfound_copy_fields';
+import * as migration_20261010_030000_drop_hero_button_footer_credit_fields from './20261010_030000_drop_hero_button_footer_credit_fields';
+import * as migration_20261010_040000_drop_about_fields from './20261010_040000_drop_about_fields';
 
 export const migrations = [
   {
@@ -59,5 +65,35 @@ export const migrations = [
     up: migration_20261005_000000_drop_waline_url.up,
     down: migration_20261005_000000_drop_waline_url.down,
     name: '20261005_000000_drop_waline_url'
+  },
+  {
+    up: migration_20261009_000000_add_page_copy_fields.up,
+    down: migration_20261009_000000_add_page_copy_fields.down,
+    name: '20261009_000000_add_page_copy_fields'
+  },
+  {
+    up: migration_20261010_000000_drop_home_copy_fields.up,
+    down: migration_20261010_000000_drop_home_copy_fields.down,
+    name: '20261010_000000_drop_home_copy_fields'
+  },
+  {
+    up: migration_20261010_010000_drop_post_notes_archive_copy_fields.up,
+    down: migration_20261010_010000_drop_post_notes_archive_copy_fields.down,
+    name: '20261010_010000_drop_post_notes_archive_copy_fields'
+  },
+  {
+    up: migration_20261010_020000_drop_tags_stats_search_notfound_copy_fields.up,
+    down: migration_20261010_020000_drop_tags_stats_search_notfound_copy_fields.down,
+    name: '20261010_020000_drop_tags_stats_search_notfound_copy_fields'
+  },
+  {
+    up: migration_20261010_030000_drop_hero_button_footer_credit_fields.up,
+    down: migration_20261010_030000_drop_hero_button_footer_credit_fields.down,
+    name: '20261010_030000_drop_hero_button_footer_credit_fields'
+  },
+  {
+    up: migration_20261010_040000_drop_about_fields.up,
+    down: migration_20261010_040000_drop_about_fields.down,
+    name: '20261010_040000_drop_about_fields'
   },
 ];

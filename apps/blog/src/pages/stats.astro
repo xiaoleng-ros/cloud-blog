@@ -3,21 +3,21 @@ import { getCollection } from 'astro:content';
 import Icon from '../components/Icon.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { formatDate, getCategoryPath, getTagPath, sortPosts } from '../lib/posts';
-import { getSiteSettings } from '../lib/site-settings';
+import { getSiteSettings, getSiteSince } from '../lib/site-settings';
 import { buildSiteStats } from 'cloud-blog/shared/site-stats';
 import { siteAge } from 'cloud-blog/shared/site-age';
-import { PLACEHOLDER_SITE_SINCE } from 'cloud-blog/shared/site-defaults';
 
 const posts = sortPosts(await getCollection('posts'));
 const notes = await getCollection('notes');
 const stats = buildSiteStats(posts);
-const age = siteAge(PLACEHOLDER_SITE_SINCE);
+// 起始日来自后台「网站创建时间」；后台留空则为空串，整行不渲染（下面 age && 兜底）
+const age = siteAge(await getSiteSince());
 
 const settings = await getSiteSettings();
 const authorName = settings?.siteAuthor ?? '我';
 
 // 最近一次更新：取文章与随笔里较新的那个日期。
-// （原想放「站点已运行 N 天」，但起始日就设在昨天，显示「1 天」没有信息量。）
+// 展示优先级：有内容就显示「最近更新于」；完全没有内容时，才退回「站点已运行 N 天」兜底。
 const latestUpdate = [
   ...posts.map((p) => p.data.date).filter((d): d is Date => d instanceof Date),
   ...notes.map((n) => n.data.date),
@@ -211,7 +211,7 @@ const formatWords = (words: number) => {
       )}
     </section>
 
-    <p class="stats-since">
+    <p class="stats-since" data-sync-block="statsSince">
       {latestUpdate ? (
         <>
           <Icon name="clock" size={14} />

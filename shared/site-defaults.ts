@@ -23,7 +23,6 @@ export interface OfflineHero {
   name: string;
   subtitle: string;
   bio: string;
-  buttonLabel: string;
 }
 
 export interface OfflineFooter {
@@ -33,7 +32,6 @@ export interface OfflineFooter {
 }
 
 export interface OfflineAbout {
-  lead: string;
   paragraphs: string[];
   notes: NoteItem[];
   skills: SkillItem[];
@@ -60,7 +58,6 @@ export const OFFLINE_HERO: OfflineHero = {
   name: '云岫',
   subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
   bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
-  buttonLabel: '浏览文章',
 };
 
 /**
@@ -132,7 +129,6 @@ export const OFFLINE_FOOTER: OfflineFooter = {
 };
 
 export const OFFLINE_ABOUT: OfflineAbout = {
-  lead: '关于我',
   // 与在线路径同源的 ==高亮== 记号，渲染交给 formatAboutLine，避免默认值成为唯一一段裸 HTML
   paragraphs: [
     '我喜欢==神秘感==——云雾之间。',

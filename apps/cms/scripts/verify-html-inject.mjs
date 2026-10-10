@@ -10,7 +10,7 @@
  *   3.  带 title 替换
  *   4.  空 blocks
  *   5.  NON_ELEMENT_BLOCKS 跳过
- *   6.  空 blockHtml 跳过
+ *   6.  空 blockHtml 清空锚点内容（含 6b：锚点不存在仍进 skipped）
  *   7.  锚点不存在
  *   8.  同名嵌套 article（parse5 关键优势）
  *   9.  属性带单引号 / 无引号
@@ -89,14 +89,24 @@ console.log('\n[用例 5] NON_ELEMENT_BLOCKS 跳过（不进 injected 也不进 
   check('html 完全不变', r.html === html)
 }
 
-// ========== 用例 6：空 blockHtml ==========
-console.log('\n[用例 6] 空 blockHtml 进 skipped')
+// ========== 用例 6：空 blockHtml = 清空锚点内容 ==========
+console.log('\n[用例 6] 空 blockHtml 清空锚点内容（后台清空字段 → 前台实时清空）')
 {
   const html = '<!doctype html><html><body><div data-sync-block="a">X</div></body></html>'
   const r = injectSyncBlocks(html, { a: '' }, 'v')
+  check('a 在 injected（按清空处理）', r.injected.includes('a'))
+  check('原内容已被清空', !r.html.includes('>X<'))
+  check('锚点仍在、版本号已写', r.html.includes('data-sync-block="a"') && r.html.includes('data-sync-version="v"'))
+}
+
+// ========== 用例 6b：空 blockHtml 但锚点不存在 → skipped ==========
+console.log('\n[用例 6b] 空 blockHtml 但锚点不存在进 skipped')
+{
+  const html = '<!doctype html><html><body><div id="other">X</div></body></html>'
+  const r = injectSyncBlocks(html, { a: '' }, 'v')
   check('injected 为空', r.injected.length === 0)
   check('a 在 skipped', r.skipped.includes('a'))
-  check('原内容保持', r.html.includes('>X<'))
+  check('html 不变', r.html === html)
 }
 
 // ========== 用例 7：锚点不存在 ==========

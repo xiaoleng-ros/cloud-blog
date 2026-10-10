@@ -34,11 +34,6 @@ export function setAltMap(map) {
   globalAltMap = map instanceof Map ? map : new Map(Object.entries(map ?? {}));
 }
 
-/** 读取当前全局 altMap（诊断/测试用） */
-export function getAltMap() {
-  return globalAltMap;
-}
-
 /** 遍历 img 节点，按给定 map 或全局 map 补齐 alt */
 function applyImgAttrs(tree, altMap) {
   const lookup = altMap && altMap.size > 0 ? altMap : globalAltMap;

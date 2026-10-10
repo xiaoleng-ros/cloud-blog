@@ -19,6 +19,8 @@ export interface CachedBlock {
   version: string
   title: string | null
   blocks: Record<string, string | null>
+  /** 页面在数据层不存在（文章/分类/标签/归档页码查无此物）：模板兜底分支据此改判 404 */
+  notFound?: boolean
   ts: number
 }
 

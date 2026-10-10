@@ -38,7 +38,7 @@ const { tag, posts, tags } = Astro.props;
     </a>
     <header class="page-header">
       <p class="eyebrow">Tag</p>
-      <h1>{tag}</h1>
+      <h1 data-sync-block="termTitle">{tag}</h1>
       <p data-sync-block="termCount">这个标签下共有 {posts.length} 篇文章。</p>
     </header>
 

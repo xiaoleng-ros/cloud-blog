@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join, extname, resolve, sep } from 'node:path'
 import { NextResponse } from 'next/server'
 import { renderBlocksForPathname, resolveLegacyPostPath } from '../../lib/blog-render'
@@ -196,25 +196,183 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 /**
  * 用后台最新数据渲染该页面的区块并注入静态外壳。
  * 任何一步失败（后台不可用、渲染异常、超时）都退回原始外壳，保证页面永远能打开。
+ * notFound：数据层不存在该页面（文章/分类/标签/归档页码查无此物）——
+ * 模板兜底分支据此改判 404，避免给不存在的页面拿模板拼出「半成品 HTML」。
  */
-async function renderShellWithData(html: string, pathname: string): Promise<string> {
+async function renderShellWithData(
+  html: string,
+  pathname: string,
+): Promise<{ html: string; title: string | null; notFound: boolean }> {
   try {
     const timeout = injectWarmedUp ? WARM_INJECT_TIMEOUT_MS : COLD_INJECT_TIMEOUT_MS
     const result = await withTimeout(renderBlocksForPathname(pathname), timeout)
-    if (!result) return html
+    if (!result) return { html, title: null, notFound: false }
     injectWarmedUp = true
 
     const blocks: Record<string, string> = {}
     for (const [id, value] of Object.entries(result.blocks ?? {})) {
-      if (typeof value === 'string' && value !== '') blocks[id] = value
+      // '' 保留：语义是「清空该区块」（后台字段被清空时前台实时跟着清空）
+      if (typeof value === 'string') blocks[id] = value
     }
-    if (Object.keys(blocks).length === 0) return html
+    if (Object.keys(blocks).length === 0) {
+      return { html, title: result.title ?? null, notFound: result.notFound }
+    }
 
-    return injectSyncBlocks(html, blocks, result.version, result.title).html
+    return {
+      html: injectSyncBlocks(html, blocks, result.version, result.title).html,
+      title: result.title ?? null,
+      notFound: result.notFound,
+    }
   } catch (err) {
     console.error('[blog-html] 注入后台数据失败，返回静态外壳:', err)
-    return html
+    return { html, title: null, notFound: false }
   }
+}
+
+// ---------------------------------------------------------------------------
+// 「同形状模板」兜底：外壳缺失的新页面（新文章 / 新分类 / 新标签 / 新归档页）不再 404。
+// 取同类页面里已构建的外壳当模板 + 全量块注入；模板里烘着的「另一个页面」的
+// canonical / og:url / og:title 会在 rewriteTemplateHead 里一并改写。
+// ---------------------------------------------------------------------------
+
+interface ShapeTemplate {
+  file: string
+  /** 模板自身对应的页面路径（用于改写 head 里烘死的路径），如 /posts/AI纪元/3/ */
+  pathname: string
+}
+
+const shapeTemplateCache = new Map<string, ShapeTemplate | null>()
+
+/** 磁盘目录名是解码后的原文（astro 按参数原值建目录）；统一收敛成请求路径形态 */
+function fileToPathname(htmlDir: string, file: string): string {
+  const relative = file.slice(htmlDir.length).replace(/\\/g, '/').replace(/\/index\.html$/, '')
+  const segments = relative
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => safeDecode(segment))
+  return `/${segments.join('/')}/`
+}
+
+function cachedShapeTemplate(key: string, build: () => ShapeTemplate | null): ShapeTemplate | null {
+  const cached = shapeTemplateCache.get(key)
+  // 命中且模板文件仍在 → 直接用；重出外壳后旧模板被删会自动重扫
+  if (cached !== undefined && (!cached || existsSync(cached.file))) return cached
+  const fresh = build()
+  shapeTemplateCache.set(key, fresh)
+  return fresh
+}
+
+function findTermShapeTemplate(htmlDir: string, kind: 'categories' | 'tags'): ShapeTemplate | null {
+  try {
+    const kindDir = join(htmlDir, kind)
+    for (const entry of readdirSync(kindDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const file = join(kindDir, entry.name, 'index.html')
+      if (existsSync(file)) return { file, pathname: fileToPathname(htmlDir, file) }
+    }
+  } catch {
+    // 目录不存在等情况按「没有模板」处理
+  }
+  return null
+}
+
+function findPostShapeTemplate(htmlDir: string): ShapeTemplate | null {
+  const postsDir = join(htmlDir, 'posts')
+  const candidates: string[] = []
+  try {
+    for (const cat of readdirSync(postsDir, { withFileTypes: true })) {
+      if (!cat.isDirectory()) continue
+      // 只收两级（/posts/{分类}/{id}/index.html）；一级的 /posts/{id}/ 是旧地址外壳（noindex），不能当模板
+      for (const entry of readdirSync(join(postsDir, cat.name), { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        const file = join(postsDir, cat.name, entry.name, 'index.html')
+        if (existsSync(file)) candidates.push(file)
+      }
+    }
+  } catch {
+    return null
+  }
+  // 优先挑「无目录侧栏（TOC）」的文章外壳：封面位置与 article--toc 栅格都随 TOC 有无而变，
+  // 无 TOC 模板能覆盖多数形态（新文章带 TOC 时会缺侧栏，属可接受降级，重出外壳即恢复）
+  const chosen =
+    candidates.find((file) => {
+      try {
+        return !readFileSync(file, 'utf-8').includes('data-sync-block="tocSidebar"')
+      } catch {
+        return false
+      }
+    }) ??
+    candidates[0] ??
+    null
+  return chosen ? { file: chosen, pathname: fileToPathname(htmlDir, chosen) } : null
+}
+
+/** 按请求路径的形状找兜底模板；不是可兜底的动态形态时返回 null（照常 404） */
+function findShapeTemplate(pathname: string): ShapeTemplate | null {
+  const htmlDir = resolveHtmlDir()
+  if (!htmlDir) return null
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] === 'posts' && segments.length >= 3) {
+    return cachedShapeTemplate('post', () => findPostShapeTemplate(htmlDir))
+  }
+  if (segments[0] === 'categories' && segments.length === 2) {
+    return cachedShapeTemplate('categories', () => findTermShapeTemplate(htmlDir, 'categories'))
+  }
+  if (segments[0] === 'tags' && segments.length === 2) {
+    return cachedShapeTemplate('tags', () => findTermShapeTemplate(htmlDir, 'tags'))
+  }
+  if (segments[0] === 'archive' && segments.length === 2 && /^\d+$/.test(segments[1])) {
+    return cachedShapeTemplate('archive', () => {
+      const file = join(htmlDir, 'archive', 'index.html')
+      return existsSync(file) ? { file, pathname: '/archive/' } : null
+    })
+  }
+  return null
+}
+
+/** 与 astro 构建产物同口径的逐段编码（getPostPath 对每段做 encodeURIComponent） */
+function encodePathname(pathname: string): string {
+  return pathname
+    .split('/')
+    .map((segment) => (segment ? encodeURIComponent(segment) : segment))
+    .join('/')
+}
+
+/**
+ * 兜底模板里烘着「另一个页面」的路径与标题，把 head 里随页面变的两处改掉。
+ * 只做定向替换（canonical / og:url 的 URL 结尾 + og:title / twitter:title），
+ * 不能对全文做路径替换——/archive/ 这类前后缀形态会波及正文里的分页链接。
+ */
+function rewriteTemplateHead(
+  html: string,
+  templatePathname: string,
+  pathname: string,
+  title: string | null,
+): string {
+  let out = html
+  const from = encodePathname(templatePathname)
+  // 路由的 pathname 没有尾斜杠，模板路径与构建产物都带——补上再编码，避免改写后的
+  // canonical/og:url 丢掉尾斜杠（与站内链接形态不一致）
+  const to = encodePathname(pathname.endsWith('/') ? pathname : `${pathname}/`)
+  const swapPath = (url: string) => (from && url.endsWith(from) ? url.slice(0, -from.length) + to : url)
+  out = out.replace(
+    /(<link rel="canonical" href=")([^"]*)(")/,
+    (_match, head: string, url: string, tail: string) => `${head}${swapPath(url)}${tail}`,
+  )
+  out = out.replace(
+    /(<meta property="og:url" content=")([^"]*)(")/,
+    (_match, head: string, url: string, tail: string) => `${head}${swapPath(url)}${tail}`,
+  )
+  if (title) {
+    const escaped = title
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+    out = out.replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${escaped}$2`)
+    out = out.replace(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${escaped}$2`)
+  }
+  return out
 }
 
 export async function GET(
@@ -267,7 +425,7 @@ export async function GET(
 
   if (htmlPath) {
     const shell = readFileSync(htmlPath, 'utf-8')
-    const html = await renderShellWithData(shell, pathname)
+    const { html } = await renderShellWithData(shell, pathname)
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
@@ -276,6 +434,28 @@ export async function GET(
         'Cache-Control': 'no-store',
       },
     })
+  }
+
+  // 外壳缺失：按页面形状取同类模板兜底（新文章 / 新分类 / 新标签 / 新归档页不再 404）
+  const shape = findShapeTemplate(pathname)
+  if (shape) {
+    try {
+      const shell = readFileSync(shape.file, 'utf-8')
+      const injected = await renderShellWithData(shell, pathname)
+      // 数据层不存在该页面（已删除的旧 ID / 不存在的词条 / 超范围页码）：落下走 404，
+      // 别拿模板拼出半成品页面
+      if (!injected.notFound) {
+        const html = rewriteTemplateHead(injected.html, shape.pathname, pathname, injected.title)
+        return new NextResponse(html, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+          },
+        })
+      }
+    } catch (err) {
+      console.error('[blog-html] 模板兜底失败，走 404:', err)
+    }
   }
 
   // 找不到对应的页面：返回 Astro 生成的 404 页面（没有则退回纯文本）

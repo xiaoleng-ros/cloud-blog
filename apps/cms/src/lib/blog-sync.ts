@@ -13,6 +13,7 @@
  */
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils'
 import { getSnapshot, setSnapshot, type SyncSnapshot } from './sync-cache'
 
 // getPayload 实例进程内缓存（避免每次请求重建数据库连接）
@@ -277,7 +278,7 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
     title: doc.title,
     owner: doc.owner ?? undefined,
     description: doc.description ?? undefined,
-    icon: doc.icon ?? 'github',
+    icon: doc.icon ?? DEFAULT_PROJECT_ICON,
     href: doc.href ?? undefined,
     articleHref: doc.articleHref ?? undefined,
     stars: Number(doc.stars ?? 0),

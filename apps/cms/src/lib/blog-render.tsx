@@ -47,6 +47,10 @@ import {
   OFFLINE_SOCIALS,
   socialIconFor,
 } from 'cloud-blog/shared/site-defaults'
+// 站点运行时间（stats 页兜底行用）：与前台同一份算法
+import { siteAge } from 'cloud-blog/shared/site-age'
+// 站点统计聚合（stats 页卡片/标签数用）：与前台同一份实现
+import { buildSiteStats } from 'cloud-blog/shared/site-stats'
 // 图标唯一一张表：与 Astro 的 Icon.astro 同一份，品牌图形带官方色
 import {
   BRAND_ICONS,
@@ -86,6 +90,7 @@ import {
   getPostsByTag,
   ARCHIVE_PAGE_SIZE,
   getArchivePagePath,
+  getArchivePageNumbers,
   getArchivePageYears,
   getArchiveTotalPages,
   parseArchivePage,
@@ -164,7 +169,6 @@ function getHeroData(settings: Record<string, any> | null) {
     name: settings.name ?? '',
     subtitle: settings.subtitle ?? '',
     bio: settings.bio ?? '',
-    buttonLabel: settings.buttonLabel ?? '',
   }
 }
 
@@ -412,7 +416,7 @@ function renderPostSummary(
 
 /** 首页 Hero 卡片内容（锚点 index.astro 的 div[data-sync-block="heroCard"]） */
 function renderHeroCard(
-  hero: { greeting: string; name: string; subtitle: string; bio: string; buttonLabel: string },
+  hero: { greeting: string; name: string; subtitle: string; bio: string },
   socials: Array<{ href: string; icon: string; label: string }>,
 ): string {
   const socialHtml = socials
@@ -428,24 +432,18 @@ function renderHeroCard(
     })
     .join('')
 
-  // 每一项都只在后台真有内容时输出：结构对齐 index.astro 的条件渲染
+  // 每一项都只在后台真有内容时输出：结构对齐 index.astro 的条件渲染；
+  // 「浏览文章」按钮固定写死（原按钮文字字段已按用户要求删除）
   const titleHtml =
     hero.greeting || hero.name
       ? `<h1 class="hero__title">${escapeHtml(hero.greeting)}<span class="hero__name">${escapeHtml(
           hero.name,
         )}</span>！</h1>`
       : ''
-  const actionsHtml =
-    hero.buttonLabel || socials.length > 0
-      ? `<div class="hero__actions">
-    ${
-      hero.buttonLabel
-        ? `<a class="hero__tag" href="/archive/">${escapeHtml(hero.buttonLabel)}${iconSvg('arrow-right', 16)}</a>`
-        : ''
-    }
+  const actionsHtml = `<div class="hero__actions">
+    <a class="hero__tag" href="/archive/">浏览文章${iconSvg('arrow-right', 16)}</a>
     ${socials.length > 0 ? `<span class="hero__social" aria-label="社交链接">${socialHtml}</span>` : ''}
   </div>`
-      : ''
 
   return `<span class="hero__arrow" aria-hidden="true"></span>
   <span class="hero__sticker hero__sticker--1" aria-hidden="true"></span>
@@ -521,11 +519,69 @@ function icpOf(settings: SyncData['settings'] | null | undefined): string {
   return settings?.siteIcp?.trim() ?? ''
 }
 
+/** 页脚头像：后台「网站图标」优先，留空/不合法用站点默认头像（与 Footer.astro 一致） */
+function avatarOf(settings: SyncData['settings'] | null | undefined): string {
+  return safeHref(settings?.siteIcon, '/avatars/avatar.png')
+}
+
+/**
+ * 首页「站点运行时间」卡（锚点 index.astro 的 aside[data-sync-block="siteAge"]）。
+ * 后台「网站创建时间」留空 → 返回 ''（清空区块，全站「填了才显示」一致）；
+ * 数字按注入时刻算，页面脚本（SiteAge.astro）进页面后会用同一套算法再重算一遍。
+ * 标记必须与 SiteAge.astro 的产物逐字一致，否则块替换会出现两套样式/结构。
+ */
+function renderSiteAge(settings: SyncData['settings'] | null | undefined): string {
+  const since = String(settings?.siteCreatedAt ?? '').trim()
+  const age = siteAge(since)
+  if (!age) return ''
+  return `<section class="site-age" data-site-age data-since="${escapeAttr(since)}">
+    <div class="site-age__card">
+      <header class="site-age__head">
+        ${iconSvg('clock', 15)}
+        <h2>站点运行时间</h2>
+      </header>
+      <div class="site-age__figure">
+        ${iconSvg('clock', 30, 'site-age__glyph')}
+        <p class="site-age__count">
+          <span class="site-age__num" data-age="totalDays">${age.totalDays}</span>
+          <span class="site-age__unit">天</span>
+        </p>
+      </div>
+      <ul class="site-age__chips" aria-label="运行时长拆分">
+        <li class="site-age__chip site-age__chip--yellow"><b data-age="years">${age.years}</b>年</li>
+        <li class="site-age__chip site-age__chip--cyan"><b data-age="months">${age.months}</b>月</li>
+        <li class="site-age__chip site-age__chip--green"><b data-age="days">${age.days}</b>天</li>
+      </ul>
+    </div>
+  </section>`
+}
+
+/**
+ * 页脚两个区块（footerInner / footerBar）的统一组装：
+ * 作者、ICP、头像、版权年、底栏声明都从同一份 settings 取值，避免各页面 blocks 重复展开。
+ */
+function footerBlocks(settings: SyncData['settings'] | null | undefined): {
+  footerInner: string
+  footerBar: string
+} {
+  const doc = settings ?? null
+  return {
+    footerInner: renderFooterInner(
+      getFooterData(doc),
+      settings?.siteAuthor ?? site.author,
+      icpOf(settings),
+      avatarOf(settings),
+    ),
+    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
+  }
+}
+
 /** 页脚主体内容（锚点Footer.astro 的 div[data-sync-block="footerInner"]） */
 function renderFooterInner(
   footer: { subtitle: string; channels: Array<{ name: string; icon: string; href: string }>; groups: Array<{ name: string; icon: string; href: string }> },
   author: string,
   icp = '',
+  avatarSrc = '/avatars/avatar.png',
 ): string {
   // 图标表里没有的名字不渲染空 svg，只留文字（与 Footer.astro 的条件渲染一致）
   const glyph = (name: string) => (hasIcon(name) ? iconSvg(name, 15) : '')
@@ -551,7 +607,7 @@ function renderFooterInner(
   const hasLinks = footer.channels.length > 0 || footer.groups.length > 0
 
   return `<div class="site-footer__id">
-    <img src="/avatars/avatar.png" alt="${escapeAttr(author)}" class="site-footer__avatar" width="40" height="40" />
+    <img src="${escapeAttr(avatarSrc)}" alt="${escapeAttr(author)}" class="site-footer__avatar" width="40" height="40" />
     <div class="site-footer__id-text">
       <strong>${escapeHtml(author)}</strong>
       ${footer.subtitle ? `<span>${escapeHtml(footer.subtitle)}</span>` : ''}
@@ -568,11 +624,9 @@ function renderFooterInner(
   }`
 }
 
-/** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]） */
+/** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]）；声明文字字段已按用户要求删除，仅留版权行 */
 function renderFooterBar(author: string, year: number): string {
-  return `<span>© ${year} ${escapeHtml(author)}</span>
-  <span aria-hidden="true">·</span>
-  <span>由 <a href="https://astro.build" target="_blank" rel="noopener noreferrer">Astro</a> 构建</span>`
+  return `<span>© ${year} ${escapeHtml(author)}</span>`
 }
 
 /** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]） */
@@ -848,6 +902,28 @@ async function renderNote(note: MdEntry, altMap: Map<string, string>, anchor?: s
 }
 
 /** 随笔页 feed 内容（锚点 notes.astro 的 div[data-sync-block="notesFeed"]）与
+/**
+ * 随笔月份锚点：按日期倒序，每月第一条拿 `t-{年}-{月}`（月份不补零），其余条目没有 id。
+ * 与 notes.astro（lib/anchors.ts）同规则；随笔列表页与搜索深链共用（见 buildSiteIndex）。
+ */
+function noteMonthAnchorIds(notes: MdEntry[]): Map<string, string> {
+  const ordered = [...notes].sort(
+    (a, b) => (toDate(b.data.date)?.getTime() ?? 0) - (toDate(a.data.date)?.getTime() ?? 0),
+  )
+  const seenMonth = new Set<string>()
+  const anchors = new Map<string, string>()
+  for (const note of ordered) {
+    const parts = toShanghaiParts(toDate(note.data.date))
+    if (!parts) continue
+    const key = `${parts.year}-${Number(parts.month)}`
+    if (seenMonth.has(key)) continue
+    seenMonth.add(key)
+    anchors.set(note.id, `t-${key}`)
+  }
+  return anchors
+}
+
+/**
  *  时间索引内容（锚点 aside[data-sync-block="notesAside"]） */
 async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): Promise<{
   feed: string
@@ -865,18 +941,7 @@ async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): P
     else byYear.push({ year, notes: [note] })
   }
 
-  const monthAnchor = new Map<string, string>()
-  const seenMonth = new Set<string>()
-  for (const note of sorted) {
-    const parts = toShanghaiParts(toDate(note.data.date))
-    if (!parts) continue
-    // 月份保持不补零（t-2026-3），与 notes.astro 构建期生成的锚点 id 一致
-    const key = `${parts.year}-${Number(parts.month)}`
-    if (!seenMonth.has(key)) {
-      seenMonth.add(key)
-      monthAnchor.set(note.id, `t-${key}`)
-    }
-  }
+  const monthAnchor = noteMonthAnchorIds(sorted)
 
   const timeIndex = byYear.map((group) => ({
     year: group.year,
@@ -927,7 +992,6 @@ async function renderNotesFeed(notes: MdEntry[], altMap: Map<string, string>): P
 
 // SkillItem / NoteItem 与解析统一走 shared/about-format（前台同一份实现）
 interface AboutData {
-  lead: string
   paragraphs: string[]
   notes: NoteItem[]
   skills: SkillItem[]
@@ -937,14 +1001,12 @@ interface AboutData {
 function getAboutData(settings: Record<string, any> | null): AboutData {
   if (settings === null) {
     return {
-      lead: OFFLINE_ABOUT.lead,
       paragraphs: OFFLINE_ABOUT.paragraphs,
       notes: OFFLINE_ABOUT.notes,
       skills: OFFLINE_ABOUT.skills,
     }
   }
   return {
-    lead: settings.aboutLead ?? '',
     // 正文：==记号== → 高亮 span（整体转义后仅还原记号，比旧 HTML 白名单更严）；
     // 存量 HTML 写法在解析时自动转换，无需迁移数据
     paragraphs: splitAboutParagraphs(settings.aboutParagraphs),
@@ -984,20 +1046,13 @@ function renderAboutProfile(about: AboutData, postCount: number, firstYear: numb
   </div>`
     })
     .join('')
-  // 结构与条件渲染对齐 about.astro：后台留空的项整块不出
-  const introHtml =
-    about.lead || about.paragraphs.length > 0
-      ? `<div class="about__intro-card">
+  // 「ABOUT / 关于我 / 简介行」按用户要求写死（原字段已删）；结构与 about.astro 逐字对齐
+  const introHtml = `<div class="about__intro-card">
     <span class="about__eyebrow">ABOUT</span>
-    ${about.lead ? `<h1 id="about-heading" class="about__lead">${escapeHtml(about.lead)}</h1>` : ''}
+    <h1 id="about-heading" class="about__lead">关于我</h1>
     ${paragraphsHtml}
-    <div class="about__facts">
-      <span class="about__fact">${postCount} 篇文章</span>
-      <span class="about__fact">写于 ${firstYear} 至今</span>
-      <span class="about__fact">全站由 AI 开发</span>
-    </div>
+    <div class="about__facts"><span class="about__fact">${postCount} 篇文章</span><span class="about__fact">写于 ${firstYear} 至今</span><span class="about__fact">全站由 AI 开发</span></div>
   </div>`
-      : ''
   const notesSection =
     about.notes.length > 0 ? `<div class="about__notes">${notesHtml}</div>` : ''
 
@@ -1041,7 +1096,7 @@ function groupProjects(projects: ProjectEntry[]): ProjectGroup[] {
   })
 }
 
-/** 单个项目卡片（about.astro .proj） */
+/** 单个项目卡片（about.astro .proj）；「笔记」链接文字写死（原字段已删），有 articleHref 才出 */
 function renderProject(item: ProjectEntry): string {
   const starsHtml =
     item.stars > 0
@@ -1052,9 +1107,10 @@ function renderProject(item: ProjectEntry): string {
     .join('')
   // 项目链接同样是后台自由填写：与前台 fetchProjects 用同一套协议白名单
   const articleHref = safeHref(item.articleHref, '')
-  const noteHtml = articleHref
-    ? `<a class="proj__note" href="${escapeAttr(articleHref)}">笔记${iconSvg('arrow-right', 13)}</a>`
-    : ''
+  const noteHtml =
+    articleHref
+      ? `<a class="proj__note" href="${escapeAttr(articleHref)}">笔记${iconSvg('arrow-right', 13)}</a>`
+      : ''
   const projectHref = safeHref(item.href, '#')
   return `<article class="proj">
   <span class="proj__icon">${iconSvg(item.icon, 18)}</span>
@@ -1100,7 +1156,7 @@ function renderAboutProjects(projects: ProjectEntry[]): string {
     <h2 class="proj-section__label" id="${projectGroupDomId(group.title, index)}">${escapeHtml(group.title)}</h2>
     <p class="proj-section__desc">${escapeHtml(group.description)}</p>
   </div>
-  <div class="proj-grid">${group.items.map(renderProject).join('')}</div>
+  <div class="proj-grid">${group.items.map((item) => renderProject(item)).join('')}</div>
 </section>`
         : '',
     )
@@ -1138,19 +1194,18 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
   ].slice(0, 5)
 
   const hero = getHeroData(settings)
-  const heroBio = hero.bio.replace('{count}', String(posts.length))
   const socials = getSocials(settings)
   const siteName = settings?.siteName ?? site.name
 
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
-    heroCard: renderHeroCard({ ...hero, bio: heroBio }, socials),
+    ...footerBlocks(settings),
+    heroCard: renderHeroCard(hero, socials),
     heroPicks: renderHeroPicks(heroPicks),
     latestPosts: latest.map((p) => renderPostSummary(p)).join(''),
     heroCount: `全部 ${posts.length} 篇`,
+    siteAge: renderSiteAge(settings),
   }
 }
 
@@ -1183,8 +1238,7 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
+    ...footerBlocks(settings),
     // 标题保持原始文本（未转义）：客户端直接赋给 document.title，
     // 服务端注入 <title> 时再统一做一次 HTML 转义。
     pageTitle: `${post.data.title} - ${siteName}`,
@@ -1193,6 +1247,35 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
     tocSidebar: hasToc ? renderTocSidebar(tocGroups) : '',
     articleFooter: renderArticleFooter(newer, older, related),
   }
+}
+
+/** 归档分页条（锚点 archive/[...page].astro 的 div[data-sync-block="archivePager"]）；单页时返回 '' 清空 */
+function renderArchivePager(page: number, totalPages: number): string {
+  if (totalPages <= 1) return ''
+  const step = (direction: 'prev' | 'next', href: string | null) => {
+    const icon = direction === 'prev' ? iconSvg('arrow-left', 16) : iconSvg('arrow-right', 16)
+    const inner =
+      direction === 'prev'
+        ? `${icon}<span>上一页</span>`
+        : `<span>下一页</span>${icon}`
+    return href
+      ? `<a class="archive-pager__step" href="${escapeAttr(href)}" rel="${direction}">${inner}</a>`
+      : `<span class="archive-pager__step is-disabled" aria-hidden="true">${inner}</span>`
+  }
+  const list = getArchivePageNumbers(page, totalPages)
+    .map((num) =>
+      num === 0
+        ? '<li class="archive-pager__gap" aria-hidden="true">…</li>'
+        : num === page
+          ? `<li><span class="archive-pager__num is-current" aria-current="page">${num}</span></li>`
+          : `<li><a class="archive-pager__num" href="${escapeAttr(getArchivePagePath(num))}">${num}</a></li>`,
+    )
+    .join('')
+  return `<nav class="archive-pager" aria-label="归档分页" data-archive-pager>
+    ${step('prev', page > 1 ? getArchivePagePath(page - 1) : null)}
+    <ol class="archive-pager__list">${list}</ol>
+    ${step('next', page < totalPages ? getArchivePagePath(page + 1) : null)}
+  </nav>`
 }
 
 /** 归档页。path 形如 /archive/ 或 /archive/2/，只渲染该页的切片。 */
@@ -1209,25 +1292,24 @@ async function archiveBlocks(ctx: SyncData, path: string): Promise<Record<string
     brandName: siteName,
     // 导航高亮按当前分页路径判定，否则在第 2 页会丢掉「归档」高亮
     navLinks: renderNavLinks(ctx.nav, pagePath),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
+    ...footerBlocks(settings),
     archiveHeader: renderArchiveHeader(posts.length, page, totalPages),
     archiveSummary: renderArchiveSummary(getCategories(posts), getTags(posts)),
     archiveYears: renderArchiveYears(pageYears),
+    archivePager: renderArchivePager(page, totalPages),
   }
 }
 
 /** 随笔页 */
 async function notesBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
-  const { feed, aside } = await renderNotesFeed(ctx.notes, ctx.mediaAltMap)
   const settings = ctx.settings
+  const { feed, aside } = await renderNotesFeed(ctx.notes, ctx.mediaAltMap)
   const siteName = settings?.siteName ?? site.name
 
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/notes/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
+    ...footerBlocks(settings),
     notesFeed: feed,
     notesAside: aside,
   }
@@ -1251,14 +1333,116 @@ async function termBlocks(
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
+    ...footerBlocks(settings),
+    termTitle: escapeHtml(term),
     termSwitcher: renderTermSwitcher(terms, term, kind),
     termPostList: renderPostList(posts, true),
     termCount:
       kind === 'categories'
         ? `这个分类下共有 ${posts.length} 篇文章。`
         : `这个标签下共有 ${posts.length} 篇文章。`,
+  }
+}
+
+/**
+ * 标签墙页（/tags/）：页头（计数为动态数字，仍走同步；静态文案写死）。
+ * 注意：/tags/ 必须排在 termBlocks 的 `startsWith('/tags/')` 之前，
+ * 否则计数会按「空标签」的 termBlocks 分支渲染出错误内容。
+ */
+async function tagsIndexBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
+  const settings = ctx.settings
+  const siteName = settings?.siteName ?? site.name
+  const tags = buildSiteStats(sortPosts(ctx.posts)).tags
+
+  return {
+    brandName: siteName,
+    navLinks: renderNavLinks(ctx.nav, '/tags/'),
+    ...footerBlocks(settings),
+    tagsHeader: `<div class="tags-hero__top">
+    <p class="eyebrow">Tags</p>
+    <h1 class="tags-hero__title">标签墙</h1>
+  </div>
+  <p class="tags-hero__sub">拾取标签，发现更多感兴趣的内容</p>
+  <div class="tags-hero__rule" aria-hidden="true"><i></i></div>
+  <p class="tags-hero__count">共 <b>${tags.length}</b> 个标签</p>`,
+  }
+}
+
+/** 统计页（/stats/）：概览卡 + 逐年归档 + 底部更新行（静态文案写死，数字与日期仍走同步） */
+async function statsBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
+  const posts = sortPosts(ctx.posts)
+  const stats = buildSiteStats(posts)
+  const settings = ctx.settings
+  const siteName = settings?.siteName ?? site.name
+
+  // 概览卡：与 stats.astro 结构逐字一致（图标 + 数字 + 文案标签）
+  const card = (mod: string, iconName: string, value: string, label: string) => `<div class="stats-card stats-card--${mod}">
+    <span class="stats-card__icon" aria-hidden="true">${iconSvg(iconName, 20)}</span>
+    <div class="stats-card__body">
+      <b>${value}</b>
+      <span>${label}</span>
+    </div>
+  </div>`
+
+  // 逐年归档：字数转「万字 / 千字」（与 stats.astro 的 formatWords 同口径）
+  const formatWords = (words: number) => {
+    if (words >= 10_000) return `${(words / 10_000).toFixed(1)} 万字`
+    if (words >= 1_000) return `${(words / 1_000).toFixed(1)} 千字`
+    return `${words} 字`
+  }
+  // 逐年归档面板：锚点在 <section class="stats-panel"> 上，整段（含标题）都要渲染，
+  // 否则同步会把标题一并替换掉（标题里的年份范围与数据相关，本就该跟数据走）
+  const yearsList =
+    stats.years.length === 0
+      ? '<p class="stats-empty">还没有带日期的文章。</p>'
+      : `<ol class="stats-years">${stats.years
+          .map(
+            (row) => `<li class="stats-years__row">
+    <b class="stats-years__year">${escapeHtml(row.year)}</b>
+    <span class="stats-years__cell">${iconSvg('archive', 13)}${row.posts} 篇</span>
+    <span class="stats-years__cell stats-years__cell--tags">${iconSvg('hash', 13)}${row.tags} 标签</span>
+    <span class="stats-years__cell stats-years__cell--words">${iconSvg('download', 13)}${escapeHtml(formatWords(row.words))}</span>
+    <a href="/archive/" class="stats-years__more" aria-label="查看 ${escapeHtml(row.year)} 年归档">${iconSvg('arrow-right', 14)}</a>
+  </li>`,
+          )
+          .join('')}</ol>`
+  const yearsHtml = `<h2 id="stats-year-title" class="stats-panel__title">
+        ${iconSvg('clock', 16)}文章归档
+        <small>
+          ${escapeHtml(stats.firstYear)} — ${escapeHtml(stats.lastYear)}
+        </small>
+      </h2>
+      ${yearsList}`
+
+  // 底部行：有内容显示「最近更新于 X」，完全没有内容才退回「站点已运行」兜底（与 stats.astro 一致）
+  const latestUpdate = [
+    ...posts.map((p) => toDate(p.data.date)),
+    ...ctx.notes.map((n) => toDate(n.data.date)),
+  ]
+    .filter((d): d is Date => d instanceof Date)
+    .sort((a, b) => b.getTime() - a.getTime())[0]
+  let statsSince = ''
+  if (latestUpdate) {
+    statsSince = `${iconSvg('clock', 14)}\n最近更新于 <b>${escapeHtml(formatDate(latestUpdate))}</b>`
+  } else {
+    const age = siteAge(String(settings?.siteCreatedAt ?? '').trim())
+    if (age) {
+      statsSince = `${iconSvg('clock', 14)}\n站点已运行 <b>${age.totalDays}</b> 天（${age.years} 年 ${age.months} 月 ${age.days} 天）`
+    }
+  }
+
+  return {
+    brandName: siteName,
+    navLinks: renderNavLinks(ctx.nav, '/stats/'),
+    ...footerBlocks(settings),
+    statsCards: [
+      card('blue', 'archive', String(stats.postCount), '文章统计'),
+      card('yellow', 'spark', stats.wordCount.toLocaleString('zh-CN'), '字数统计'),
+      card('green', 'hash', String(stats.tagCount), '标签统计'),
+      card('pink', 'layers', String(ctx.notes.length), '随笔统计'),
+    ].join('\n    '),
+    statsYears: yearsHtml,
+    statsSince,
   }
 }
 
@@ -1277,8 +1461,7 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/about/'),
-    footerInner: renderFooterInner(getFooterData(settings), settings?.siteAuthor ?? site.author, icpOf(settings)),
-    footerBar: renderFooterBar(settings?.siteAuthor ?? site.author, currentYearShanghai()),
+    ...footerBlocks(settings),
     aboutProfile: renderAboutProfile(about, postCount, firstYear),
     aboutSkills: renderAboutSkills(about.skills),
     aboutProjects: renderAboutProjects(ctx.projects),
@@ -1311,13 +1494,180 @@ export async function resolveLegacyPostPath(pathname: string): Promise<string | 
   return post ? getPostPath(post) : null
 }
 
+// ---------------------------------------------------------------------------
+// 站内搜索索引（/site-index.json）：与前台 Astro 端点（apps/blog/src/lib/site-index.ts）同口径。
+// 9527/线上由 CMS 动态生成 —— 新发的文章立刻能搜到，不再依赖外壳重建。
+// ---------------------------------------------------------------------------
+
+interface SiteIndexEntry {
+  kind: 'page' | 'post' | 'note' | 'project' | 'category' | 'tag'
+  title: string
+  subtitle: string
+  meta: string
+  url: string
+  tags: string[]
+  text: string
+}
+
+/** 拼小写匹配域：空值直接丢掉，避免多余空格把词切碎（与前台 site-index.ts 同一份规则） */
+function matchField(...parts: Array<string | string[] | undefined | null>): string {
+  return parts
+    .flat()
+    .filter((part): part is string => Boolean(part))
+    .join(' ')
+    .toLowerCase()
+}
+
+const stripMarkdown = (value: string) =>
+  value
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`]/g, '')
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^[-+]\s+/, '')
+    .trim()
+
+/** 随笔大多没有标题，拿正文首行当摘要（与前台同规则） */
+function noteFirstLine(body: string): string {
+  for (const line of body.split('\n')) {
+    const text = stripMarkdown(line)
+    if (text) return text.length > 46 ? `${text.slice(0, 46)}…` : text
+  }
+  return ''
+}
+
+/** 导航之外的常驻页面（与前台 site-index.ts 的 EXTRA_PAGES 一致） */
+const EXTRA_INDEX_PAGES: Array<{ href: string; label: string; keywords: string }> = [
+  { href: '/stats/', label: '统计', keywords: '数据 statistics 归档 标签墙' },
+  { href: '/tags/', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
+]
+
+export function buildSiteIndex(ctx: {
+  posts: MdEntry[]
+  notes: MdEntry[]
+  projects: ProjectEntry[]
+  nav: Array<{ href: string; label: string }>
+}): SiteIndexEntry[] {
+  const posts = sortPosts(ctx.posts)
+
+  const pageEntries: SiteIndexEntry[] = [
+    ...ctx.nav
+      .filter((item) => item.href && item.label)
+      .map((item) => ({
+        kind: 'page' as const,
+        title: item.label,
+        subtitle: '',
+        meta: '',
+        url: item.href,
+        tags: [] as string[],
+        text: matchField(item.label, item.href),
+      })),
+    ...EXTRA_INDEX_PAGES.map((item) => ({
+      kind: 'page' as const,
+      title: item.label,
+      subtitle: '',
+      meta: '',
+      url: item.href,
+      tags: [] as string[],
+      text: matchField(item.label, item.href, item.keywords),
+    })),
+  ]
+
+  const postEntries: SiteIndexEntry[] = posts.map((post) => {
+    const excerpt = getPostExcerpt(post) ?? ''
+    return {
+      kind: 'post',
+      title: String(post.data.title ?? ''),
+      subtitle: excerpt,
+      meta: post.data.date ? formatDate(post.data.date) : '',
+      url: getPostPath(post),
+      tags: getPostTags(post),
+      text: matchField(
+        post.data.title,
+        excerpt,
+        getPostCategory(post),
+        getPostTags(post),
+        post.data.keywords,
+      ),
+    }
+  })
+
+  const noteAnchors = noteMonthAnchorIds(ctx.notes)
+  const noteEntries: SiteIndexEntry[] = ctx.notes.map((note) => {
+    const title = String(note.data.title ?? '').trim()
+    const excerpt = noteFirstLine(note.body ?? '')
+    const anchor = noteAnchors.get(note.id)
+    return {
+      kind: 'note',
+      title: title || excerpt || `${formatDate(note.data.date)} 的随笔`,
+      subtitle: title ? excerpt : '',
+      meta: formatDate(note.data.date),
+      url: anchor ? `/notes/#${anchor}` : '/notes/',
+      tags: (note.data.tags as string[] | undefined) ?? [],
+      text: matchField(note.data.title, excerpt, note.data.mood, note.data.tags),
+    }
+  })
+
+  const groups = groupProjects(ctx.projects)
+  const groupIds = new Map(groups.map((group, index) => [group.title, projectGroupDomId(group.title, index)]))
+  const projectEntries: SiteIndexEntry[] = ctx.projects.map((project) => ({
+    kind: 'project',
+    title: project.title,
+    subtitle: project.description ?? '',
+    meta: project.group,
+    // 项目没有详情页：能跳文章就跳文章，否则落到关于页分组锚点（与前台同规则）
+    url: project.articleHref ?? `/about/#${groupIds.get(project.group)}`,
+    tags: project.tags ?? [],
+    text: matchField(project.title, project.description, project.group, project.owner, project.tags),
+  }))
+
+  const termEntries: SiteIndexEntry[] = [
+    ...getCategories(posts).map((term) => ({
+      kind: 'category' as const,
+      title: term.name,
+      subtitle: '',
+      meta: `${term.count} 篇`,
+      url: getCategoryPath(term.name),
+      tags: [] as string[],
+      text: matchField(term.name),
+    })),
+    ...getTags(posts).map((term) => ({
+      kind: 'tag' as const,
+      title: term.name,
+      subtitle: '',
+      meta: `${term.count} 篇`,
+      url: getTagPath(term.name),
+      tags: [] as string[],
+      text: matchField(term.name),
+    })),
+  ]
+
+  return [...pageEntries, ...postEntries, ...noteEntries, ...projectEntries, ...termEntries]
+}
+
 export async function renderBlocksForPathname(pathname: string): Promise<{
   version: string
   title: string | null
   blocks: Record<string, string | null>
+  /** 数据层不存在该页面（文章/分类/标签/归档页码）：外壳缺失的模板兜底据此改判 404 */
+  notFound: boolean
+  /**
+   * 非 DOM 区块的运行时值（页面脚本按需应用，见 BaseLayout 的 applyRuntime）：
+   * - icon：站点图标地址（favicon / apple-touch，与页脚头像同一条兜底）
+   * - playlist：后台歌单 ID 的「已校验」值；null = 后台留空（前台退回构建期兜底/env），
+   *   '' = 明确失效（应隐藏播放器）。非法值不回退 env，与 MusicPlayer 构建期口径一致。
+   * 与区块缓存同版本键控：version 变化才重新计算，缓存命中时按同一快照现算（开销可忽略）。
+   */
+  runtime: { icon: string; playlist: string | null }
 }> {
   const snapshot = await getSyncData()
   const version = snapshot.version
+
+  const playlistRaw = String(snapshot.settings?.neteasePlaylistId ?? '').trim()
+  const runtime = {
+    icon: avatarOf(snapshot.settings),
+    playlist: /^\d+$/.test(playlistRaw) ? playlistRaw : playlistRaw ? '' : null,
+  }
 
   // 路径归一化：/about 与 /about/ 视为同一份缓存（服务端注入与前台轮询拿到的 URL 形式可能不同）
   const path = pathname.endsWith('/') ? pathname : `${pathname}/`
@@ -1325,7 +1675,7 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
   // 命中区块缓存：版本号一致 → 直接返回，零查库、零渲染（~1ms）
   const cached = getBlock(path)
   if (cached && cached.version === version) {
-    return { version, title: cached.title, blocks: cached.blocks }
+    return { version, title: cached.title, blocks: cached.blocks, notFound: cached.notFound ?? false, runtime }
   }
 
   const ctx: SyncData = {
@@ -1341,6 +1691,7 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
 
   let title: string | null = siteName
   let blocks: Record<string, string | null>
+  let notFound = false
 
   if (path === '/') {
     blocks = await homeBlocks(ctx)
@@ -1348,6 +1699,8 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
   } else if (path.startsWith('/posts/')) {
     blocks = await postBlocks(ctx, path)
     title = (blocks.pageTitle as string) ?? siteName
+    // postBlocks 查无文章时只返回 { postContent: null }
+    notFound = Object.keys(blocks).length === 1 && blocks.postContent === null
   } else if (path === '/notes/') {
     blocks = await notesBlocks(ctx)
     title = `随笔 - ${siteName}`
@@ -1356,20 +1709,32 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
     blocks = await archiveBlocks(ctx, path)
     const page = parseArchivePage(path)
     title = page > 1 ? `归档 - 第 ${page} 页 - ${siteName}` : `归档 - ${siteName}`
+    notFound = page < 1 || page > getArchiveTotalPages(ctx.posts.length)
   } else if (path === '/about/') {
     blocks = await aboutBlocks(ctx)
     title = `关于 - ${siteName}`
+  } else if (path === '/stats/') {
+    blocks = await statsBlocks(ctx)
+    title = `数据统计 - ${siteName}`
+  } else if (path === '/tags/') {
+    // 必须排在 startsWith('/tags/') 之前：否则标签墙页会落进「标签词条页」的分支
+    blocks = await tagsIndexBlocks(ctx)
+    title = `标签 - ${siteName}`
   } else if (path.startsWith('/categories/')) {
+    const term = decodeURIComponent(path.split('/')[2] ?? '')
     blocks = await termBlocks(ctx, path, 'categories')
     title = `分类 - ${siteName}`
+    notFound = !getCategories(ctx.posts).some((t) => t.name === term)
   } else if (path.startsWith('/tags/')) {
+    const term = decodeURIComponent(path.split('/')[2] ?? '')
     blocks = await termBlocks(ctx, path, 'tags')
     title = `标签 - ${siteName}`
+    notFound = !getTags(ctx.posts).some((t) => t.name === term)
   } else {
     blocks = {}
     title = siteName
   }
 
-  setBlock(path, { version, title, blocks, ts: Date.now() })
-  return { version, title, blocks }
+  setBlock(path, { version, title, blocks, notFound, ts: Date.now() })
+  return { version, title, blocks, notFound, runtime }
 }

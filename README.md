@@ -6,7 +6,7 @@
 
 ![Astro](https://img.shields.io/badge/Astro-7.2-orange?logo=astro&logoColor=ff5d01)
 ![Payload](https://img.shields.io/badge/Payload-3.88-gray?logo=payload&logoColor=ffffff)
-![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?logo=opensourceinitiative&logoColor=white)
 

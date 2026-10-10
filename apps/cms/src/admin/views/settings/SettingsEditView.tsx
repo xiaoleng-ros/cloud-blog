@@ -104,7 +104,7 @@ const SECTIONS: SectionDef[] = [
       </>,
     ),
     fields: [
-      { name: 'siteIcon', label: '网站图标', type: 'text', span: 2, widget: 'uploader' },
+      { name: 'siteIcon', label: '网站图标', type: 'text', span: 2, widget: 'uploader', hint: '用作浏览器标签页图标与页脚头像；留空则用站点默认头像。' },
       {
         name: 'siteIcp',
         label: 'ICP 备案号',
@@ -130,7 +130,6 @@ const SECTIONS: SectionDef[] = [
       { name: 'name', label: '名字', type: 'text' },
       { name: 'subtitle', label: '副标题', type: 'text', span: 2 },
       { name: 'bio', label: '介绍文字', type: 'textarea', span: 2, rows: 4 },
-      { name: 'buttonLabel', label: '浏览文章按钮文字', type: 'text', span: 2 },
     ],
   },
   {
@@ -189,7 +188,6 @@ const SECTIONS: SectionDef[] = [
       </>,
     ),
     fields: [
-      { name: 'aboutLead', label: '关于页大标题', type: 'text', span: 2, narrow: true },
       {
         name: 'aboutParagraphs',
         label: '关于页正文',

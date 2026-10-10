@@ -230,6 +230,11 @@ export interface InjectResult {
  * 找不到锚点的区块会被跳过（例如构建时该区块为空、模板里根本没有这段 DOM），
  * 此时仍由客户端轮询兜底。
  *
+ * 区块值语义：
+ * - 非字符串（null / undefined）→ 不处理该区块（进 skipped）
+ * - 空字符串 `''` → **清空锚点内容**（后台字段被清空时，前台要实时跟着清空）
+ * - 其余字符串 → 作为锚点的 innerHTML 注入
+ *
  * 关键行为：
  * - **只解析一次**：parse5 DOM 遍历一遍 O(n)
  * - **不做全量序列化**：非锚点区域字节与原文 100% 一致
@@ -237,7 +242,7 @@ export interface InjectResult {
  * - **降级保底**：任何解析失败都返回原始 html + 全 skipped
  *
  * @param html - 原始静态 HTML 外壳
- * @param blocks - 后台渲染的区块 HTML 字典：blockId -> innerHTML
+ * @param blocks - 后台渲染的区块 HTML 字典：blockId -> innerHTML（'' = 清空）
  * @param version - 数据版本号，写入每个锚点的 data-sync-version
  * @param title - 可选，传入时会替换 <title> 内容
  * @returns 注入后的 HTML 及 injected / skipped 列表
@@ -265,19 +270,19 @@ export function injectSyncBlocks(
     }
   }
 
-  // 2) 预计算 wantedIds：只关心真正要注入的 blockId（跳过 NON_ELEMENT + 空内容）
+  // 2) 预计算 wantedIds：只关心真正要处理的 blockId（跳过 NON_ELEMENT + 非字符串；'' 也要入场，语义是清空）
   const wantedIds = new Set<string>()
   for (const [id, blockHtml] of Object.entries(blocks)) {
     if (NON_ELEMENT_BLOCKS.has(id)) continue
-    if (typeof blockHtml !== 'string' || blockHtml === '') continue
+    if (typeof blockHtml !== 'string') continue
     wantedIds.add(id)
   }
 
   if (wantedIds.size === 0) {
-    // 提前算好 skipped：所有非元素空内容
+    // 提前算好 skipped：所有非字符串内容
     for (const [id, blockHtml] of Object.entries(blocks)) {
       if (NON_ELEMENT_BLOCKS.has(id)) continue
-      if (typeof blockHtml !== 'string' || blockHtml === '') skipped.push(id)
+      if (typeof blockHtml !== 'string') skipped.push(id)
     }
     return { html, injected, skipped }
   }
@@ -297,12 +302,12 @@ export function injectSyncBlocks(
     }
   }
 
-  // 4) 逐个决定注入 / 跳过，并抽出 openTag 原文片段
+  // 4) 逐个决定注入 / 跳过，并抽出 openTag 原文片段（'' 也注入：把锚点内容替换为空 = 清空）
   type Hit = { openStart: number; innerEnd: number; openTag: string; blockHtml: string }
   const hits: Hit[] = []
   for (const [blockId, blockHtml] of Object.entries(blocks)) {
     if (NON_ELEMENT_BLOCKS.has(blockId)) continue
-    if (typeof blockHtml !== 'string' || blockHtml === '') {
+    if (typeof blockHtml !== 'string') {
       skipped.push(blockId)
       continue
     }

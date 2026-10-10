@@ -8,6 +8,7 @@ import { defaultSchema } from 'rehype-sanitize';
 import { getMdSanitizeLists } from 'cloud-blog/shared/md-sanitize-schema.mjs';
 import { absoluteUrl, site } from '../lib/posts';
 import { getSiteSettings } from '../lib/site-settings';
+import { safeHref } from 'cloud-blog/shared/html-safety';
 import '../styles/global.css';
 
 // 客户端兜底净化的白名单与净化器共用同一份派生（shared/md-sanitize-schema），构建期序列化为 JSON
@@ -43,6 +44,9 @@ const defaultInfo = {
   description: settings?.siteDescription ?? site.description,
   author: settings?.siteAuthor ?? site.author,
 };
+
+// 站点图标（浏览器标签页/收藏夹）：后台「网站配置 → 网站图标」优先，留空用默认头像
+const siteIcon = safeHref(settings?.siteIcon, '/avatars/avatar.png');
 
 const {
   title = defaultInfo.name,
@@ -127,8 +131,8 @@ const routeMotion = {
     <meta name="author" content={defaultInfo.author} />
     <meta id="theme-color" name="theme-color" content="#fbf7ed" />
     <meta name="generator" content={Astro.generator} />
-    <link rel="icon" type="image/png" href="/avatars/avatar.png" />
-    <link rel="apple-touch-icon" href="/avatars/avatar.png" />
+    <link rel="icon" type="image/png" href={siteIcon} />
+    <link rel="apple-touch-icon" href={siteIcon} />
     {walineServer && <meta name="waline-server" content={walineServer} />}
     {walineOrigin && <link rel="preconnect" href={walineOrigin} crossorigin />}
     <link rel="preconnect" href="https://cravatar.cn" />
@@ -174,6 +178,15 @@ const routeMotion = {
         set:html={JSON.stringify(schema).replace(/</g, '\\u003c')}
       />
     ))}
+    <script is:inline>
+      // 「首次后台同步就绪」信号：body 末尾的同步脚本跑完第一次 sync 后 resolve（成功/失败都算）。
+      // 组件（如音乐播放器）依赖它：外壳里的 data-* 是上次构建的快照，必须等同步把运行时值
+      // 刷进来之后再读取，否则刷新后会拿旧值（详见 MusicPlayer 的 boot 等待）。
+      window.__blogSyncReadyState = {};
+      window.__blogSyncReady = new Promise((resolve) => {
+        window.__blogSyncReadyState.resolve = resolve;
+      });
+    </script>
     <ClientRouter />
     <script is:inline>
       (() => {
@@ -815,6 +828,18 @@ const routeMotion = {
         window.__blogSyncController = controller;
         const signal = controller.signal;
 
+        // 首次同步跑完就 resolve 头部的 __blogSyncReady（成功/失败都算），幂等
+        const markFirstSyncDone = (() => {
+          let done = false;
+          return () => {
+            if (done) return;
+            done = true;
+            try {
+              window.__blogSyncReadyState?.resolve?.();
+            } catch {}
+          };
+        })();
+
         // 同步配置常量（集中定义避免魔法值散落在逻辑中）
         const KEY = 'blog-data-version';
         const SSE_STREAM_URL = '/api/blog-sync/stream';
@@ -844,7 +869,32 @@ const routeMotion = {
         const SAN = window.__mdSanitizeLists ?? {};
         const TAGS = new Set(SAN.tags);
         // 这些标签即便不在白名单也整棵子树丢弃（unwrap 会把脚本内容变成可见文本节点）
-        const DROP_SUBTREE = new Set(['script', 'style', 'object', 'embed', 'frame', 'form', 'template', 'noscript', 'svg', 'math']);
+        const DROP_SUBTREE = new Set(['script', 'style', 'object', 'embed', 'frame', 'form', 'template', 'noscript', 'math']);
+        // —— 安全 SVG 子集 ——
+        // 白名单表（rehype-sanitize defaultSchema + MD_EXTRA_TAGS）不含 svg 家族，但站内
+        // 所有注入区块都带内联图标（shared/icon-paths 统一产出 svg/g/path/circle/rect…）。
+        // 若照旧「svg 整棵子树丢弃」，SSE 实时替换一次区块，图标就会全部消失。
+        // 这里单独放行一份受控子集：元素/属性双白名单 + 沿用 on*/URL 协议/style 的既有限制；
+        // 重建时必须走 createElementNS，否则拿到的是不会渲染的 HTML 命名空间元素。
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const SVG_TAGS = new Set(['svg', 'g', 'path', 'circle', 'rect', 'ellipse', 'line', 'polyline', 'polygon', 'title']);
+        const SVG_COMMON_ATTRS = new Set([
+          'class', 'style', 'aria-hidden', 'role', 'focusable', 'viewbox', 'width', 'height',
+          'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+          'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit', 'opacity', 'transform',
+          'fill-rule', 'clip-rule',
+        ]);
+        const SVG_ATTR_SETS = new Map(Object.entries({
+          path: ['d', 'pathlength'],
+          circle: ['cx', 'cy', 'r'],
+          ellipse: ['cx', 'cy', 'rx', 'ry'],
+          rect: ['x', 'y', 'rx', 'ry'],
+          line: ['x1', 'y1', 'x2', 'y2'],
+          polyline: ['points'],
+          polygon: ['points'],
+        }));
+        const svgAttrAllowed = (tag, name) =>
+          SVG_COMMON_ATTRS.has(name) || (SVG_ATTR_SETS.get(tag)?.includes(name) ?? false);
         const URL_ATTRS = new Set(SAN.urlAttributes);
         const HREF_PROTOCOLS = new Set(SAN.protocols?.href ?? []);
         const SRC_PROTOCOLS = new Set(SAN.protocols?.src ?? []);
@@ -887,23 +937,25 @@ const routeMotion = {
             if (child.nodeType !== Node.ELEMENT_NODE) continue; // 注释/其它节点：丢弃
             const tag = child.tagName.toLowerCase();
             if (DROP_SUBTREE.has(tag)) continue;
-            if (tag === 'iframe') {
+            const inSvg = SVG_TAGS.has(tag);
+            if (!inSvg && tag === 'iframe') {
               const src = child.getAttribute('src') ?? '';
               // 非白名单 host 的 iframe 整节点丢弃（服务端 schema 此时已剥 src，这里兜住篡改后的响应）
               if (!urlOk(src, 'src') || !iframeSrcOk(src)) continue;
             }
-            if (!TAGS.has(tag)) {
+            if (!inSvg && !TAGS.has(tag)) {
               frag.appendChild(cleanChildren(child));
               continue;
             }
-            const el = document.createElement(tag);
+            const el = inSvg ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
             for (const attr of Array.from(child.attributes)) {
               const name = attr.name.toLowerCase();
               if (name.startsWith('on')) continue;
-              if (!attrAllowed(tag, name)) continue;
+              if (inSvg ? !svgAttrAllowed(tag, name) : !attrAllowed(tag, name)) continue;
               if (URL_ATTRS.has(name) && !urlOk(attr.value, name)) continue;
               // style 不再全放行：url()/expression/behavior 这类可外联或可执行的写法整体丢弃该属性
               if (name === 'style' && /url\s*\(|expression\s*\(|javascript:|behavior\s*:/i.test(compactUrl(attr.value))) continue;
+              // SVG 属性名大小写敏感（viewBox/pathLength），按原样写回，别用 toLowerCase 后的名字
               el.setAttribute(attr.name, attr.value);
             }
             el.appendChild(cleanChildren(child));
@@ -916,11 +968,12 @@ const routeMotion = {
           return cleanChildren(doc.body);
         };
 
-        // 更新某个锚点的内容；找不到锚点或内容为空则跳过，返回是否更新成功
+        // 更新某个锚点的内容；找不到锚点或值为 null 则跳过，返回是否更新成功。
+        // 服务端约定：'' 表示「清空该区块」（后台字段被清空时要实时跟着清空），null 表示「不处理」。
         // 用原始 HTML 字符串做「这块真变了没」的比较，替代旧的 innerHTML 往返对比（不再需要序列化）
         const lastAppliedHtml = new WeakMap();
         const applyBlock = (id, html, version) => {
-          if (html == null || html === '') return false;
+          if (html == null) return false;
           const el = document.querySelector(`[data-sync-block="${id}"]`);
           if (!el) return false;
           // 服务端在返回 HTML 时已经用**同一版本号**注入过这一块 → 直接跳过。
@@ -939,6 +992,38 @@ const routeMotion = {
             node.dataset.revealed = '1';
           });
           return true;
+        };
+
+        // 运行时字段（图标 / 歌单等非 DOM 区块）：服务端在响应里带最新值，这里按需刷进 head 与组件属性。
+        // - icon：后台「网站图标」→ favicon / apple-touch 两个 link（外壳里的 href 是构建快照）
+        // - playlist：后台「歌单 ID」；null 表示未配置，退回外壳里的 baked 值（env 兜底在构建期已解析）
+        const applyRuntime = (runtime) => {
+          if (!runtime || typeof runtime !== 'object') return false;
+          let changed = false;
+
+          const icon = typeof runtime.icon === 'string' ? runtime.icon : '';
+          if (icon) {
+            document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').forEach((link) => {
+              if (link.getAttribute('href') !== icon) {
+                link.setAttribute('href', icon);
+                changed = true;
+              }
+            });
+          }
+
+          const player = document.querySelector('[data-music-player]');
+          if (player) {
+            // 后台留空（null）→ 退回构建期 env 兜底值；'' 是明确停用；字符串则是最新值
+            const fallback = player.dataset.playlistFallback ?? '';
+            const next = typeof runtime.playlist === 'string' ? runtime.playlist : fallback;
+            if ((player.dataset.playlistId ?? '') !== next) {
+              player.dataset.playlistId = next;
+              player.hidden = !next;
+              changed = true;
+            }
+          }
+
+          return changed;
         };
 
         // 页面加载后的首次同步必须无条件应用区块：
@@ -975,15 +1060,16 @@ const routeMotion = {
               const applied = applyBlock(id, html, data.version);
               updatedAny = updatedAny || applied;
             }
+            const runtimeChanged = applyRuntime(data.runtime);
             if (data.title && document.title !== data.title) {
               document.title = data.title;
             }
             // 正文被替换后，重新绑定复制按钮/图片灯箱等交互
-            if (updatedAny) {
-              if (window.__blogInitPostContent) {
-                window.__blogInitPostContent();
-              }
-              // 通知页面级脚本（如归档页「展开其余标签」）重新绑定
+            if (updatedAny && window.__blogInitPostContent) {
+              window.__blogInitPostContent();
+            }
+            if (updatedAny || runtimeChanged) {
+              // 通知页面级脚本（如归档页「展开其余标签」、播放器歌单变更）重新绑定/响应
               document.dispatchEvent(new CustomEvent('blog:sync-updated'));
             }
             try {
@@ -992,6 +1078,9 @@ const routeMotion = {
           } catch (err) {
             if (err?.name === 'AbortError') return;
             // 网络失败静默重试，避免控制台刷屏
+          } finally {
+            // 首次同步无论成败都放行等待运行时值的组件（如播放器）
+            markFirstSyncDone();
           }
         };
 

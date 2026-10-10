@@ -16,6 +16,7 @@ import {
   OFFLINE_FOOTER,
   OFFLINE_HERO,
   OFFLINE_SOCIALS,
+  PLACEHOLDER_SITE_SINCE,
   socialIconFor,
   type FooterLinkItem,
 } from 'cloud-blog/shared/site-defaults';
@@ -32,7 +33,6 @@ export interface SiteSettingsData {
   name?: string;
   subtitle?: string;
   bio?: string;
-  buttonLabel?: string;
   /** 社交链接：textarea 字符串，每行一条「平台 链接」 */
   socials?: string;
   /** 页脚：副标题与链接/群组（textarea 字符串） */
@@ -41,16 +41,20 @@ export interface SiteSettingsData {
   footerGroups?: string;
   /** 页脚：ICP 备案号 */
   siteIcp?: string;
-  /** 关于页：标题/正文/便签/技能（textarea 字符串） */
-  aboutLead?: string;
+  /** 网站配置：网站图标（用作浏览器标签页图标与页脚头像，留空用默认头像） */
+  siteIcon?: string;
+  /** 网站配置：网站创建时间（YYYY-MM-DD 文本，站点运行时间从这里算） */
+  siteCreatedAt?: string;
+  /** 关于页：正文/便签/技能（textarea 字符串） */
   aboutParagraphs?: string;
   aboutNotes?: string;
   skills?: string;
 }
 
 // 站点设置模块级缓存：同一构建/开发会话内重复调用不会每次都请求后台。
-// TTL 过期后重新拉取，兼顾实时性与带宽。后台不可用时返回 null 并保留过期缓存作为降级。
-const SETTINGS_CACHE_TTL = 60_000;
+// 5s 短缓存：后台改设置后，dev 浏览最迟 ~5 秒内跟上（构建是一次性进程，影响可忽略）。
+// 后台不可用时返回 null 并保留过期缓存作为降级。
+const SETTINGS_CACHE_TTL = 5_000;
 let settingsCache: { data: SiteSettingsData | null; ts: number } | null = null;
 
 export async function getSiteSettings(): Promise<SiteSettingsData | null> {
@@ -66,6 +70,18 @@ export async function getSiteSettings(): Promise<SiteSettingsData | null> {
     // 请求失败时保留过期缓存（比完全不可用更好）
     return settingsCache?.data ?? null;
   }
+}
+
+/**
+ * 站点起始日（「站点运行时间」的唯一数据出口）：
+ * - 后台填了 → 用后台值（YYYY-MM-DD；解析与日历口径统一在 shared/site-age，按 Asia/Shanghai 定格）
+ * - 后台可用但留空 → 返回空串，调用方整块不渲染（全站「填了才显示」规则）
+ * - 后台整体不可用 → 离线兜底常量，保证宕机时这块仍在
+ */
+export async function getSiteSince(): Promise<string> {
+  const settings = await getSiteSettings();
+  if (settings === null) return PLACEHOLDER_SITE_SINCE;
+  return (settings.siteCreatedAt ?? '').trim();
 }
 
 /** 导航项：后台「导航管理」Global 优先，缺失时回退默认四项 */
@@ -107,7 +123,6 @@ export async function getHero(): Promise<{
   name: string;
   subtitle: string;
   bio: string;
-  buttonLabel: string;
 }> {
   const settings = await getSiteSettings();
   if (settings === null) return { ...OFFLINE_HERO };
@@ -116,7 +131,6 @@ export async function getHero(): Promise<{
     name: settings.name ?? '',
     subtitle: settings.subtitle ?? '',
     bio: settings.bio ?? '',
-    buttonLabel: settings.buttonLabel ?? '',
   };
 }
 
@@ -197,7 +211,6 @@ import {
 } from 'cloud-blog/shared/about-format';
 
 export interface AboutData {
-  lead: string;
   paragraphs: string[];
   notes: NoteItem[];
   skills: SkillItem[];
@@ -211,14 +224,12 @@ export async function getAboutContent(): Promise<AboutData> {
   const settings = await getSiteSettings();
   if (settings === null) {
     return {
-      lead: OFFLINE_ABOUT.lead,
       paragraphs: OFFLINE_ABOUT.paragraphs,
       notes: OFFLINE_ABOUT.notes,
       skills: OFFLINE_ABOUT.skills,
     };
   }
   return {
-    lead: settings.aboutLead ?? '',
     paragraphs: splitAboutParagraphs(settings.aboutParagraphs),
     notes: parseNotes(settings.aboutNotes),
     skills: parseSkills(settings.skills),

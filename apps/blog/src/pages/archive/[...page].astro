@@ -140,6 +140,9 @@ const restTags = tags.slice(16);
       )}
     </div>
 
+    {/* 分页条整块走后台同步（锚点 div[data-sync-block="archivePager"]）：文章增减改变总页数时，
+        9527 不重出外壳也能跟上（页码与上/下一页状态都随数据） */}
+    <div data-sync-block="archivePager">
     {totalPages > 1 && (
       <nav class="archive-pager" aria-label="归档分页" data-archive-pager>
         {page > 1 ? (
@@ -183,6 +186,7 @@ const restTags = tags.slice(16);
         )}
       </nav>
     )}
+    </div>
   </section>
 
   <script is:inline data-astro-rerun>

@@ -28,11 +28,20 @@ export const dynamic = 'force-dynamic'
  * 规则按博客真实路由形态推导（与 blog-render 的区块组装分支一一对应）：
  * 静态页是固定集合；文章/分类/标签末段是动态的（数字 ID / 编码词条），逐文件枚举不现实，用模式匹配。
  */
-const STATIC_SYNC_PATHS = new Set(['/', '/notes/', '/archive/', '/about/'])
+const STATIC_SYNC_PATHS = new Set([
+  '/',
+  '/notes/',
+  '/archive/',
+  '/about/',
+  // 标签墙 / 统计页有同步区块（标签计数、概览卡、逐年列表）
+  '/tags/',
+  '/stats/',
+])
 const DYNAMIC_SYNC_PATH_PATTERNS = [
   /^\/posts\/[^/]+\/[^/]+\/$/, // 文章详情：/posts/{分类名}/{数字ID}/
   /^\/categories\/[^/]+\/$/,
   /^\/tags\/[^/]+\/$/,
+  /^\/archive\/\d+\/$/, // 归档分页：/archive/2/ …
 ]
 
 function isSyncablePath(rawPath: string): boolean {

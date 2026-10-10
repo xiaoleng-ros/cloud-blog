@@ -1,9 +1,9 @@
 ---
 import { getCollection, render } from 'astro:content';
-import CommentsBox from '../components/CommentsBox.astro';
 import Icon from '../components/Icon.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { formatDate, toShanghaiParts } from '../lib/posts';
+import { noteMonthAnchors } from '../lib/anchors';
 
 const all = (await getCollection('notes')).sort(
   (a, b) => b.data.date.getTime() - a.data.date.getTime(),
@@ -28,18 +28,8 @@ for (const entry of entries) {
   }
 }
 
-// First entry of each month gets an anchor id, for the time index to jump to.
-const monthAnchor = new Map<string, string>();
-const seenMonth = new Set<string>();
-for (const { note } of entries) {
-  const parts = toShanghaiParts(note.data.date);
-  if (!parts) continue;
-  const key = `${parts.year}-${Number(parts.month)}`;
-  if (!seenMonth.has(key)) {
-    seenMonth.add(key);
-    monthAnchor.set(note.id, `t-${key}`);
-  }
-}
+// 每个月第一条拿一个锚点 id，供时间索引跳转；生成规则与站内搜索深链共用一份实现
+const monthAnchor = noteMonthAnchors(all);
 
 const timeIndex = byYear.map((group) => ({
   year: group.year,
@@ -155,8 +145,6 @@ const moodIcon = (mood?: string) => {
     ) : (
       <p class="notes-empty">还没有随笔，过些日子再来看看。</p>
     )}
-
-    <CommentsBox title="留言" />
   </section>
 
   <script is:inline data-astro-rerun>

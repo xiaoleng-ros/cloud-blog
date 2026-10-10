@@ -101,7 +101,7 @@ export const PublishModal: React.FC<Props> = ({
     placeholder: string,
   ) => (
     <select
-      className="publish-modal__select"
+      className="publish-modal__select publish-modal__select--multi"
       multiple
       size={5}
       value={selected.map(String)}
@@ -127,7 +127,7 @@ export const PublishModal: React.FC<Props> = ({
     placeholder: string,
   ) => (
     <select
-      className="publish-modal__select publish-modal__select--single"
+      className={`publish-modal__input publish-modal__select--single${selected[0] ? '' : ' publish-modal__select--empty'}`}
       value={String(selected[0] ?? '')}
       onChange={(e) => {
         const v = e.target.value

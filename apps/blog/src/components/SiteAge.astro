@@ -1,11 +1,11 @@
 ---
 import Icon from './Icon.astro';
 import { siteAge } from 'cloud-blog/shared/site-age';
-import { PLACEHOLDER_SITE_SINCE } from 'cloud-blog/shared/site-defaults';
+import { getSiteSince } from '../lib/site-settings';
 
-// 起始日期目前是占位值（收在 site-defaults.ts）。接后台时换成 settings.siteCreatedAt，
-// 并按「填了才显示」规则：后台留空就整块不渲染。
-const since = PLACEHOLDER_SITE_SINCE;
+// 起始日期来自后台「站点设置 → 网站配置 → 网站创建时间」：
+// 后台留空整块不渲染（「填了才显示」），只有后台整体不可用才用离线兜底。
+const since = await getSiteSince();
 const age = siteAge(since);
 ---
 
@@ -45,19 +45,32 @@ const age = siteAge(since);
 <script>
   import { siteAge } from 'cloud-blog/shared/site-age';
 
-  // 前台是静态构建：天数若在构建期算死，页面缓存多久就停在多久。
-  // SSR 那份只当无 JS 兜底，进页面立刻用同一套算法按当前时刻重算。
-  const root = document.querySelector<HTMLElement>('[data-site-age]');
-  const age = root ? siteAge(root.dataset.since) : null;
-  if (root && age) {
+  // 前台是静态构建/外壳快照：天数若在构建期算死，页面缓存多久就停在多久。
+  // SSR/注入那份只当无 JS 兜底，进页面立刻用同一套算法按当前时刻重算；
+  // 区块被后台同步整块替换（blog:sync-updated）后也要重算，否则新卡片的数字停在注入时刻。
+  type SiteAgeWindow = Window & { __blogSiteAgeBound?: boolean };
+  const w = window as SiteAgeWindow;
+
+  const applySiteAge = () => {
+    const root = document.querySelector<HTMLElement>('[data-site-age]');
+    if (!root) return;
+    const age = siteAge(root.dataset.since);
+    if (!age) return;
     for (const [key, value] of Object.entries(age)) {
       const node = root.querySelector(`[data-age="${key}"]`);
       if (node) node.textContent = String(value);
     }
+  };
+
+  if (!w.__blogSiteAgeBound) {
+    w.__blogSiteAgeBound = true;
+    document.addEventListener('astro:page-load', applySiteAge);
+    document.addEventListener('blog:sync-updated', applySiteAge);
   }
+  applySiteAge();
 </script>
 
-<style>
+<style is:global>
   .site-age__card {
     position: relative;
     /* 右栏只有 16.5rem，单列塌回时也不该拉成通栏，17rem 一档两种布局都刚好 */

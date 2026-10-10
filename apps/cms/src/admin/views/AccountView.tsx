@@ -4,12 +4,13 @@
  * 自定义账号设置视图（替换 Payload 默认 /account 页）
  *
  * 功能说明：
- * - 与站点设置页同款版式：左侧竖排目录（账号信息 / 基本资料 / 修改密码）+ 右侧内容面板
- * - 面板状态同步到 URL（?tab=info|profile|password），刷新/前进后退都能停在本面板
+ * - 与站点设置页同款版式：左侧竖排目录（账号信息 / 修改密码）+ 右侧内容面板
+ * - 面板状态同步到 URL（?tab=info|password），刷新/前进后退都能停在本面板
  * - 骨架常驻：目录与面板框架立即渲染，/api/users/me 数据到达前用占位符
- * - 操作结果使用提示条展示
+ * - 操作结果使用浮层 toast（自动消失）展示，不占正文布局
  */
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { PASSWORD_RULE_TEXT, validatePasswordStrength } from '../../lib/password'
 import { PageHeader } from '../components/PageHeader'
 
@@ -26,8 +27,8 @@ type MeUser = {
 /** 居中提示条的类型 */
 type Notice = { type: 'success' | 'error'; text: string } | null
 
-/** 面板标识（与 URL ?tab= 参数一一对应） */
-type Tab = 'info' | 'profile' | 'password'
+/** 面板标识（与 URL ?tab= 参数一一对应）；原「基本资料」已并入「账号信息」 */
+type Tab = 'info' | 'password'
 
 /** 17px 线性图标，风格与站点设置目录一致 */
 const icon = (path: ReactNode) => (
@@ -40,22 +41,11 @@ const TABS: Array<{ key: Tab; label: string; desc: string; icon: ReactNode }> = 
   {
     key: 'info',
     label: '账号信息',
-    desc: '登录标识',
+    desc: '登录标识与昵称',
     icon: icon(
       <>
         <circle cx="12" cy="8" r="4" />
         <path d="M4 21c0-4 3.6-6 8-6s8 2 8 6" />
-      </>,
-    ),
-  },
-  {
-    key: 'profile',
-    label: '基本资料',
-    desc: '昵称与邮箱',
-    icon: icon(
-      <>
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
       </>,
     ),
   },
@@ -72,9 +62,8 @@ const TABS: Array<{ key: Tab; label: string; desc: string; icon: ReactNode }> = 
   },
 ]
 
-/** 解析 URL 中的 tab 参数，非法值回落到「账号信息」 */
-const parseTab = (value: string | null): Tab =>
-  value === 'profile' || value === 'password' ? value : 'info'
+/** 解析 URL 中的 tab 参数；非法值（含旧链接 ?tab=profile）回落到「账号信息」 */
+const parseTab = (value: string | null): Tab => (value === 'password' ? 'password' : 'info')
 
 /** 账号设置视图组件（挂在 admin.components.views.account.Component） */
 export const AccountView = () => {
@@ -186,7 +175,7 @@ export const AccountView = () => {
       if (!res.ok) throw new Error(errorMessage(json, '保存失败，请稍后重试'))
       // 本地同步最新资料
       setUser((prev) => (prev ? { ...prev, name: name.trim(), email: email.trim() } : prev))
-      showNotice('success', '基本资料已保存')
+      showNotice('success', '保存成功')
     } catch (e) {
       showNotice('error', (e as Error).message)
     } finally {
@@ -237,8 +226,25 @@ export const AccountView = () => {
 
   return (
     <div className="settings">
-      {/* 结果提示条 */}
-      {notice && <div className={`account-view__notice account-view__notice--${notice.type}`}>{notice.text}</div>}
+      {/* 结果反馈：屏幕正中的卡片式 toast（portal 挂 body，避免祖先 transform 让 fixed 失效） */}
+      {notice &&
+        createPortal(
+          <div className={`account-view__toast account-view__toast--${notice.type}`} role="status">
+            <span className="account-view__toast-icon" aria-hidden="true">
+              {notice.type === 'success' ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                  <path d="M12 7v6M12 17.2h.01" />
+                </svg>
+              )}
+            </span>
+            {notice.text}
+          </div>,
+          document.body,
+        )}
 
       {/* 页头 */}
       <PageHeader title="账号设置" />
@@ -273,6 +279,7 @@ export const AccountView = () => {
           {tab === 'info' && (
             <>
               <h2 className="settings__panel-title">账号信息</h2>
+              {/* 身份卡：头像字母徽标 + 昵称/邮箱速览（保存后随之更新） */}
               <div className="account-view__identity">
                 <span className="account-view__avatar">
                   {user ? user.name?.slice(0, 1) || user.email.slice(0, 1).toUpperCase() : '…'}
@@ -284,12 +291,6 @@ export const AccountView = () => {
                   <span className="account-view__identity-email">{user ? user.email : '—'}</span>
                 </div>
               </div>
-            </>
-          )}
-
-          {tab === 'profile' && (
-            <>
-              <h2 className="settings__panel-title">基本资料</h2>
               <div className="settings__grid">
                 <label className="settings__field settings__field--full">
                   <span className="settings__field-label">昵称</span>

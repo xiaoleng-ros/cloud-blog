@@ -14,6 +14,7 @@
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { safeHref } from 'cloud-blog/shared/html-safety';
+import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils';
 
 /**
  * 后台地址解析优先级：
@@ -360,7 +361,7 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
       title: doc.title,
       owner: doc.owner ?? undefined,
       description: doc.description ?? undefined,
-      icon: doc.icon ?? 'github',
+      icon: doc.icon ?? DEFAULT_PROJECT_ICON,
       // 两个链接字段都是后台自由填写，过一次协议白名单：
       // href 不合法退化成惰性 '#'，articleHref 不合法退化成 ''（前台据此整条「笔记」链接不渲染）
       href: safeHref(doc.href, '#'),

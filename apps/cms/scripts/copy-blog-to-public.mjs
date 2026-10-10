@@ -34,6 +34,10 @@ const MANIFEST_FILE = join(CMS_PUBLIC, '.copy-blog-manifest.json');
 // 不参与清理的目录（后台媒体上传、图标等非构建产物）
 const KEEP_DIRS = new Set(['media', 'cloud-icons']);
 
+// 这些产物不复制到 public/ 根：CMS 已有同路径的动态路由（Next 检测到
+// 「公共文件与路由冲突」会直接 500），由路由按请求实时生成、保证与后台数据同步。
+const SKIP_ROOT_FILES = new Set(['site-index.json']);
+
 if (!existsSync(BLOG_DIST)) {
   console.error('[copy-blog] 找不到 Astro 构建产物，跳过复制: ' + BLOG_DIST);
   process.exit(0);
@@ -110,6 +114,7 @@ function copyDir(src, destDir, destHtmlDir, copiedRoot) {
       copyFileSync(srcPath, shellTarget);
       continue;
     }
+    if (SKIP_ROOT_FILES.has(entry.name)) continue;
     const rootTarget = join(destDir, entry.name);
     mkdirSync(dirname(rootTarget), { recursive: true });
     copyFileSync(srcPath, rootTarget);

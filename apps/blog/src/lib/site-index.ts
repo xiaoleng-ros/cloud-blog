@@ -18,8 +18,8 @@ import {
   getTags,
   getTagPath,
   sortPosts,
-  toShanghaiParts,
 } from './posts';
+import { noteMonthAnchors, projectGroupIds } from './anchors';
 
 type BlogPost = CollectionEntry<'posts'>;
 type Note = CollectionEntry<'notes'>;
@@ -50,45 +50,6 @@ function firstLine(body: string): string {
     if (text) return text.length > 46 ? `${text.slice(0, 46)}…` : text;
   }
   return '';
-}
-
-/**
- * 随笔落在 /notes/ 的月份锚点上。规则与 notes.astro 的 monthAnchor 同源
- * （每月第一条拿到 `t-{年}-{月}`，其余条目页面上本来就没有 id）。
- * 两处若走偏，最坏结果是页面不滚动，不会 404。
- */
-function noteAnchors(notes: Note[]): Map<string, string> {
-  const ordered = [...notes].sort(
-    (a, b) => b.data.date.getTime() - a.data.date.getTime(),
-  );
-  const seenMonths = new Set<string>();
-  const anchors = new Map<string, string>();
-  for (const note of ordered) {
-    const parts = toShanghaiParts(note.data.date);
-    if (!parts) continue;
-    const key = `${parts.year}-${Number(parts.month)}`;
-    if (seenMonths.has(key)) continue;
-    seenMonths.add(key);
-    anchors.set(note.id, `t-${key}`);
-  }
-  return anchors;
-}
-
-/** 分组锚点 id：与 about.astro 的 groupDomId 同一套 slug 规则 */
-function projectGroupIds(projects: Project[]): Map<string, string> {
-  const order: string[] = [];
-  for (const project of projects) {
-    if (!order.includes(project.data.group)) order.push(project.data.group);
-  }
-  const ids = new Map<string, string>();
-  order.forEach((title, index) => {
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    ids.set(title, `proj-${index}${slug ? `-${slug}` : ''}`);
-  });
-  return ids;
 }
 
 /**
@@ -144,7 +105,7 @@ function postEntries(posts: BlogPost[]): IndexEntry[] {
 }
 
 function noteEntries(notes: Note[]): IndexEntry[] {
-  const anchors = noteAnchors(notes);
+  const anchors = noteMonthAnchors(notes);
   return notes.map((note) => {
     const title = note.data.title?.trim();
     const excerpt = firstLine(note.body ?? '');

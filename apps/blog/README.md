@@ -128,7 +128,7 @@ PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 
 ## 💬 评论
 
-评论后端是 **Waline**，直接挂在 CMS 应用的 `/api/waline` 路由下（复用同一个 Postgres 库的独立 schema，无需单独部署），数据表脚本见 `apps/cms/scripts/waline/schema.sql`。前台在文章/随笔页通过官方 `@waline/client` 组件挂载（见 `src/components/CommentsBox.astro`），服务地址由 `PUBLIC_WALINE_URL` 在构建期注入。
+评论后端是 **Waline**，直接挂在 CMS 应用的 `/api/waline` 路由下（复用同一个 Postgres 库的独立 schema，无需单独部署），数据表脚本见 `apps/cms/scripts/waline/schema.sql`。前台仅在**文章详情页**通过官方 `@waline/client` 组件挂载（见 `src/components/CommentsBox.astro`；随笔页不挂评论），服务地址由 `PUBLIC_WALINE_URL` 在构建期注入。
 
 先审后发、同 IP 发言间隔、敏感词过滤均由 `apps/cms/.env` 的 Waline 分区变量控制；后台「评论管理」页可筛选、搜索与审核评论（批准 / 退回待审 / 标垃圾 / 删除）。建表、首次注册管理员与 REST 审核配方见 `apps/cms/scripts/waline/README.md`。
 

@@ -5,6 +5,7 @@ import Icon from '../components/Icon.astro';
 import SkillRing from '../components/SkillRing.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { sortPosts, toShanghaiParts } from '../lib/posts';
+import { projectGroupId } from '../lib/anchors';
 import { getAboutContent, getSiteSettings } from '../lib/site-settings';
 
 const posts = sortPosts(await getCollection('posts'));
@@ -26,16 +27,6 @@ const authorName = settings?.siteAuthor ?? '我';
 // loader 已按 sortOrder 升序写入 store，分组时保持该顺序
 const projects = await getCollection('projects');
 
-// 分组名 → 合法 HTML id：小写、非字母数字连续段转单个 -、去首尾 -。
-// 纯中文/空格类分组名会被清空，用分组序号兜底保证 id 唯一且非空。
-const groupDomId = (title: string, index: number) => {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `proj-${index}${slug ? `-${slug}` : ''}`;
-};
-
 // 分组聚合：镜像后台 blog-render.tsx 的 groupProjects()——
 // 保留首次出现的分组描述，组内顺序即 sortOrder 顺序
 const projectGroups = (() => {
@@ -51,7 +42,7 @@ const projectGroups = (() => {
   return order.map((title, index) => {
     const g = byGroup.get(title)!;
     return {
-      id: groupDomId(title, index),
+      id: projectGroupId(title, index),
       title,
       description: g.description,
       items: g.items.map((entry) => entry.data),
@@ -72,24 +63,18 @@ const STAR_FILL_SVG =
   <article class="about">
     <!-- 关于我：左文字 + 右便签（运行时同步区块） -->
     <section class="about__profile" aria-labelledby="about-heading" data-sync-block="aboutProfile">
-      {(about.lead || about.paragraphs.length > 0) && (
-        <div class="about__intro-card">
-          <span class="about__eyebrow">ABOUT</span>
-          {about.lead && (
-            <h1 id="about-heading" class="about__lead">
-              {about.lead}
-            </h1>
-          )}
-          {about.paragraphs.map((paragraph) => (
-            <p class="about__text" set:html={paragraph} />
-          ))}
-          <div class="about__facts">
-            <span class="about__fact">{postCount} 篇文章</span>
-            <span class="about__fact">写于 {firstYear} 至今</span>
-            <span class="about__fact">全站由 AI 开发</span>
-          </div>
+      <div class="about__intro-card">
+        <span class="about__eyebrow">ABOUT</span>
+        <h1 id="about-heading" class="about__lead">关于我</h1>
+        {about.paragraphs.map((paragraph) => (
+          <p class="about__text" set:html={paragraph} />
+        ))}
+        <div class="about__facts">
+          <span class="about__fact">{postCount} 篇文章</span>
+          <span class="about__fact">写于 {firstYear} 至今</span>
+          <span class="about__fact">全站由 AI 开发</span>
         </div>
-      )}
+      </div>
 
       {about.notes.length > 0 && (
         <div class="about__notes">

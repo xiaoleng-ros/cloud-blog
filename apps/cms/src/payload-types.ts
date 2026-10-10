@@ -601,6 +601,9 @@ export interface SiteSetting {
   githubRepo?: string | null;
   neteasePlaylistId?: string | null;
   siteDescription?: string | null;
+  /**
+   * 用作浏览器标签页图标与页脚头像；留空则用站点默认头像。
+   */
   siteIcon?: string | null;
   siteIcp?: string | null;
   siteCreatedAt?: string | null;
@@ -608,7 +611,6 @@ export interface SiteSetting {
   name?: string | null;
   subtitle?: string | null;
   bio?: string | null;
-  buttonLabel?: string | null;
   socials?: string | null;
   footerSubtitle?: string | null;
   /**
@@ -619,7 +621,6 @@ export interface SiteSetting {
    * 每行一条「名称 链接」，链接可留空仅填名称（展示为纯文字标签）。支持 QQ / 微信图标。
    */
   footerGroups?: string | null;
-  aboutLead?: string | null;
   /**
    * 一行一段，想换行直接回车；给部分文字加高亮写成 ==这样== 即可（旧数据里的 HTML 会在后台首次保存时自动转成该记号）。
    */
@@ -668,12 +669,10 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   name?: T;
   subtitle?: T;
   bio?: T;
-  buttonLabel?: T;
   socials?: T;
   footerSubtitle?: T;
   footerChannels?: T;
   footerGroups?: T;
-  aboutLead?: T;
   aboutParagraphs?: T;
   aboutNotes?: T;
   skills?: T;

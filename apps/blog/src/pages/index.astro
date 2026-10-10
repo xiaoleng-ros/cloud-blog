@@ -32,7 +32,6 @@ const heroPicks = [
 // Hero 文案与社交链接：后台填了才显示，只有后台整体不可用时才用离线兜底
 const settings = await getSiteSettings();
 const hero = await getHero();
-const heroBio = hero.bio.replace('{count}', String(posts.length));
 const socials = await getSocials();
 
 // Warm clay/amber band for cover-less featured items, on palette.
@@ -64,33 +63,29 @@ const coverHue = (value: string) => {
         </h1>
       )}
       {hero.subtitle && <p class="hero__subtitle">{hero.subtitle}</p>}
-      {heroBio && <p class="hero__bio">{heroBio}</p>}
+      {hero.bio && <p class="hero__bio">{hero.bio}</p>}
 
-      {(hero.buttonLabel || socials.length > 0) && (
-        <div class="hero__actions">
-          {hero.buttonLabel && (
-            <a class="hero__tag" href="/archive/">
-              {hero.buttonLabel}
-              <Icon name="arrow-right" size={16} />
-            </a>
-          )}
-          {socials.length > 0 && (
-            <span class="hero__social" aria-label="社交链接">
-              {socials.map((item) => (
-                <a
-                  class={hasIcon(item.icon) ? 'icon-button' : 'icon-button icon-button--label'}
-                  href={item.href}
-                  target={item.href.startsWith('http') ? '_blank' : undefined}
-                  rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                  aria-label={item.label}
-                >
-                  {hasIcon(item.icon) ? <Icon name={item.icon} /> : item.label}
-                </a>
-              ))}
-            </span>
-          )}
-        </div>
-      )}
+      <div class="hero__actions">
+        <a class="hero__tag" href="/archive/">
+          浏览文章
+          <Icon name="arrow-right" size={16} />
+        </a>
+        {socials.length > 0 && (
+          <span class="hero__social" aria-label="社交链接">
+            {socials.map((item) => (
+              <a
+                class={hasIcon(item.icon) ? 'icon-button' : 'icon-button icon-button--label'}
+                href={item.href}
+                target={item.href.startsWith('http') ? '_blank' : undefined}
+                rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                aria-label={item.label}
+              >
+                {hasIcon(item.icon) ? <Icon name={item.icon} /> : item.label}
+              </a>
+            ))}
+          </span>
+        )}
+      </div>
     </div>
   </section>
 
@@ -183,8 +178,9 @@ const coverHue = (value: string) => {
       </section>
     </div>
 
-    {/* 右侧模块栏：站点运行时间打头，后续要加的模块顺次往下堆 */}
-    <aside class="home-aside" aria-label="站点模块">
+    {/* 右侧模块栏：站点运行时间打头，后续要加的模块顺次往下堆。
+        站点运行时间卡整块走后台同步（后台改创建时间：刷新即变，开着的页面会被 SSE 刷进来） */}
+    <aside class="home-aside" aria-label="站点模块" data-sync-block="siteAge">
       <SiteAge />
     </aside>
   </div>

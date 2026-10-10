@@ -1,14 +1,10 @@
 ---
 // Waline 官方评论组件（构建时打包，表情图包本地化，运行时零外链）。
-// title 通过官方 locale.comment 覆盖计数头措辞（如 notes 页「留言」）。
-interface Props {
-  title?: string;
-}
-const { title = '评论' } = Astro.props;
+// 计数头措辞固定「评论」：走官方 locale.comment 覆盖。
 import '@waline/client/style';
 ---
 
-<section class="cbox" data-cbox data-c-title={title}>
+<section class="cbox" data-cbox>
   <div data-c-mount></div>
 </section>
 
@@ -35,7 +31,6 @@ import '@waline/client/style';
     }
 
     const mountEl = root.querySelector<HTMLElement>('[data-c-mount]');
-    const titleWord = root.dataset.cTitle || '评论';
     let instance: ReturnType<typeof init> | null = null;
     let emptySweeper: MutationObserver | null = null;
 
@@ -46,7 +41,7 @@ import '@waline/client/style';
         serverURL: getServer(),
         path: location.pathname,
         lang: 'zh-CN',
-        locale: { comment: titleWord },
+        locale: { comment: '评论' },
         reaction: true,
         pageview: false,
         // 官方 v-if 开关：整行移除底部 RSS 订阅图标与「Powered by Waline」版权条

@@ -262,7 +262,6 @@ async function main() {
       name: '云岫',
       subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
       bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
-      buttonLabel: '浏览文章',
     }
     // 社交链接：textarea 字符串（每行「平台 链接」）
     const socials =
@@ -313,7 +312,6 @@ async function main() {
       ?? ''
 
     // ---- 关于页（同样仅当为空时写入默认值） ----
-    const aboutLead = global?.aboutLead ?? '关于我'
     const aboutParagraphs =
       global?.aboutParagraphs
       ?? [
@@ -347,7 +345,6 @@ async function main() {
         footerSubtitle,
         footerChannels,
         footerGroups,
-        aboutLead,
         aboutParagraphs,
         aboutNotes,
         skills,
