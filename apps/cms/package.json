@@ -2,7 +2,7 @@
   "name": "payload-blog",
   "version": "1.0.0",
   "description": "基于 Payload CMS 3 + Next.js 的博客内容后台（Postgres，前后台一体化部署）",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "postinstall": "patch-package",

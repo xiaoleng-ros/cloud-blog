@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "云岫的博客 Monorepo：apps/blog（Astro 前端）+ apps/cms（Payload CMS 后台），两个独立应用可分别部署到 EdgeOne Makers。",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "exports": {
     ".": "./package.json",
     "./shared/*": "./shared/*"

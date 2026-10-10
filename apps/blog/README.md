@@ -177,9 +177,13 @@ npm config set registry https://registry.npmmirror.com
 
 ---
 
-## 📜 许可证
+## 📜 许可证与来源
 
-本项目基于 **MIT** ✅ License 开源（见 [LICENSE](LICENSE)）。
+本项目以 **GPL-3.0** ⚖️ 开源（见仓库根目录 [LICENSE](../../LICENSE)）。
+
+前台基底来自 [**clay-blog**](https://github.com/laogou717/clay-blog)（MIT，© laogou717），本项目在其之上重构；
+另有部分版式参考 [**ThriveX-Blog**](https://github.com/LiuYuYang01/ThriveX-Blog)（GPL-3.0），
+页脚动物插画即取自该项目 —— 完整署名见 [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md)。
 
 ---
 
