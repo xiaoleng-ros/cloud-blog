@@ -84,6 +84,8 @@
 | 根目录 `admin.html`、`animals.png` | 未跟踪、零引用；来源不明的用户文件，不擅自删除 |
 
 > **后记（2026-10-11）**：上表两文件经用户确认后已删除。取证结论：`animals.png` 与 `apps/blog/public/images/footer-animals.png` 的 md5 完全一致（字节级副本，项目实际引用的是 `public/` 那份），`admin.html` 为 Payload 后台的 Next.js SSR 快照。两者均未入库，删除对项目零影响。
+>
+> 同批清理的还有 `apps/blog/public/avatars/logo.png`（2.1MB）：经比对为 `avatar.png` 的同图未压缩原图（压缩后 358KB，体积差 83%），而代码三处硬编码（`Footer.astro:17`、`BaseLayout.astro:49`、`blog-render.tsx:524,584`）全部指向 `avatar.png`，该文件零引用，已删除。
 
 ## 5. 已有 Payload 模型及使用位置
 
