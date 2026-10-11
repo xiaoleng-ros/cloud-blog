@@ -10,6 +10,9 @@ apps/cms/.next/
 apps/cms/dist/
 apps/cms/node_modules/
 apps/cms/tsconfig.tsbuildinfo
+# Next 自动生成，每次 dev/build 会在 .next/types/ 与 .next/dev/types/ 之间来回改写，
+# 追踪它必然反复产生无意义 diff（Next 官方建议忽略）
+apps/cms/next-env.d.ts
 # 本地 Payload 静态上传目录（媒体文件运行时产物，禁止入库）
 apps/cms/media/
 

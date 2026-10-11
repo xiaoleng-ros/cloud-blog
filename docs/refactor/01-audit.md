@@ -83,6 +83,8 @@
 | `apps/blog/dev-fixtures/*.json` | 仅 dev 环境加载的假数据（构建不读），属开发辅助 |
 | 根目录 `admin.html`、`animals.png` | 未跟踪、零引用；来源不明的用户文件，不擅自删除 |
 
+> **后记（2026-10-11）**：上表两文件经用户确认后已删除。取证结论：`animals.png` 与 `apps/blog/public/images/footer-animals.png` 的 md5 完全一致（字节级副本，项目实际引用的是 `public/` 那份），`admin.html` 为 Payload 后台的 Next.js SSR 快照。两者均未入库，删除对项目零影响。
+
 ## 5. 已有 Payload 模型及使用位置
 
 Collections（`apps/cms/src/collections/`，均无 versions/drafts）：

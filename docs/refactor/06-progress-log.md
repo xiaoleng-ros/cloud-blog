@@ -51,5 +51,5 @@
 
 - 通过后台 UI 的发布/撤回/删除端到端演练（需管理员账号；建议日常使用中顺带验收）。
 - 逐页截图对照（如需要，按 `05-test-plan.md` 执行）。
-- 根目录未跟踪文件 `admin.html`、`animals.png` 待用户处置。
+- ~~根目录未跟踪文件 `admin.html`、`animals.png` 待用户处置。~~ **已处置（2026-10-11）**：经md5 比对确认 `animals.png` 是 `apps/blog/public/images/footer-animals.png` 的字节级副本（项目实际引用后者，见 `Footer.astro:36`），`admin.html` 为 Payload 后台 SSR 快照，两者均零引用且未入库，已删除。备份见当日日志。
 - 本轮改动**尚未提交**（按约定等用户确认后提交；`git status` 可见全部改动面）。
