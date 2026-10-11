@@ -10,6 +10,8 @@ apps/cms/.next/
 apps/cms/dist/
 apps/cms/node_modules/
 apps/cms/tsconfig.tsbuildinfo
+# EdgeOne Makers CLI 本地项目绑定（含项目 ID，不入库）
+apps/cms/.edgeone/
 # Next 自动生成，每次 dev/build 会在 .next/types/ 与 .next/dev/types/ 之间来回改写，
 # 追踪它必然反复产生无意义 diff（Next 官方建议忽略）
 apps/cms/next-env.d.ts
