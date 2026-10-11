@@ -18,6 +18,10 @@ const nextConfig = {
   // 必须保持为 server external，交给 createRequire 在 node_modules 里原样解析。
   serverExternalPackages: ['@waline/vercel', 'thinkjs', 'think-model-postgresql', 'ip2region'],
   experimental: {
+    // EdgeOne 云函数包有 128MiB 硬限额；turbopack 默认会往 .next/server 写 ~78MB
+    // 服务端 source map（本地实测 675 个 .map），运行时与排障都用不到，关掉。
+    serverSourceMaps: false,
+    turbopackSourceMaps: false,
     // 悬停才预取动态路由。默认行为是「进入视口就预取」，侧栏 13 个链接会一次性把
     // dev 服务器打成并发按需编译（实测同时编译 4 个页面时单页耗时 21s）。
     //

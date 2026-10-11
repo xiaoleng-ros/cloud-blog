@@ -99,7 +99,9 @@ function walkUpFor(relative: string): string[] {
   for (let depth = 0; depth < 4; depth += 1) {
     const parent = resolve(dir, '..')
     if (parent === dir) break
-    out.push(join(parent, relative))
+    // turbopackIgnore：候选目录是运行时探测的，静态分析无法收敛，会让 turbopack
+    // 把整个 monorepo（含 apps/blog 产物）追踪进服务端包，直接顶爆 EdgeOne 128MiB 限额。
+    out.push(join(/* turbopackIgnore: true */ parent, relative))
     dir = parent
   }
   return out
@@ -424,7 +426,8 @@ export async function GET(
   const htmlPath = getStaticHtmlPath(pathname)
 
   if (htmlPath) {
-    const shell = readFileSync(htmlPath, 'utf-8')
+    // 同上：外壳路径运行时才确定，禁止 turbopack 据此做整项目追踪（见 walkUpFor 注释）
+    const shell = readFileSync(/* turbopackIgnore: true */ htmlPath, 'utf-8')
     const { html } = await renderShellWithData(shell, pathname)
     return new NextResponse(html, {
       headers: {
