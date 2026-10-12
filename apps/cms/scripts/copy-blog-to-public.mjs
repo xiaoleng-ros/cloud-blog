@@ -20,8 +20,8 @@
 // 根目录的 .html 全部是旧版本脚本复制的 Astro 产物（.gitignore 已声明 public/
 // 内容均为构建产物），此时按旧约定清除，之后一律走清单。
 // 触发方式：npm run build:all 最后手动执行（必须在 next build 之后，避免被覆盖）。
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 
 const BLOG_DIST = join(import.meta.dirname, '../../blog/dist');
 // apps/cms/public/ —— Next.js 约定的静态资源目录，EdgeOne 会自动部署
@@ -149,3 +149,45 @@ if (prevManifest !== null) {
 
 writeFileSync(MANIFEST_FILE, JSON.stringify({ version: 1, root: copiedRoot }, null, 2));
 console.log('[copy-blog] 已复制：静态资源 → public/ 根，HTML 仅一份 → public/__blog/（供运行时注入）');
+
+// ─── 把外壳同步进 .next/standalone —— 修「全站 404 · Not Found」 ────────────
+//
+// 时序坑（2026-10-12 实际翻车）：`next build` 生成 standalone 时，会把**当时**的
+// public/ 整个快照进 .next/standalone/<app>/public；而本脚本在 build 之后才把 Astro
+// 产物（__blog 外壳）写进 public —— 于是：
+//   · CDN 静态层拿到的是最终 public（/__blog/index.html 能 200，一切正常）；
+//   · 云函数包只拷 standalone 快照，容器里没有 public/__blog → route.ts 读不到外壳，
+//     全站每个页面（含 /favicon.ico）都落到兜底分支回纯文本 404「Not Found」。
+// 修复：写完 public 后，把外壳补进 standalone 快照。
+//
+// 目标子目录与 @edgeone/opennextjs-pages 的 PluginContext 同口径：
+//   distDir       = relative(cwd, resolve(relativeAppDir, config.distDir))  // apps/cms/.next
+//   函数包拷贝     .next/standalone/<distDir 的父目录>/*，容器内 cwd 也是这个父目录
+// 额外再放一份到 standalone 根：口径万一不同（cwd 在函数包根）也能被路由的
+// 向上探测（walkUpFor）命中；该副本是否进包取决于插件版本，体积按下面日志核对。
+function syncShellsToStandalone() {
+  const reqFilesPath = join(import.meta.dirname, '..', '.next', 'required-server-files.json');
+  const standaloneRoot = join(import.meta.dirname, '..', '.next', 'standalone');
+  if (!existsSync(reqFilesPath) || !existsSync(standaloneRoot)) {
+    console.log('[copy-blog] 未找到 .next/standalone（非 standalone 构建？），跳过外壳同步');
+    return;
+  }
+  let targets;
+  try {
+    const rsf = JSON.parse(readFileSync(reqFilesPath, 'utf-8'));
+    const distDir = relative(process.cwd(), resolve(rsf.relativeAppDir || '', rsf.config?.distDir || '.next'));
+    targets = [join(standaloneRoot, dirname(distDir), 'public', HTML_DIR_NAME)];
+    const rootTarget = join(standaloneRoot, 'public', HTML_DIR_NAME);
+    if (!targets.includes(rootTarget)) targets.push(rootTarget);
+  } catch (err) {
+    console.warn('[copy-blog] 解析 required-server-files.json 失败，跳过外壳同步:', err.message);
+    return;
+  }
+  for (const target of targets) {
+    rmSync(target, { recursive: true, force: true });
+    mkdirSync(dirname(target), { recursive: true });
+    cpSync(HTML_ROOT, target, { recursive: true });
+    console.log('[copy-blog] 已同步外壳 → ' + relative(import.meta.dirname, target));
+  }
+}
+syncShellsToStandalone();
