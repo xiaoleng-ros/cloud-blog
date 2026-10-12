@@ -47,6 +47,16 @@ const nextConfig = {
   // loader 注入（见 @edgeone/opennextjs-pages 的 "images.unoptimized detected"），
   // 函数包里不再携带 sharp/图像优化运行时，行为零变化。
   images: { unoptimized: true },
+  // Supabase CA 证书必须显式纳入文件追踪。
+  //
+  // 背景（2026-10-12 线上事故）：payload.config.ts 在严格 TLS 下用 readFileSync 读
+  // certs/supabase-ca.pem 注入 pg 的 ssl.ca。readFileSync 的路径是运行时决定的，
+  // Next 的文件追踪静态分析看不到它 → 证书不会进 .next/standalone →
+  // 容器里读不到 → 又回到 "self-signed certificate in certificate chain"，
+  // Payload 初始化失败、全站 500。outputFileTracingIncludes 是唯一可靠解法。
+  outputFileTracingIncludes: {
+    '/**': ['./certs/**/*.pem'],
+  },
   // EdgeOne 云函数 128MiB 限额：把仅构建期/CLI 使用的工具链挡在文件追踪之外
   // （不进追踪 = 不进 standalone，比构建后删文件安全）。
   // 基线实测（2026-10-12，edgeone pages build 本地打包）：函数包 208MB，超限 80MB；

@@ -21,6 +21,7 @@ import { Tags } from './collections/Tags'
 import { Users } from './collections/Users'
 import { Navigation } from './globals/Navigation'
 import { SiteSettings } from './globals/SiteSettings'
+import { readFileSync } from 'node:fs'
 // 迁移必须静态导入：一是让 webpack 打进 EdgeOne 运行产物（动态 import 不会被打包），
 // 二是供 prodMigrations 在生产启动时自动补跑未执行的迁移（见下方 postgresAdapter）。
 import { migrations } from './migrations'
@@ -264,6 +265,54 @@ const PG_SSL_INSECURE = process.env.PG_SSL_INSECURE === '1'
 const PG_SSL_STRICT = !PG_SSL_INSECURE
 
 /**
+ * Supabase CA 证书（严格 TLS 校验的前提，缺了就连不上库）
+ *
+ * 背景（2026-10-12 线上事故）：EdgeOne 运行时容器的系统信任库不含 Supabase 根证书，
+ * 连接 pooler 时报 `self-signed certificate in certificate chain`，Payload 初始化失败，
+ * 表现为 /api/* 与 /admin/login 全站 500。实测数据库本身完全正常
+ * （rejectUnauthorized=false 时 1.8s 连上、pg_stat_activity 有 14 条连接）。
+ *
+ * 为什么不用 NODE_EXTRA_CA_CERTS：它是 Node 进程启动时读取的环境变量，
+ * 在 Serverless 容器里既无法保证在 Node 启动前设置、也无法保证文件已就位。
+ * 直接把 CA 交给 pg 的 ssl.ca 是进程内生效、不依赖启动顺序的做法。
+ *
+ * 为什么保留 rejectUnauthorized=true：注入 CA 是补全信任链，不是关掉校验。
+ * 证书真的被篡改时依然会连失败——这与 PG_SSL_INSECURE=1 的降级有本质区别。
+ *
+ * 证书抓取与轮换方式见 certs/supabase-ca.pem 文件头注释。
+ */
+function loadSupabaseCa(): string | undefined {
+  // 显式覆盖优先（应急：容器工作目录漂移时在控制台改这一个变量即可）
+  const override = process.env.SUPABASE_CA_FILE
+  const relative = 'certs/supabase-ca.pem'
+  const candidates = [
+    override,
+    // 本地开发：payload.config.ts 位于 src/ 下，仓库内为 ../../certs
+    path.resolve(dirname, '..', relative),
+    // Next 构建产物：standalone 里 public/ 之外的相对位置
+    path.resolve(process.cwd(), relative),
+    path.resolve(process.cwd(), 'apps', 'cms', relative),
+    path.resolve('/var/user', 'apps', 'cms', relative),
+    path.resolve('/var/task', relative),
+    // 兜底：从 cwd 逐级向上找（容器把应用放在任意层级时）
+    ...[1, 2, 3].map((depth) => {
+      const base = path.resolve(process.cwd(), ...Array.from({ length: depth }, () => '..'))
+      return path.resolve(base, relative)
+    }),
+  ].filter((p): p is string => !!p)
+
+  for (const candidate of candidates) {
+    try {
+      const pem = readFileSync(candidate, 'utf-8')
+      if (pem.includes('BEGIN CERTIFICATE')) return pem
+    } catch {
+      // 继续试下一个候选
+    }
+  }
+  return undefined
+}
+
+/**
  * 本地绿色版 PG（127.0.0.1 / localhost / ::1）默认没开 SSL。
  * 只要 ssl 配置对象非 undefined，pg 就会坚持完成 TLS 协商（即使 URL 写 sslmode=prefer
  * 也会直接报 "The server does not support SSL connections"），所以本机连接要把 ssl 置为 false。
@@ -315,11 +364,30 @@ const PG_URL = process.env.POSTGRES_URL
 const PG_IS_LOCAL = isLocalPg(PG_URL) && process.env.PG_LOCAL_SSL !== '1'
 // 本机连接不带 ssl 参数，也不强制 sslmode；远程才按严格/降级策略重写 sslmode。
 const pgConnectionString = PG_URL && !PG_IS_LOCAL ? withSslMode(PG_URL, PG_SSL_STRICT) : PG_URL
-const pgSsl: false | { rejectUnauthorized: boolean } | undefined = PG_IS_LOCAL
+// 严格模式下必须带上 Supabase CA：容器信任库不含该根证书，不带就报
+// "self-signed certificate in certificate chain"（2026-10-12 线上全站 500 的根因）。
+// 降级模式（PG_SSL_INSECURE=1）不需要 CA。
+const SUPABASE_CA = PG_SSL_STRICT ? loadSupabaseCa() : undefined
+const pgSsl: false | { rejectUnauthorized: boolean; ca?: string } | undefined = PG_IS_LOCAL
   ? false
   : PG_URL
-    ? { rejectUnauthorized: PG_SSL_STRICT }
+    ? { rejectUnauthorized: PG_SSL_STRICT, ...(SUPABASE_CA ? { ca: SUPABASE_CA } : {}) }
     : undefined
+
+/**
+ * 严格模式却没找到 CA 证书时的提醒（非致命，留给 fallback）。
+ *
+ * 为什么不 fail-fast：本地开发连本机 PG / 用别家库都可能不需要这份证书，
+ * 直接 exit 会让正常开发起不来。真正连不上时 Payload 初始化会抛
+ * "cannot connect to Postgres: self-signed certificate in certificate chain"，
+ * 由 /api/health 直接暴露，比在这里猜测环境更可靠。
+ */
+if (PG_SSL_STRICT && PG_URL && !PG_IS_LOCAL && !SUPABASE_CA) {
+  console.warn(
+    '[payload] 未找到 certs/supabase-ca.pem，严格 TLS 下连接 Supabase 可能报 ' +
+      '"self-signed certificate in certificate chain"。可用 SUPABASE_CA_FILE 指定路径。',
+  )
+}
 
 /**
  * 数据库 fail-fast（与 PAYLOAD_SECRET / 对象存储分支同策略）：
