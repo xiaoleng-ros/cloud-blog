@@ -49,27 +49,48 @@ const nextConfig = {
   images: { unoptimized: true },
   // EdgeOne 云函数 128MiB 限额：把仅构建期/CLI 使用的工具链挡在文件追踪之外
   // （不进追踪 = 不进 standalone，比构建后删文件安全）。
-  // ⚠️ 只能排除「没有 turbopack 哈希符号链接」的包：turbopack 会为模块图里的
-  // externalized 包在 .next/standalone/apps/cms/.next/node_modules/ 下建
-  // `<pkg>-<hash>` 符号链接（本地图谱：drizzle-kit/graphql/pg/pino/pino-pretty/
-  // sharp/shiki/@libsql/client/@aws-sdk/client-s3/@waline/vercel），链接目标是
-  // 追踪复制进来的包本体；若把这类包从追踪排除，CI 里链接目标不存在 →
-  // 插件 onBuild realpath ENOENT（2026-10-12 实际翻车：drizzle-kit）。
-  // drizzle-kit 恰好在图谱里（payload 的 drizzle 适配器 import drizzle-kit/migrator），
-  // 只能留；@esbuild/esbuild 系不在图谱、仅作闭包依赖进包，排除安全。
-  // @vercel/og 仅 ImageResponse 使用，本项目无。
+  // 基线实测（2026-10-12，edgeone pages build 本地打包）：函数包 208MB，超限 80MB；
+  // 下列排除合计裁掉 ~100MB，打包后约 108MB。
+  //
+  // ⚠️ 哈希符号链接坑（曾在 CI 翻车）：turbopack 会给图谱里的 externalized 包在
+  // .next/standalone/apps/cms/.next/node_modules/ 下建 `<pkg>-<hash>` 符号链接，
+  // 打包插件 onBuild 会对链接做 realpath 复制；若把这类包整包排除 → 链接变死链 →
+  // realpath ENOENT 构建失败（2026-10-12 首次排除 drizzle-kit 时实际翻过车）。
+  // 解法：buildCommand 末尾 `find .next -xtype l -delete` 先清死链，再交给插件打包。
+  // （符号链接解引用后包内会有双份：drizzle-kit 本体 + 链接副本，共 ~36MB。）
   outputFileTracingExcludes: {
     '*': [
       'node_modules/@esbuild/**',
       'node_modules/esbuild/**',
       'node_modules/esbuild-register/**',
       'node_modules/next/dist/compiled/@vercel/og/**',
+      // Next 内嵌的图像优化原生库（next/node_modules/@img，glibc+musl 双份 ~37MB）。
+      // images.unoptimized=true → next 自带 image-optimizer 永不加载 sharp，运行时零引用；
+      // payload 的 sharp 走顶层 node_modules/sharp，不受影响。
+      'node_modules/next/node_modules/@img/**',
+      // musl（Alpine）专用原生二进制 ~26MB：EdgeOne Node Functions 跑官方 Node 构建
+      // （文档指定的 20.18.0 / 22.11.0 均为 glibc 发行版），运行时 detect-libc 判定
+      // glibc，只可能加载 linux-x64-gnu 变体；musl 变体在该运行时永远用不到。
+      // （npm 因 @img/@libsql 的 package.json 不区分 libc，会把两套都装上。）
+      'node_modules/@img/sharp-libvips-linuxmusl-x64/**',
+      'node_modules/@img/sharp-linuxmusl-x64/**',
+      'node_modules/@libsql/linux-x64-musl/**',
+      // drizzle-kit 只在 dev（schema push / 迁移生成）用到：payload 的
+      // requireDrizzleKit() 是惰性 createRequire，生产跑预生成 migrations 数组，
+      // 从不调用它（@payloadcms/drizzle 的调用点全在 pushDevSchema / 迁移生成链路）。
+      // 整包排除后其哈希死链由 buildCommand 的 find -xtype l -delete 清理。
+      'node_modules/drizzle-kit/**',
     ],
     '/*': [
       'node_modules/@esbuild/**',
       'node_modules/esbuild/**',
       'node_modules/esbuild-register/**',
       'node_modules/next/dist/compiled/@vercel/og/**',
+      'node_modules/next/node_modules/@img/**',
+      'node_modules/@img/sharp-libvips-linuxmusl-x64/**',
+      'node_modules/@img/sharp-linuxmusl-x64/**',
+      'node_modules/@libsql/linux-x64-musl/**',
+      'node_modules/drizzle-kit/**',
     ],
   },
   // 安全响应头：对全部路由（含 Payload 后台 /admin 与 /api）统一加，均为无副作用基线项：
