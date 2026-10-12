@@ -188,6 +188,14 @@ npm run dev:cms:warm     # 推荐：按需启动本地 PG → 拉起 Next → �
 >   会退化成「模板默认文案 + 0 篇文章」，并且**不会生成任何文章详情页**（`/posts/*` 全部 404）。
 >   构建日志里会打印明确的 `[payload-loader] ⚠️` 提示。
 > - 首次部署（站点还没上线时）构建必然拉不到数据，属正常；上线后在控制台填好域名重新部署一次即可。
+> - **Supabase 根证书随仓库提交**（`apps/cms/certs/supabase-ca.pem`），构建时由
+>   `scripts/ensure-supabase-ca.mjs` 复制进函数包，别删、别加进 `.gitignore`。
+>   ⚠️ **连接串里不要写 `sslmode` / `sslrootcert` / `sslcert` / `sslkey`**：
+>   pg 会用连接串的解析结果覆盖显式传入的 ssl 配置，把它整个清成 `{}`，
+>   注入的 CA 随之丢失 → 连库报 `self-signed certificate in certificate chain`
+>   → Payload 初始化失败 → `/admin` 与 `/api/*` 全站 500（2026-10-12 线上事故根因）。
+>   代码已会自动剔除这些参数并打印 `[payload] Postgres TLS` 摘要；
+>   部署后访问 `GET /api/health` 核对 `pgTls.ssl.hasCa === true` 即可确认证书真的生效。
 > - **Serverless 无持久磁盘，线上必须用 `postgres` 托管库**（项目已内置 `@payloadcms/db-postgres`，并带 `projects` 集合的迁移）。SQLite 分支仅作保留：`migrations/` 是 Postgres 方言，用它无法复用线上迁移，不推荐。
 > - CMS 依赖 Node 运行时与 `sharp`，请在 Makers 中选择支持 Node/Next SSR 的方案（而非纯边缘函数）。
 > - **运行时常量**：SSE 与内存缓存均为单实例级；EdgeOne 多实例时靠 5s TTL 快照 + 前台轮询兜底，最终一致。

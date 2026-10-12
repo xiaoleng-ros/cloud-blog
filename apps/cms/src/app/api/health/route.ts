@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { NextResponse } from 'next/server'
+import { resolvePgTls } from '../../../lib/pg-tls'
 
 // 临时诊断端点（问题定位后可删除）：
 // EdgeOne 函数容器里拿不到交互式日志，这个端点把三类定位信息直接吐进 HTTP 响应：
@@ -73,6 +74,20 @@ export async function GET() {
     }
   })
 
+  // 2.6 实际生效的 Postgres TLS 方案（2026-10-12 事故的关键观测量）
+  //
+  // 专门回答「注入的 CA 到底有没有被 pg 用上」—— 证书在包里 ≠ 证书被使用：
+  //   - strippedQueryKeys 非空 → POSTGRES_URL 自带 sslmode 等参数（已被自动剔除，属修复后的正常行为）
+  //   - ssl.rejectUnauthorized=false → 走了 PG_SSL_INSECURE=1 降级分支
+  //   - ssl.hasCa=false / ca.loaded=false → 才是真的没拿到证书
+  // 三者组合可一次性区分「修复没部署」「证书没进包」「证书进了包但被连接串覆盖」。
+  const pgTls = resolvePgTls({
+    connectionString: process.env.POSTGRES_URL,
+    insecure: process.env.PG_SSL_INSECURE === '1',
+    caFile: process.env.SUPABASE_CA_FILE,
+    localSsl: process.env.PG_LOCAL_SSL === '1',
+  })
+
   // 3. Payload 初始化真实报错
   const realExit = process.exit.bind(process)
   ;(process as { exit: unknown }).exit = () => {}
@@ -93,7 +108,33 @@ export async function GET() {
   }
 
   return NextResponse.json(
-    { cwd, htmlDirFound: dirs.find((d) => d.exists)?.path ?? null, dirs, env, certs, payload },
+    {
+      cwd,
+      htmlDirFound: dirs.find((d) => d.exists)?.path ?? null,
+      dirs,
+      env,
+      certs,
+      pgTls: {
+        host: pgTls.host,
+        strict: pgTls.strict,
+        isLocal: pgTls.isLocal,
+        // 非空 = 用户在 POSTGRES_URL 里写了 ssl 参数，已被自动剔除
+        strippedQueryKeys: pgTls.strippedQueryKeys,
+        ssl:
+          pgTls.ssl === false
+            ? false
+            : pgTls.ssl
+              ? {
+                  rejectUnauthorized: pgTls.ssl.rejectUnauthorized,
+                  hasCa: Boolean(pgTls.ssl.ca),
+                  trustStoreCerts: pgTls.ssl.ca?.length ?? 0,
+                }
+              : null,
+        ca: pgTls.ca,
+        trustStoreCerts: pgTls.trustStoreCerts,
+      },
+      payload,
+    },
     { status: payload.ok ? 200 : 503 },
   )
 }
