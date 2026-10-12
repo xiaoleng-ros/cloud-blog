@@ -80,6 +80,8 @@ export async function GET() {
   //   - strippedQueryKeys 非空 → POSTGRES_URL 自带 sslmode 等参数（已被自动剔除，属修复后的正常行为）
   //   - ssl.rejectUnauthorized=false → 走了 PG_SSL_INSECURE=1 降级分支
   //   - ssl.hasCa=false / ca.loaded=false → 才是真的没拿到证书
+  //   - user/port：Supabase pooler 的 user 含项目 ref，与控制台项目地址一对比即现形
+  //     （2026-10-12 终极根因：ref typo，报错与项目暂停一模一样，极具误导性）
   // 三者组合可一次性区分「修复没部署」「证书没进包」「证书进了包但被连接串覆盖」。
   const pgTls = resolvePgTls({
     connectionString: process.env.POSTGRES_URL,
@@ -116,6 +118,11 @@ export async function GET() {
       certs,
       pgTls: {
         host: pgTls.host,
+        // Supabase pooler 的 user = postgres.<ref>，即 tenant 标识。
+        // 与控制台项目地址（https://<ref>.supabase.co）对比，ref typo 一秒现形 ——
+        // 2026-10-12 全站 500 的终极根因就是这里错了两位，host 却是对的。
+        user: pgTls.user,
+        port: pgTls.port,
         strict: pgTls.strict,
         isLocal: pgTls.isLocal,
         // 非空 = 用户在 POSTGRES_URL 里写了 ssl 参数，已被自动剔除

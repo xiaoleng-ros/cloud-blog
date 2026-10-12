@@ -35,6 +35,17 @@
  *   4. 注入的 ca 是「Node 内置 Mozilla 根证书 + Supabase 根证书」的合集。
  *      必须带上前者：pg 的 ssl.ca 是**替换**而不是追加信任库，只给 Supabase 根证书
  *      会让任何走公共 CA 的库（Neon / RDS / 自建）反而连不上 —— 修一个坑别挖出另一个。
+ *
+ * ⚠️ 2026-10-12 二次事故（ref typo，与 TLS 无关但症状极具误导性）：
+ *
+ *   EdgeOne 控制台 POSTGRES_URL 里的项目 ref 打错了两位（zdzemtn → zdzmztn），
+ *   连接池直接回 "(ENOTFOUND) tenant/user postgres.<ref> not found"。
+ *   这个错误和「项目被 Supabase 自动暂停」的报错**一模一样**，当时项目恰好又真的
+ *   处于暂停状态，导致排查先跑去了 Supabase 控制台恢复项目，绕了一大圈。
+ *
+ *   教训：health 端点必须回显**用户名**（Supabase pooler 的 user = postgres.<ref>，
+ *   即 tenant 标识），不能只回显 host。用户名里的 ref 与控制台项目地址一对比，
+ *   typo 一秒现形。user / port 字段就是为此加入的。
  */
 
 import { readFileSync } from 'node:fs'
@@ -84,6 +95,14 @@ export interface PgTlsPlan {
   isLocal: boolean
   /** 连接串主机名（不含凭据，可安全回显） */
   host: string | null
+  /**
+   * 连接串用户名。Supabase pooler 的 user = postgres.<project-ref>，即 tenant 标识，
+   * 与控制台项目地址一对比就能发现 ref typo —— 2026-10-12 事故的核心观测量。
+   * 用户名不含密码，可安全回显。
+   */
+  user: string | null
+  /** 连接串端口（缺省时 pg 按 5432 处理） */
+  port: string | null
   /** 从连接串里剔除掉的参数名，用于诊断「用户串里是不是本来就带 ssl 参数」 */
   strippedQueryKeys: string[]
   /** Supabase CA 的加载情况；loaded=false 才是真的缺文件 */
@@ -97,6 +116,27 @@ function hostOf(connectionString?: string): string | null {
   if (!connectionString) return null
   try {
     return new URL(connectionString).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+/** 取连接串用户名（Supabase pooler 下即 tenant 标识）；解析失败返回 null */
+function userOf(connectionString?: string): string | null {
+  if (!connectionString) return null
+  try {
+    const user = new URL(connectionString).username
+    return user ? decodeURIComponent(user) : null
+  } catch {
+    return null
+  }
+}
+
+/** 取连接串端口；未显式指定返回 null（pg 默认 5432） */
+function portOf(connectionString?: string): string | null {
+  if (!connectionString) return null
+  try {
+    return new URL(connectionString).port || null
   } catch {
     return null
   }
@@ -229,6 +269,8 @@ export function resolvePgTls(input: {
     strict,
     isLocal,
     host: hostOf(input.connectionString),
+    user: userOf(input.connectionString),
+    port: portOf(input.connectionString),
     strippedQueryKeys: stripped,
     ca: ca ? { loaded: true, ...ca.info } : { loaded: false },
     trustStoreCerts,
