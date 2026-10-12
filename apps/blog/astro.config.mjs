@@ -84,28 +84,56 @@ function siteUrlGuard() {
 }
 
 /**
- * 空站守卫：构建产物里一条文章详情页都没有就让构建失败（非零退出）。
+ * 空站守卫：构建产物里一条文章详情页都没有时的处理。
  *
  * 为什么放这里而不是 loader 里抛错：loader 在 dev / astro check 里同样会跑，
  * 那两种场景下「后台没起来」是正常状态（dev 靠轮询自愈、check 不关心数据），
  * 只有 build 才需要拦住空站；astro:build:done 只在构建时触发，天然区分。
- * 拦的是两类事故：「库里 0 篇已发布文章」和「PUBLIC_PAYLOAD_URL 指错域名 →
- * 静默回退本地 markdown」，两者都会照常打印 Complete!，随后被 build:all 带上线。
+ *
+ * 严格拦的是两类事故：「后台正常但库里 0 篇已发布文章」和「PUBLIC_PAYLOAD_URL
+ * 指错域名 → 静默回退本地 markdown」，两者都会照常打印 Complete!，随后被 build:all 带上线。
+ *
+ * 唯一例外：后台本身不可用（网络错误 / 5xx）时只告警放行。否则会形成死循环——
+ * 环境变量只对「新部署」生效，而新部署的构建期要拉「旧部署」的 API；旧部署一旦 500
+ * （如数据库被 Supabase 休眠暂停 → Payload 起不来），空站守卫就永远中止构建，
+ * 新部署永远上不了线（2026-10-12 实际发生）。放行空外壳后，运行时 catch-all 会在
+ * 后台恢复时注入实时数据；后台恢复后**再构建一次**即补齐 /posts/* 详情页。
  */
 function emptySiteGuard() {
+  const strictError = () =>
+    new Error(
+      '[astro.config] 构建产物里没有任何文章详情页（/posts/*），已中止。' +
+        '通常是后台拉取失败后静默回退了本地 markdown（src/content/posts 为空）：' +
+        '确认 PUBLIC_PAYLOAD_URL 指向的后台有已发布文章；本地刷新前台外壳请用 npm run sync:blog。',
+    );
   return {
     name: 'empty-site-guard',
     hooks: {
-      'astro:build:done'({ pages }) {
+      'astro:build:done': async ({ pages, logger }) => {
         // pathname 不带前导斜杠（如 404/、posts/AI纪元/2/）；列表页是 posts/ 或 posts，
         // 详情页在 posts/ 之后还有内容
         const detailPages = pages.filter((page) => /^\/?posts\/.+/.test(page.pathname ?? ''));
         if (detailPages.length > 0) return;
-        throw new Error(
-          '[astro.config] 构建产物里没有任何文章详情页（/posts/*），已中止。' +
-            '通常是后台拉取失败后静默回退了本地 markdown（src/content/posts 为空）：' +
-            '确认 PUBLIC_PAYLOAD_URL 指向的后台有已发布文章；本地刷新前台外壳请用 npm run sync:blog。',
-        );
+        // process.env 在配置求值时读不到 .env 文件，必须走 loadEnv（见上方 LOCAL_ENV 注释）
+        const base = (LOCAL_ENV.PUBLIC_PAYLOAD_URL || process.env.PUBLIC_PAYLOAD_URL || '').trim();
+        if (!base) throw strictError();
+        let backendDown = false;
+        try {
+          const res = await fetch(`${base}/api/blog-sync?digest=1`, {
+            signal: AbortSignal.timeout(8000),
+          });
+          backendDown = res.status >= 500;
+        } catch {
+          backendDown = true;
+        }
+        if (backendDown) {
+          logger?.error?.(
+            '[empty-site-guard] ⚠️ 后台不可用（网络错误或 5xx）：本次放行空外壳部署，' +
+              '避免「构建期依赖旧部署」死循环。后台恢复后请再触发一次构建，补齐 /posts/* 详情页。',
+          );
+          return;
+        }
+        throw strictError();
       },
     },
   };
