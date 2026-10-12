@@ -41,6 +41,8 @@ apps/cms/public/*
 .idea/
 .workbuddy/
 .trae/
+# 聊天上传的截图等附件（可能含控制台凭据截图，禁止入库）
+.uploads/
 
 # Logs and OS caches
 npm-debug.log*

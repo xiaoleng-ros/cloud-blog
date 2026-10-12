@@ -38,6 +38,18 @@ async function startBridge(): Promise<Bridge> {
   if (starting) return starting
 
   starting = (async () => {
+    // 评论敏感词：仓库词表（src/lib/forbidden-words.ts，可放成千上万个词）与环境变量
+    // FORBIDDEN_WORDS 取并集，在 require('@waline/vercel') 之前注入 process.env ——
+    // Waline 的 config.js 在 require 时一次性读取该变量，晚了就读不到。
+    // 每个词都过正则转义：@waline/core 会把词直接 join('|') 拼进 RegExp，
+    // 词里带 ( ) + . 等元字符不转义会让整条评论插入直接抛错。
+    const { escapeRegExp, forbiddenWordList } = await import('./forbidden-words')
+    const envWords = (process.env.FORBIDDEN_WORDS ?? '').split(/[\s,，]+/u).filter(Boolean)
+    const mergedWords = [...new Set([...envWords, ...forbiddenWordList])]
+    if (mergedWords.length > 0) {
+      process.env.FORBIDDEN_WORDS = mergedWords.map(escapeRegExp).join(',')
+    }
+
     // @waline/vercel 是 CJS，且 ThinkJS 用运行时动态 require 加载其 src/*，
     // 必须保持 external（见 next.config.mjs 的 serverExternalPackages），
     // 因此这里用 createRequire 在运行时解析，绕开打包器的静态分析。
