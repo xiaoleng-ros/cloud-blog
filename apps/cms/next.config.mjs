@@ -48,19 +48,24 @@ const nextConfig = {
   // 函数包里不再携带 sharp/图像优化运行时，行为零变化。
   images: { unoptimized: true },
   // EdgeOne 云函数 128MiB 限额：把仅构建期/CLI 使用的工具链挡在文件追踪之外
-  // （不进追踪 = 不进 standalone = 不产生死链符号链接，比构建后删文件安全）。
-  // drizzle-kit/@esbuild/esbuild 只服务于 migrate:create 等 CLI 路径；
+  // （不进追踪 = 不进 standalone，比构建后删文件安全）。
+  // ⚠️ 只能排除「没有 turbopack 哈希符号链接」的包：turbopack 会为模块图里的
+  // externalized 包在 .next/standalone/apps/cms/.next/node_modules/ 下建
+  // `<pkg>-<hash>` 符号链接（本地图谱：drizzle-kit/graphql/pg/pino/pino-pretty/
+  // sharp/shiki/@libsql/client/@aws-sdk/client-s3/@waline/vercel），链接目标是
+  // 追踪复制进来的包本体；若把这类包从追踪排除，CI 里链接目标不存在 →
+  // 插件 onBuild realpath ENOENT（2026-10-12 实际翻车：drizzle-kit）。
+  // drizzle-kit 恰好在图谱里（payload 的 drizzle 适配器 import drizzle-kit/migrator），
+  // 只能留；@esbuild/esbuild 系不在图谱、仅作闭包依赖进包，排除安全。
   // @vercel/og 仅 ImageResponse 使用，本项目无。
   outputFileTracingExcludes: {
     '*': [
-      'node_modules/drizzle-kit/**',
       'node_modules/@esbuild/**',
       'node_modules/esbuild/**',
       'node_modules/esbuild-register/**',
       'node_modules/next/dist/compiled/@vercel/og/**',
     ],
     '/*': [
-      'node_modules/drizzle-kit/**',
       'node_modules/@esbuild/**',
       'node_modules/esbuild/**',
       'node_modules/esbuild-register/**',
