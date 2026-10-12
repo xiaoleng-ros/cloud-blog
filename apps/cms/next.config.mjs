@@ -43,6 +43,30 @@ const nextConfig = {
   // Next 16 起 next build 默认 Turbopack，其项目根取本目录；cloud-blog 是指向仓库根的
   // file: 依赖，../../shared/* 落在根外会 module-not-found，必须显式上提根到 monorepo 根。
   turbopack: { root: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..') },
+  // 全项目无人使用 next/image；置 unoptimized 后 EdgeOne 插件会跳过图像优化
+  // loader 注入（见 @edgeone/opennextjs-pages 的 "images.unoptimized detected"），
+  // 函数包里不再携带 sharp/图像优化运行时，行为零变化。
+  images: { unoptimized: true },
+  // EdgeOne 云函数 128MiB 限额：把仅构建期/CLI 使用的工具链挡在文件追踪之外
+  // （不进追踪 = 不进 standalone = 不产生死链符号链接，比构建后删文件安全）。
+  // drizzle-kit/@esbuild/esbuild 只服务于 migrate:create 等 CLI 路径；
+  // @vercel/og 仅 ImageResponse 使用，本项目无。
+  outputFileTracingExcludes: {
+    '*': [
+      'node_modules/drizzle-kit/**',
+      'node_modules/@esbuild/**',
+      'node_modules/esbuild/**',
+      'node_modules/esbuild-register/**',
+      'node_modules/next/dist/compiled/@vercel/og/**',
+    ],
+    '/*': [
+      'node_modules/drizzle-kit/**',
+      'node_modules/@esbuild/**',
+      'node_modules/esbuild/**',
+      'node_modules/esbuild-register/**',
+      'node_modules/next/dist/compiled/@vercel/og/**',
+    ],
+  },
   // 安全响应头：对全部路由（含 Payload 后台 /admin 与 /api）统一加，均为无副作用基线项：
   //   - nosniff：禁止 MIME 嗅探；Payload 各资源都带正确 Content-Type，不会被误判拦截。
   //   - Referrer-Policy：跨源只发 origin，收敛引用方信息泄露。
