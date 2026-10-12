@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { NextResponse } from 'next/server'
 
@@ -46,7 +46,32 @@ export async function GET() {
     SUPABASE_BUCKET: !!process.env.SUPABASE_BUCKET,
     SUPABASE_PROJECT_REF: !!process.env.SUPABASE_PROJECT_REF,
     NODE_ENV: process.env.NODE_ENV ?? null,
+    // PG_SSL_INSECURE：若线上为 true，说明走了降级分支、报的是别的问题
+    PG_SSL_INSECURE: process.env.PG_SSL_INSECURE ?? null,
+    SUPABASE_CA_FILE: process.env.SUPABASE_CA_FILE ?? null,
   }
+
+  // 2.5 Supabase CA 证书探测（2026-10-12 线上 Payload 全站 500 的关键诊断项）
+  //
+  // 这个分支能一次性区分两种完全不同的情况：
+  //   - 「本次修复根本没部署」（新探测代码也不存在 → 看不到 certs 字段）
+  //   - 「部署了但证书没进函数包」（能看到 certs 字段但全是 found:false）
+  // 两者修法完全不同，必须能在线上区分开。
+  const caCandidates = [
+    process.env.SUPABASE_CA_FILE,
+    join(cwd, 'certs', 'supabase-ca.pem'),
+    join(cwd, 'apps', 'cms', 'certs', 'supabase-ca.pem'),
+    join('/var/user', 'apps', 'cms', 'certs', 'supabase-ca.pem'),
+    join('/var/task', 'certs', 'supabase-ca.pem'),
+  ].filter((p): p is string => !!p)
+  const certs = caCandidates.map((p) => {
+    try {
+      const pem = readFileSync(p, 'utf-8')
+      return { path: p, found: true, bytes: pem.length, blocks: (pem.match(/BEGIN CERTIFICATE/g) ?? []).length }
+    } catch {
+      return { path: p, found: false }
+    }
+  })
 
   // 3. Payload 初始化真实报错
   const realExit = process.exit.bind(process)
@@ -68,7 +93,7 @@ export async function GET() {
   }
 
   return NextResponse.json(
-    { cwd, htmlDirFound: dirs.find((d) => d.exists)?.path ?? null, dirs, env, payload },
+    { cwd, htmlDirFound: dirs.find((d) => d.exists)?.path ?? null, dirs, env, certs, payload },
     { status: payload.ok ? 200 : 503 },
   )
 }
