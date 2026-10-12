@@ -35,8 +35,13 @@ function resolveHtmlDir(): string | null {
     process.env.CMS_HTML_DIR,
     // 常见情况：cwd 就是 apps/cms
     join(process.cwd(), 'public', HTML_DIR_NAME),
+    // EdgeOne 函数包不含 public/（2026-10-12 二次实锤：静态层有外壳、容器里没有），
+    // 但 .next（服务端运行必需）一定在包里 —— copy-blog-to-public.mjs 会把外壳
+    // 同步一份到 standalone 的 .next/__blog，这里对应探测。
+    join(process.cwd(), '.next', HTML_DIR_NAME),
     // cwd 是仓库根目录时
     join(process.cwd(), 'apps', 'cms', 'public', HTML_DIR_NAME),
+    join(process.cwd(), 'apps', 'cms', '.next', HTML_DIR_NAME),
     // 容器把应用放在 /var/task 之类的目录时
     join('/var/task', 'public', HTML_DIR_NAME),
     // 兜底：从 cwd 逐级向上找「哪个目录下的 public/__blog 存在」

@@ -26,8 +26,10 @@ import { dirname, join, relative, resolve } from 'node:path';
 const BLOG_DIST = join(import.meta.dirname, '../../blog/dist');
 // apps/cms/public/ —— Next.js 约定的静态资源目录，EdgeOne 会自动部署
 const CMS_PUBLIC = join(import.meta.dirname, '../public');
+// HTML 外壳目录名（route.ts 运行时按此名探测；HTML_ROOT = public/<HTML_DIR_NAME>）
+const HTML_DIR_NAME = '__blog';
 // HTML 外壳目录（唯一一份 HTML，供运行时注入使用）
-const HTML_ROOT = join(CMS_PUBLIC, '__blog');
+const HTML_ROOT = join(CMS_PUBLIC, HTML_DIR_NAME);
 // 本脚本复制产物清单（相对 public/ 的路径列表），用于「只清自己复制的文件」
 const MANIFEST_FILE = join(CMS_PUBLIC, '.copy-blog-manifest.json');
 
@@ -163,6 +165,11 @@ console.log('[copy-blog] 已复制：静态资源 → public/ 根，HTML 仅一�
 // 目标子目录与 @edgeone/opennextjs-pages 的 PluginContext 同口径：
 //   distDir       = relative(cwd, resolve(relativeAppDir, config.distDir))  // apps/cms/.next
 //   函数包拷贝     .next/standalone/<distDir 的父目录>/*，容器内 cwd 也是这个父目录
+// 同步两处（2026-10-12 二次实锤：插件打包**不含 public/**——静态层有外壳、函数容器
+// 里没有，route.ts 全部候选落空 → 全站纯文本 404）：
+//   1. standalone/<app>/public/__blog  —— 静态层/兜底用，插件若含 public 则生效
+//   2. standalone/<app>/.next/__blog   —— 函数包必含 .next（服务端运行必需），此份
+//      一定能进容器；route.ts 的 resolveHtmlDir 已加对应候选
 // 额外再放一份到 standalone 根：口径万一不同（cwd 在函数包根）也能被路由的
 // 向上探测（walkUpFor）命中；该副本是否进包取决于插件版本，体积按下面日志核对。
 function syncShellsToStandalone() {
@@ -176,7 +183,11 @@ function syncShellsToStandalone() {
   try {
     const rsf = JSON.parse(readFileSync(reqFilesPath, 'utf-8'));
     const distDir = relative(process.cwd(), resolve(rsf.relativeAppDir || '', rsf.config?.distDir || '.next'));
-    targets = [join(standaloneRoot, dirname(distDir), 'public', HTML_DIR_NAME)];
+    const appDir = dirname(distDir);
+    targets = [
+      join(standaloneRoot, appDir, 'public', HTML_DIR_NAME),
+      join(standaloneRoot, appDir, '.next', HTML_DIR_NAME),
+    ];
     const rootTarget = join(standaloneRoot, 'public', HTML_DIR_NAME);
     if (!targets.includes(rootTarget)) targets.push(rootTarget);
   } catch (err) {
