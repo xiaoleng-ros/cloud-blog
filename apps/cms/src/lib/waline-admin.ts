@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import { Client } from 'pg'
 import { forwardToWaline } from './waline-bridge'
+import { resolvePgTls } from './pg-tls'
 
 /**
  * 后台评论管理的服务端入口：以「管理员身份」调用进程内 Waline。
@@ -84,14 +85,44 @@ class WalineAdminError extends Error {
 
 let adminId: number | null = null
 
+/**
+ * 评论库连接串：与 Payload 主库同一份 Supabase 实例。
+ *
+ * 优先 POSTGRES_URL（EdgeOne 控制台配置的连接串）；
+ * 回落本地的 POSTGRES_HOST/PORT/DATABASE/USER/PASSWORD 分离变量（本地绿色版 PG）。
+ */
+function walineConnectionString(): string | undefined {
+  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL
+  const { POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD } = process.env
+  if (!POSTGRES_HOST) return undefined
+  const auth = POSTGRES_USER
+    ? `${encodeURIComponent(POSTGRES_USER)}:${encodeURIComponent(POSTGRES_PASSWORD ?? '')}@`
+    : ''
+  return `postgresql://${auth}${POSTGRES_HOST}:${POSTGRES_PORT ?? 5432}/${POSTGRES_DATABASE ?? ''}`
+}
+
+/**
+ * 连接评论库。
+ *
+ * TLS 方案必须走 resolvePgTls（项目硬性约定 #3），与 Payload 主连接同一套严格校验：
+ * 旧代码在这里用过 `rejectUnauthorized: false`（连 Supabase 时不校验证书），
+ * 等于给同一个库开了两条策略——主连接严查、这条连接放任，中间人风险就从这来。
+ * 废弃 POSTGRES_SSL 开关：SSL 行为由 POSTGRES_URL 形态 + PG_SSL_INSECURE 决定，
+ * 本机库自动跳过 TLS（isLocalPg 命中），无需手动开关。
+ */
 async function withDb<T>(run: (client: Client) => Promise<T>): Promise<T> {
+  const plan = resolvePgTls({
+    connectionString: walineConnectionString(),
+    insecure: process.env.PG_SSL_INSECURE === '1',
+    caFile: process.env.SUPABASE_CA_FILE,
+    localSsl: process.env.PG_LOCAL_SSL === '1',
+  })
+  if (!plan.connectionString) {
+    throw new WalineAdminError('未配置 POSTGRES_URL / POSTGRES_HOST，评论管理不可用', 500)
+  }
   const client = new Client({
-    host: process.env.POSTGRES_HOST ?? '127.0.0.1',
-    port: Number(process.env.POSTGRES_PORT ?? 5432),
-    database: process.env.POSTGRES_DATABASE ?? '',
-    user: process.env.POSTGRES_USER ?? '',
-    password: process.env.POSTGRES_PASSWORD ?? '',
-    ssl: process.env.POSTGRES_SSL ? { rejectUnauthorized: false } : undefined,
+    connectionString: plan.connectionString,
+    ...(plan.ssl !== undefined ? { ssl: plan.ssl } : {}),
   })
   await client.connect()
   try {

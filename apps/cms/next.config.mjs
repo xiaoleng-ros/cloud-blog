@@ -108,6 +108,9 @@ const nextConfig = {
   //   - Referrer-Policy：跨源只发 origin，收敛引用方信息泄露。
   //   - X-Frame-Options SAMEORIGIN：只允许同源页面把后台嵌进 iframe（防点击劫持）；
   //     后台与前台同源，不影响 Payload admin 自身的同页布局。
+  //   - Strict-Transport-Security：EdgeOne 全站 HTTPS，声明一年内只走加密连接，
+  //     挡掉首次访问时的协议降级（http:// 劫持/嗅探）。includeSubDomains 覆盖
+  //     后台子域 cms.iceuu.com 与前台 blog.iceuu.icu 同族场景。
   // 说明：暂不强上 CSP —— 后台（vditor/lexical/内联样式与脚本）内联内容多，贸然加会碎掉界面；
   //       建议后续单独做 CSP 基线并按 nonce 方案灰度验证后再启用。
   async headers() {
@@ -118,6 +121,7 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
         ],
       },
     ]
