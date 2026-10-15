@@ -107,8 +107,51 @@ function isUnder(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`)
 }
 
+/**
+ * 登录限频（应用层兜底，非主力）。
+ *
+ * 主力防护在 EdgeOne 控制台的速率限制规则（边缘层拦截，按平台侧可信源 IP 计数）。
+ * 这里作为兜底：内存计数在单实例内有效，EdgeOne 多实例时各实例独立计数，
+ * 且 Edge runtime 冷启动会丢计数——挡得住持续暴力破解，挡不住分布式慢速尝试。
+ *
+ * 阈值从宽：10 次/分钟。正常登录（含输错一次改对）远低于此；
+ * 真实防护是平台层规则，这里只是漏到应用层的请求别无限重试。
+ */
+const LOGIN_WINDOW_MS = 60_000
+const LOGIN_MAX_ATTEMPTS = 10
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+
+function loginRateLimited(request: NextRequest): boolean {
+  // x-forwarded-for 取第一个（客户端地址）；取不到 IP 时放弃计数放行——
+  // 落到共享 'unknown' 桶会把正常用户一起误伤，比不限频更糟。
+  const forwarded = request.headers.get('x-forwarded-for')
+  const ip = forwarded?.split(',')[0]?.trim()
+  if (!ip) return false
+
+  const now = Date.now()
+  // Map 膨胀防护：超千条时顺手清掉已过期的窗口
+  if (loginAttempts.size > 1000) {
+    for (const [key, rec] of loginAttempts) {
+      if (now > rec.resetAt) loginAttempts.delete(key)
+    }
+  }
+
+  const rec = loginAttempts.get(ip)
+  if (!rec || now > rec.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+    return false
+  }
+  rec.count += 1
+  return rec.count > LOGIN_MAX_ATTEMPTS
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // 登录端点限频：Payload 3.x 登录走 POST /api/users/login（routes.api 默认 '/api'）
+  if (pathname === '/api/users/login' && loginRateLimited(request)) {
+    return new NextResponse(null, { status: 429 })
+  }
 
   // 处理 /admin 前缀（管理入口及其子页面）
   if (isUnder(pathname, ADMIN_ROOT)) {
@@ -135,7 +178,8 @@ export function middleware(request: NextRequest) {
 // 使用 Next.js 默认的 Edge runtime 即可，无需 experimental flag，构建稳定。
 // 注：EdgeOne Makers 作为 Next.js 托管平台支持 Edge runtime middleware。
 
-// 匹配 /admin 前缀（含 /admin 本身与其下所有子路径），鉴权判断见上方 isUnder 逻辑
+// 匹配 /admin 前缀（含 /admin 本身与其下所有子路径）+ 登录端点（限频兜底），
+// 鉴权判断见上方 isUnder 逻辑，/_next/* 等静态资源不命中。
 export const config = {
-  matcher: '/admin/:path*',
+  matcher: ['/admin/:path*', '/api/users/login'],
 }

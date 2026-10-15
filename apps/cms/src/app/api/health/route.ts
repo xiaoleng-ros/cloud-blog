@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { NextResponse } from 'next/server'
+import { timingSafeEqual } from 'node:crypto'
+import { NextResponse, type NextRequest } from 'next/server'
 
 // 临时诊断端点（问题定位后可删除）：
 // EdgeOne 函数容器里拿不到交互式日志，这个端点把三类定位信息直接吐进 HTTP 响应：
@@ -10,11 +11,36 @@ import { NextResponse } from 'next/server'
 //      "There was an error initializing Payload"，这里自己调用一次拿到根因）
 // 注意：payload.config 的 fail-fast 是「throw + 延迟 process.exit(1)」，导入前必须
 // 暂时屏蔽 process.exit，否则进程会在响应发出前被拉死，诊断信息一个字节都出不去。
+//
+// ⚠️ 生产环境默认 404：响应里含 cwd、目录结构、环境变量存在性、CA 路径、连接串 ref
+// 等内部信息，匿名可访问就是在给攻击者递侦察报告。
+// 线上排障时在 EdgeOne 控制台加环境变量 HEALTH_TOKEN，请求带头
+// `x-health-token: <HEALTH_TOKEN 值>` 才放行：
+//   curl -H 'x-health-token: <token>' https://blog.iceuu.icu/api/health
+// 不配置 HEALTH_TOKEN = 线上任何人 404，本地开发不受影响。
 export const dynamic = 'force-dynamic'
 
 const HTML_DIR_NAME = '__blog'
 
-export async function GET() {
+/** 恒定时间比较，避免 token 比对本身成为计时侧信道 */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, 'utf-8')
+  const bb = Buffer.from(b, 'utf-8')
+  if (ab.length !== bb.length) return false
+  return timingSafeEqual(ab, bb)
+}
+
+export async function GET(request: NextRequest) {
+  // 生产环境守卫：未配置 HEALTH_TOKEN 或 token 不匹配 → 404（用 404 而非 401/403，
+  // 不暴露「这个端点存在」这一事实本身）
+  if (process.env.NODE_ENV === 'production') {
+    const expected = process.env.HEALTH_TOKEN
+    const provided = request.headers.get('x-health-token')
+    if (!expected || !provided || !safeEqual(provided, expected)) {
+      return new NextResponse(null, { status: 404 })
+    }
+  }
+
   const cwd = process.cwd()
 
   // 1. 外壳目录候选探测（与 src/app/[[...path]]/route.ts 的 resolveHtmlDir 同口径 + .next 兜底位）
