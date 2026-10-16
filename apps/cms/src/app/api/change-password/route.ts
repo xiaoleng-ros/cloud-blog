@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { APIError, getPayload } from 'payload'
-import config from '@payload-config'
+import { APIError } from 'payload'
 import { verifyRequestUser } from '../../../lib/feishu-session'
 import { validatePasswordStrength } from '../../../lib/password'
+import { getDb, type PayloadDb } from '../../../lib/blog-sync'
 
 /**
  * 修改密码（需验旧密码）
@@ -22,10 +22,6 @@ import { validatePasswordStrength } from '../../../lib/password'
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-async function getDb() {
-  return getPayload({ config })
-}
 
 /** 统一的错误响应（errors 数组形态，兼容 Payload REST 客户端） */
 const errorJson = (message: string, status: number) =>

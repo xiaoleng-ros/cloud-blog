@@ -191,7 +191,10 @@ const restTags = tags.slice(16);
 
   <script is:inline data-astro-rerun>
     (() => {
-      // 绑定「展开其余标签」交互；区块被轮询更新后需重新绑定
+      // 绑定「展开其余标签」交互；区块被轮询更新后需重新绑定。
+      // 每次重跑先清理上一次的 document 监听器，避免 ClientRouter 换页后监听器叠加
+      // （index/notes 页的 __blogHomeMoreCleanup 同款做法，本页原先漏了）。
+      window.__blogArchiveBindCleanup?.();
       const bind = () => {
         const btn = document.querySelector('[data-term-toggle]');
         const more = document.querySelector('[data-term-more]');
@@ -210,6 +213,9 @@ const restTags = tags.slice(16);
       };
       bind();
       document.addEventListener('blog:sync-updated', bind);
+      window.__blogArchiveBindCleanup = () => {
+        document.removeEventListener('blog:sync-updated', bind);
+      };
     })();
   </script>
 </BaseLayout>

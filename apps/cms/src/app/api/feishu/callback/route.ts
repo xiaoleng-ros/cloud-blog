@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
-import { createLocalReq, getPayload } from 'payload'
-import config from '@payload-config'
+import { createLocalReq } from 'payload'
 import { readCookie } from '../../../../lib/feishu-session'
+import { getDb, type PayloadDb } from '../../../../lib/blog-sync'
 
 /**
  * 飞书 OAuth 登录 —— 回调处理
@@ -211,19 +211,7 @@ type FeishuUserInfoResponse = {
   }
 }
 
-// getPayload 实例进程内缓存（跟 blog-sync.ts 相同策略，避免每请求重建）
-type PayloadDb = Awaited<ReturnType<typeof getPayload>>
-let dbPromise: Promise<PayloadDb> | null = null
 
-function getDb(): Promise<PayloadDb> {
-  if (!dbPromise) {
-    dbPromise = getPayload({ config }).catch((err) => {
-      dbPromise = null
-      throw err
-    })
-  }
-  return dbPromise
-}
 
 /** 用 authorization code 换 access_token；失败抛错 */
 async function exchangeCodeForToken(
@@ -307,6 +295,22 @@ async function fetchFeishuUserInfo(accessToken: string): Promise<{
  *     （见 payload/dist/auth/strategies/jwt.js）
  * 代价是保留了 sessions 能力：后台删会话 / 改密码都能立即吊销这个令牌。
  */
+/**
+ * 同一用户的会话写入串行化。
+ * createUserSession 是「读现存 sessions → 过滤过期 → 追加新 sid → 整体写回」，
+ * 并发登录会丢更新：后发的登录读到写回前的旧数组、追加自己的 sid 后整体覆盖，
+ * 先发登录刚写入的 sid 不在库里 → JWT 校验失败被踢。进程内按 userId 串行化即可
+ * 消除最常见的并发窗口；多实例仍需平台层（与登录限频同类已知限制）。
+ */
+const sessionLocks = new Map<string, Promise<unknown>>()
+function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<T> {
+  const prev = sessionLocks.get(userId) ?? Promise.resolve()
+  // prev 永不 reject（见下方 set 存的是吞错后的续程），故 onFulfilled/onRejected 都跑 run
+  const next = prev.then(run, run)
+  sessionLocks.set(userId, next.then(() => undefined, () => undefined))
+  return next
+}
+
 async function createUserSession(
   payload: PayloadDb,
   userDoc: { id: string | number; email?: string },
@@ -317,25 +321,28 @@ async function createUserSession(
   const now = new Date()
   const expiresAt = new Date(now.getTime() + tokenExpirationSec * 1000)
 
-  const current = await payload.findByID({
-    collection: 'users',
-    id: userDoc.id,
-    depth: 0,
-  })
-  const existing = ((current as { sessions?: Array<{ id: string; expiresAt: string | Date }> })
-    ?.sessions ?? []) as Array<{ id: string; expiresAt: string | Date }>
-  const liveSessions = existing.filter((s) => new Date(s.expiresAt) > now)
+  // 读-改-写整段进锁，避免并发登录互踢
+  await withUserLock(String(userDoc.id), async () => {
+    const current = await payload.findByID({
+      collection: 'users',
+      id: userDoc.id,
+      depth: 0,
+    })
+    const existing = ((current as { sessions?: Array<{ id: string; expiresAt: string | Date }> })
+      ?.sessions ?? []) as Array<{ id: string; expiresAt: string | Date }>
+    const liveSessions = existing.filter((s) => new Date(s.expiresAt) > now)
 
-  // updatedAt 置 null：仅新增会话不应改动「更新时间」（与 Payload addSessionToUser 行为一致）
-  await payload.db.updateOne({
-    id: userDoc.id,
-    collection: 'users',
-    data: {
-      sessions: [...liveSessions, { id: sid, createdAt: now, expiresAt }],
-      updatedAt: null,
-    },
-    req: await createLocalReq({}, payload),
-    returning: false,
+    // updatedAt 置 null：仅新增会话不应改动「更新时间」（与 Payload addSessionToUser 行为一致）
+    await payload.db.updateOne({
+      id: userDoc.id,
+      collection: 'users',
+      data: {
+        sessions: [...liveSessions, { id: sid, createdAt: now, expiresAt }],
+        updatedAt: null,
+      },
+      req: await createLocalReq({}, payload),
+      returning: false,
+    })
   })
 
   const fieldsToSign = {
@@ -473,6 +480,27 @@ export async function GET(request: Request) {
     }
 
     // 8. 建立会话并签发带 sid 的 JWT（可被后台吊销）
+    //    同时回填飞书资料：name/avatar/unionId 由本次扫码的 user_info（服务端持有 access_token）
+    //    权威拉取，覆盖绑定阶段留下的空值。绑定接口只收 openId、不收这些字段（见 /api/feishu/bind）。
+    await payload.db
+      .updateOne({
+        id: userDoc.id,
+        collection: 'users',
+        data: {
+          feishu: {
+            openId: feishuUser.openId,
+            unionId: feishuUser.unionId ?? null,
+            name: feishuUser.name ?? null,
+            avatar: feishuUser.avatar ?? null,
+          },
+        },
+        req: await createLocalReq({}, payload),
+        returning: false,
+      })
+      .catch((err) => {
+        // 资料回填失败不应阻断登录：openId 已匹配，会话照常建立，下次登录再回填。
+        console.error('[feishu/callback] 回填用户资料失败（不阻断登录）', err)
+      })
     const configuredExpiration = (payload.config as { admin?: { cookieExpiration?: number } }).admin
       ?.cookieExpiration
     const tokenExpiration =

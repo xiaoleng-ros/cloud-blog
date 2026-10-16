@@ -67,6 +67,8 @@ export interface WalineListResult {
   total: number
   waitingCount: number
   spamCount: number
+  /** 评论总数超出拉取上限（FETCH_MAX_PAGES×FETCH_PAGE_SIZE）时为真：后台应提示有更多未加载 */
+  truncated?: boolean
 }
 
 interface WalineEnvelope<T> {
@@ -161,7 +163,9 @@ async function ensureAdminAccountId(): Promise<number> {
 function mintAdminToken(): string {
   const key = process.env.JWT_TOKEN
   if (!key) throw new WalineAdminError('未配置 JWT_TOKEN，后台无法访问评论服务', 500)
-  return jwt.sign(String(adminId!), key)
+  // 管理令牌必须有过期时间：服务端签发的内部令牌泄露即永久可用是不可接受的。
+  // 12h 覆盖一次后台连续操作窗口；过期后下一次调用会重新签发（adminId 已缓存，无额外查库）。
+  return jwt.sign(String(adminId!), key, { expiresIn: '12h' })
 }
 
 /**
@@ -270,20 +274,36 @@ function isPostComment(url: string): boolean {
   return pathname === POSTS_PATH_PREFIX || pathname.startsWith(`${POSTS_PATH_PREFIX}/`)
 }
 
-/** 无过滤条件整量拉取（分页循环），返回规范化后的评论 */
-async function fetchAllComments(): Promise<WalineComment[]> {
+/**
+ * 无过滤条件整量拉取（分页循环），返回规范化后的评论与是否被上限截断。
+ *
+ * 性能：第 1 页拿到 totalPages 后，剩余页并行拉取（原来 50 页串行 = 50 次往返，
+ * Supabase 跨公网下单页 ~150ms，串行就是 7.5s 阻塞后台列表）。并行后只剩 2 次往返：
+ * 1 次 page=1 + 1 次 Promise.all 其余。
+ */
+async function fetchAllComments(): Promise<{ rows: WalineComment[]; truncated: boolean }> {
   const rows: WalineComment[] = []
-  let page = 1
-  let totalPages = 1
-  do {
-    const data = await callWaline<{ totalPages?: number; data?: RawAdminComment[] }>('/api/comment', {
-      query: { type: 'list', page: String(page), pageSize: String(FETCH_PAGE_SIZE) },
-    })
-    rows.push(...(data?.data ?? []).map(normalize))
-    totalPages = Math.min(Number(data?.totalPages ?? 0) || 1, FETCH_MAX_PAGES)
-    page += 1
-  } while (page <= totalPages)
-  return rows
+  // 第 1 页：拿 totalPages 决定后续
+  const first = await callWaline<{ totalPages?: number; data?: RawAdminComment[] }>('/api/comment', {
+    query: { type: 'list', page: '1', pageSize: String(FETCH_PAGE_SIZE) },
+  })
+  rows.push(...(first?.data ?? []).map(normalize))
+  const reportedTotalPages = Number(first?.totalPages ?? 0) || 1
+  const truncated = reportedTotalPages > FETCH_MAX_PAGES
+  // 真正要拉的页数：上限兜底，超出的部分不在结果里，由 truncated 标记告知后台
+  const pagesToFetch = Math.min(reportedTotalPages, FETCH_MAX_PAGES)
+  if (pagesToFetch > 1) {
+    const restPages = Array.from({ length: pagesToFetch - 1 }, (_, i) => i + 2)
+    const rest = await Promise.all(
+      restPages.map((page) =>
+        callWaline<{ data?: RawAdminComment[] }>('/api/comment', {
+          query: { type: 'list', page: String(page), pageSize: String(FETCH_PAGE_SIZE) },
+        }).catch(() => ({ data: [] }) as { data?: RawAdminComment[] }),
+      ),
+    )
+    for (const page of rest) rows.push(...(page?.data ?? []).map(normalize))
+  }
+  return { rows, truncated }
 }
 
 /** 无时间戳（异常数据）落到 0：不带日期筛选时照常展示，带日期筛选则不命中 */
@@ -340,7 +360,8 @@ export async function listComments(options: {
   from?: string
   to?: string
 }): Promise<WalineListResult> {
-  const posts = (await fetchAllComments()).filter((item) => isPostComment(item.url))
+  const { rows: all, truncated } = await fetchAllComments()
+  const posts = all.filter((item) => isPostComment(item.url))
 
   // 角标计数只认文章评论，且不随关键词/日期变化（是队列水位，不是搜索结果数）
   const waitingCount = posts.filter((item) => item.status === 'waiting').length
@@ -369,6 +390,7 @@ export async function listComments(options: {
     total: matched.length,
     waitingCount,
     spamCount,
+    truncated,
   }
 }
 

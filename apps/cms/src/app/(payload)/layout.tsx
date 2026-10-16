@@ -14,24 +14,37 @@ type Args = {
 }
 
 /**
- * 主题首屏脚本（同步阻塞内联，必须排在 children 之前）。
+ * 主题防闪的演进（2026-10-16 重写，旧注释描述的是已废弃的方案，勿再参考）：
  *
- * 为什么要它：Payload 服务端 getRequestTheme 在无 cookie 时恒回落 light
- * （@payloadcms/next/dist/utilities/getRequestTheme.js），而 admin.theme='all' 时
- * 客户端 ThemeProvider 的 effect 会按 prefers-color-scheme 覆写 html[data-theme]
- * （@payloadcms/ui/dist/providers/Theme/index.js 的 getTheme：cookie → matchMedia）。
- * 于是 OS 深色首访必然「先亮后暗」闪一下。此脚本在首绘前按客户端终态同一顺序
- * （cookie `payload-theme` 命中 light/dark，否则 matchMedia 判 dark）提前写好 data-theme，
- * 让服务端 CSSOM 默认态 = 客户端终态。无外部依赖、整体 try/catch 兜底。
+ * 旧方案：在 children 前渲染内联 <script> 同步写 html[data-theme]。
+ * 为什么废弃（三条都有实证）：
+ *   1. 它从未生效过。Payload 的 RootLayout 是客户端组件，本布局传给它的
+ *      children（含该 script）会被序列化进 RSC flight 流，由客户端挂载——
+ *      SSR HTML 里根本没有这个 script 实体标签（抓包确认：全文只有 3 个内联
+ *      script，分别是 Next 启动器、flight 初始化与 flight 数据），浏览器解析
+ *      阶段无从执行；客户端用 innerHTML 造出来的 script 同样不会执行。
+ *      CDP 实测：模拟 prefers-color-scheme: dark 打开 /admin/login，
+ *      data-theme 全程保持 SSR 默认的 light。
+ *   2. 客户端挂载的 script 触发 React 19 dev 警告 "Encountered a script tag
+ *      while rendering React component"（didWarnScriptTags，仅 dev 构建有），
+ *      Next 16 dev 浮层会把它弹成错误。曾用 patches/next+16.3.8.patch 把
+ *      react-dom 开发版的 didWarnScriptTags 初始值置 true 消音，2026-10-11
+ *      已主动移除（patch-package 一旦因 Next 升级失配会让 npm ci 报错、中断
+ *      部署流水线，收益却只是开发期一行警告），故警告回归。
+ *   3. hidden-div + dangerouslySetInnerHTML 绕不过：React 19 Fizz 会在 SSR
+ *      时剥掉内联 HTML 里的 script；type="module" 能消警告但脚本改为解析后
+ *      才执行，失去「首绘前」的保证。
  *
- * dev 噪音的处置：react-dom 在客户端渲染任何可执行 <script> 节点都会 console.error
- * （"Encountered a script tag…"），Next 16 dev 浮层会把它弹成错误。已排除的路：
- * hidden-div + dangerouslySetInnerHTML 会被 React 19 Fizz 在 SSR 时剥掉 script（防闪
- * 失效）；type 属性绕不过（可执行类型一律警告）；Next 16 的 logging 配置无 filter。
- * 最终用 patches/next+16.3.8.patch 把 dev 构建里的 didWarnScriptTags 初始值改为 true
- * （仅 react-dom-*.development.js，生产构建不含该代码）。勿删此脚本。
+ * 现方案（零脚本、零补丁）：Payload 的 getRequestTheme 会读请求头
+ * `Sec-CH-Prefers-Color-Scheme`（@payloadcms/next/dist/utilities/
+ * getRequestTheme.js：cookie → 该请求头 → 默认 light）。next.config.mjs 的
+ * headers() 已对全站响应 `Accept-CH: Sec-CH-Prefers-Color-Scheme`：
+ *   - 二次起访问：浏览器携带该头 → 服务端直接渲染正确主题，首帧即正确，
+ *     无任何闪烁，也不需要 JS。
+ *   - 首次访问（尚无 hint）：SSR 落 light，hydration 后 ThemeProvider 的
+ *     effect 按 matchMedia 改写，与 Payload 原生行为一致，有一帧过渡。
+ * 主题手动选择仍由 Payload 写 payload-theme cookie，优先级高于 hint，不受影响。
  */
-const THEME_INIT_SCRIPT = `(function(){try{var d=document.documentElement;var m=document.cookie.match(/(?:^|;)\\s*payload-theme=(light|dark)/);var t=m?m[1]:(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');d.setAttribute('data-theme',t);}catch(e){}})();`
 
 // 服务端函数桥接：连接后台 UI 与 Payload API
 const serverFunction: ServerFunctionClient = async function (args) {
@@ -52,7 +65,6 @@ const Layout = ({ children }: Args) => (
     importMap={importMap}
     serverFunction={serverFunction}
   >
-    <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
     {children}
   </RootLayout>
 )

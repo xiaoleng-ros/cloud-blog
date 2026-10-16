@@ -61,8 +61,12 @@ const EXTRA_PAGES: Array<{ href: string; label: string; keywords: string }> = [
   { href: '/tags/', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
 ];
 
-function pageEntries(navItems: Array<{ href: string; label: string }>): IndexEntry[] {
-  const nav = navItems.map((item) => ({
+function pageEntries(
+  navItems: Array<{ href: string; label: string }> | null,
+): IndexEntry[] {
+  // 后台清空导航（null）时不再把四个默认项硬塞进站内搜索 ——
+  // 旧实现在此处无条件兜底，与 getNavItems 的「后台可用但清空 → 隐藏」语义脱节
+  const nav = (navItems ?? []).map((item) => ({
     kind: 'page' as const,
     title: item.label,
     subtitle: '',

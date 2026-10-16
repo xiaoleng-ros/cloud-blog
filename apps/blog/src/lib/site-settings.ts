@@ -9,7 +9,7 @@
  * 模块级缓存：整个构建/开发过程只请求一次后台。
  */
 import { fetchNavItems, fetchSiteSettings } from './payload-api';
-import { safeHref } from 'cloud-blog/shared/html-safety';
+import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines';
 import {
   footerIconFor,
   OFFLINE_ABOUT,
@@ -51,9 +51,11 @@ export interface SiteSettingsData {
   skills?: string;
 }
 
-// 站点设置模块级缓存：同一构建/开发会话内重复调用不会每次都请求后台。
-// 5s 短缓存：后台改设置后，dev 浏览最迟 ~5 秒内跟上（构建是一次性进程，影响可忽略）。
-// 后台不可用时返回 null 并保留过期缓存作为降级。
+/** 站点设置模块级缓存：同一构建/开发会话内重复调用不会每次都请求后台。
+ * 5s 短缓存：后台改设置后，dev 浏览最迟 ~5 秒内跟上（构建是一次性进程，影响可忽略）。
+ * 后台不可用（fetchSiteSettings 返回 null）时返回 null，由调用方整体用离线兜底；
+ * 后台可用但拉回来是空对象（所有字段留空）时照常返回 {}，
+ * 调用方按「填了才显示」规则整块省略 —— 不把空对象误判成「后台宕机」。 */
 const SETTINGS_CACHE_TTL = 5_000;
 let settingsCache: { data: SiteSettingsData | null; ts: number } | null = null;
 
@@ -62,14 +64,14 @@ export async function getSiteSettings(): Promise<SiteSettingsData | null> {
   if (settingsCache && Date.now() - settingsCache.ts < SETTINGS_CACHE_TTL) {
     return settingsCache.data;
   }
-  try {
-    const data = await fetchSiteSettings();
+  const data = await fetchSiteSettings();
+  // fetchSiteSettings 内部已 catch：成功（含空对象 {}）与失败（null）在此区分。
+  // 旧实现把「成功拉回 null」（Global 为空）也写进缓存，5s 内所有调用方拿 null
+  // 走离线兜底 —— 后台明明可用却整站显示占位文案。现在 null 不入缓存，下轮重试。
+  if (data !== null) {
     settingsCache = { data, ts: Date.now() };
-    return data;
-  } catch {
-    // 请求失败时保留过期缓存（比完全不可用更好）
-    return settingsCache?.data ?? null;
   }
+  return data ?? settingsCache?.data ?? null;
 }
 
 /**
@@ -84,37 +86,35 @@ export async function getSiteSince(): Promise<string> {
   return (settings.siteCreatedAt ?? '').trim();
 }
 
-/** 导航项：后台「导航管理」Global 优先，缺失时回退默认四项 */
-export async function getNavItems(): Promise<Array<{ href: string; label: string }>> {
+/** 导航项：后台「导航管理」Global 优先。
+ * 区分三种情况（全站「填了才显示」+ 宕机降级）：
+ * - 后台不可用（fetchNavItems 返回 null，如 CMS 宕机）→ 默认四项兜底，保证宕机时导航仍在
+ * - 后台可用但导航被清空（[]）→ 前台导航整块隐藏（与「后台填了才显示」规则一致）
+ * - 后台填了条目 → 原样使用（每条 href/label 非空才进导航） */
+export async function getNavItems(): Promise<Array<{ href: string; label: string }> | null> {
   const items = await fetchNavItems();
-  return items && items.length > 0
+  if (items === null) {
+    return [
+      { href: '/', label: '首页' },
+      { href: '/notes/', label: '随笔' },
+      { href: '/archive/', label: '归档' },
+      { href: '/about/', label: '关于' },
+    ];
+  }
+  return items.length > 0
     ? items.filter((item) => item.href && item.label)
-    : [
-        { href: '/', label: '首页' },
-        { href: '/notes/', label: '随笔' },
-        { href: '/archive/', label: '归档' },
-        { href: '/about/', label: '关于' },
-      ];
+    : null;
 }
 
 /**
  * 把后台「社交链接」(textarea，每行「平台 链接」) 解析为结构化数组。
  * 平台名按 shared/site-defaults 的别名表找图标，认不出图标时前台显示纯文字（与页脚同一套规则）。
+ * 共用 shared/free-text-lines 解析器（与导航/页脚同一套，M4 收敛）。
  */
 function parseSocials(raw?: string): Array<{ platform: string; href: string }> {
   if (!raw) return [];
-  const out: Array<{ platform: string; href: string }> = [];
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const sp = trimmed.indexOf(' ');
-    if (sp === -1) continue;
-    const platform = trimmed.slice(0, sp).trim();
-    const href = trimmed.slice(sp + 1).trim();
-    // 协议白名单：javascript:/data: 等一律变成惰性链接，不进 href
-    if (platform && href) out.push({ platform, href: safeHref(href, '#') });
-  }
-  return out;
+  // 社交条目必须有链接：无链接的行丢弃；协议不合法 → 惰性 '#'（后续 getSocials 过滤掉）
+  return parseFreeTextLines(raw, '#', false).map((i) => ({ platform: i.name, href: i.href }));
 }
 
 /** Hero 文案：后台原样；仅后台不可用时用离线兜底 */
@@ -166,25 +166,14 @@ export interface FooterData {
 /**
  * 把后台「每行一条 名称 链接」的文本解析为页脚条目。
  * 链接为空时 href 为空串（前台渲染为纯文字标签）。
+ * 共用 shared/free-text-lines 解析器（与导航/社交同一套，M4 收敛）。
  */
 function parseFooterLines(raw?: string | null): FooterItem[] {
   if (!raw) return [];
-  const out: FooterItem[] = [];
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const sp = trimmed.lastIndexOf(' ');
-    if (sp === -1) {
-      // 只有名称没有链接 → 纯文字标签
-      out.push({ name: trimmed, icon: footerIconFor(trimmed), href: '' });
-      continue;
-    }
-    const name = trimmed.slice(0, sp).trim();
-    const href = trimmed.slice(sp + 1).trim();
-    // 协议不合法时归为空串：前台本来就按「无链接 → 纯文字标签」渲染
-    if (name) out.push({ name, icon: footerIconFor(name), href: safeHref(href, '') });
-  }
-  return out;
+  // 页脚允许「只有名称没有链接」→ 纯文字标签（allowEmptyHref=true）
+  return parseFreeTextLines(raw, '', true)
+    .filter((i) => i.name)
+    .map((i) => ({ name: i.name, icon: footerIconFor(i.name), href: i.href }));
 }
 
 /** 页脚内容：后台原样（链接/群组各按行解析），仅后台不可用时用离线兜底 */

@@ -47,17 +47,20 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
 
     <!-- 右侧标签式导航 -->
     <nav class="site-nav__tags" aria-label="主导航">
-      <span data-sync-block="navLinks" style="display: contents">
-        {navItems.map((item) => (
-          <a
-            href={item.href}
-            class:list={['site-nav__tag', isCurrent(item.href) && 'is-current']}
-            data-nav-route
-          >
-            {item.label}
-          </a>
-        ))}
-      </span>
+      <!-- 导航条：后台清空导航时整条隐藏（「填了才显示」），后台宕机时兜底默认四项 -->
+      {navItems && navItems.length > 0 && (
+        <span data-sync-block="navLinks" style="display: contents">
+          {navItems.map((item) => (
+            <a
+              href={item.href}
+              class:list={['site-nav__tag', isCurrent(item.href) && 'is-current']}
+              data-nav-route
+            >
+              {item.label}
+            </a>
+          ))}
+        </span>
+      )}
       <!-- 「更多」：展开手账九宫格面板。nav 本身是 fixed 且 pointer-events:none，
            面板要能盖住正文，所以显式把 auto 补回来。 -->
       <div class="site-nav__more" data-more-root>

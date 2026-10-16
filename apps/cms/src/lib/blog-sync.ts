@@ -13,14 +13,16 @@
  */
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils'
-import { getSnapshot, setSnapshot, type SyncSnapshot } from './sync-cache'
+import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils'
+import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines'
+import { getSnapshot, setSnapshot, getProbe, setProbe, type SyncSnapshot, type SyncProbe } from './sync-cache'
 
 // getPayload 实例进程内缓存（避免每次请求重建数据库连接）
-type PayloadDb = Awaited<ReturnType<typeof getPayload>>
+export type PayloadDb = Awaited<ReturnType<typeof getPayload>>
 let dbPromise: Promise<PayloadDb> | null = null
 
-function getDb(): Promise<PayloadDb> {
+/** 进程内单例的 Payload 实例；各 API 路由共用，避免各自 getPayload 反复初始化 */
+export function getDb(): Promise<PayloadDb> {
   if (!dbPromise) {
     dbPromise = getPayload({ config }).catch((err) => {
       dbPromise = null
@@ -55,20 +57,40 @@ export interface ProjectEntry {
   updatedAt?: string
 }
 
-/** 把浅关系字段（分类/标签）归一为名称字符串列表 */
-function namesOf(refs?: Array<{ name: string } | number> | { name?: string } | number | null | undefined): string[] | undefined {
+/** 把浅关系字段（分类/标签）归一为名称字符串列表。
+ * 数字 id（未展开的关联，status 非 published 时被 Payload 回退为裸数字）
+ * 整条丢弃，避免渲染出 "123" 假标签 —— 与前台 payload-api.namesOf 同口径 */
+function namesOf(
+  refs?: Array<{ name: string } | number> | { name?: string } | number | null | undefined,
+): string[] | undefined {
   if (!refs) return undefined
   const arr = Array.isArray(refs) ? refs : [refs]
   if (arr.length === 0) return undefined
-  const names = arr.map((r) => (typeof r === 'object' && r !== null ? String(r.name ?? '') : String(r))).filter(Boolean)
+  const names = arr
+    .filter((r) => typeof r === 'object' && r !== null && !Number.isNaN((r as { id?: unknown }).id))
+    .map((r) => String((r as { name?: string }).name ?? '').trim())
+    .filter(Boolean)
   return names.length > 0 ? names : undefined
 }
 
-/** 取单选/多选关系的首个名称，用于拼接 URL */
-function nameOfFirst(ref?: Array<{ name?: string }> | { name?: string } | null): string {
+/** 清洗后的名称列表；全部洗空时返回 undefined（前台据此省略该区块）。
+ * 名称统一经 shared/post-utils 的 sanitizeTerm（与前台 payload-api 同一份实现）做 URL 段安全。 */
+function namesOfSanitized(
+  refs?: Array<{ name: string } | number> | { name?: string } | number | null | undefined,
+): string[] | undefined {
+  const raw = namesOf(refs)
+  if (!raw) return undefined
+  const cleaned = raw.map(sanitizeTerm).filter((n) => n.length > 0)
+  return cleaned.length > 0 ? cleaned : undefined
+}
+
+/** 取单选/多选关系的首个名称（已做 URL 段安全清洗），用于拼接前台路径 */
+function nameOfFirst(
+  ref?: Array<{ name?: string }> | { name?: string } | null,
+): string {
   if (!ref) return ''
-  if (Array.isArray(ref)) return ref[0]?.name ?? ''
-  return ref.name ?? ''
+  const raw = Array.isArray(ref) ? ref[0]?.name ?? '' : ref.name ?? ''
+  return sanitizeTerm(raw)
 }
 
 /** 生成文章前台路径：/posts/{分类名}/{文章ID}/ */
@@ -105,6 +127,25 @@ function basenameOfUrl(url: string): string {
     // 非法 URL 时按原样处理，只保留相对路径部分
   }
   return path.split('#')[0]
+}
+
+/**
+ * 归一化 key 集合（与 shared/rehype-img-attrs.mjs、blog payload-api 同口径）：
+ * 原值 / 去 # 锚点 / 去 ?query / 纯 path。存多形态，markdown 里带锚点或查询串的
+ * 同图也能命中 alt。
+ */
+function urlNormalizationKeys(url: string): string[] {
+  const noHash = url.split('#')[0]
+  const noQuery = noHash.split('?')[0]
+  let pathOnly = noQuery
+  try {
+    if (/^https?:\/\//.test(noQuery)) pathOnly = new URL(noQuery).pathname
+  } catch {
+    // 非法 URL 时按原样处理
+  }
+  const keys = new Set<string>([url, noHash, noQuery])
+  if (pathOnly && pathOnly !== noQuery) keys.add(pathOnly)
+  return [...keys]
 }
 
 /**
@@ -147,8 +188,8 @@ export async function fetchMediaAltMap(): Promise<MediaAltStats> {
       if (url && alt) {
         count += 1
         // 归一化 key：Payload 存的是绝对/相对 URL，前台可能拼接域名；
-        // 这里同时按原样和"去掉域名前缀"两种形态存一份，命中率更高
-        map.set(url, alt)
+        // 原样 + 多形态（去锚点/去查询/纯 path）各存一份，命中率更高
+        for (const key of urlNormalizationKeys(url)) map.set(key, alt)
         // 兜底：按路径 basename（去掉域名前缀、去掉 hash 后缀）再存一份，
         // 让 markdown 里的相对路径、Payload 里的绝对路径能互相命中
         map.set(basenameOfUrl(url), alt)
@@ -196,8 +237,9 @@ export async function fetchPosts(): Promise<MdEntry[]> {
       cover: doc.cover ?? undefined,
       // 数字 ID 挂在 data.id 上，postBlocks 用它从 URL 里精确匹配
       id: String(doc.id),
-      categories: namesOf(doc.categories),
-      tags: namesOf(doc.tags),
+      // 分类/标签名做 URL 段安全清洗（带 / # % 的后台脏值会让路由 404）
+      categories: namesOfSanitized(doc.categories),
+      tags: namesOfSanitized(doc.tags),
       keywords: linesOf(doc.keywords),
       ai: linesOf(doc.ai),
       sticky: doc.sticky ?? undefined,
@@ -239,7 +281,7 @@ export async function fetchNotes(): Promise<MdEntry[]> {
         date: doc.date,
         title: doc.title ?? undefined,
         mood: doc.mood ?? undefined,
-        tags: namesOf(doc.tags),
+        tags: namesOfSanitized(doc.tags),
       },
       body: doc.content ?? '',
       updatedAt: doc.updatedAt,
@@ -299,21 +341,16 @@ export async function getSiteSettingsData(): Promise<Record<string, any> | null>
   }
 }
 
-/** 把后台「每行一条 「文字 链接」」的导航文本解析为结构化数组 */
+/**
+ * 把后台「每行一条 「文字 链接」」的导航文本解析为结构化数组。
+ * 与前台共享同一份解析器（shared/free-text-lines）：按「最后一个空格」切分，
+ * 名称在前、链接在后。前台导航 Global 与本函数共用，避免两边口径漂移。
+ */
 function parseNavLines(text?: string | null): Array<{ href: string; label: string }> {
   if (!text) return []
-  const out: Array<{ href: string; label: string }> = []
-  for (const line of String(text).split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    // 用最后一个空格切分：文字可含空格，链接为 URL 通常不含空格
-    const sp = trimmed.lastIndexOf(' ')
-    if (sp === -1) continue
-    const label = trimmed.slice(0, sp).trim()
-    const href = trimmed.slice(sp + 1).trim()
-    if (label && href) out.push({ href, label })
-  }
-  return out
+  return parseFreeTextLines(String(text), '#', false)
+    .filter((i) => i.href !== '#')
+    .map((i) => ({ href: i.href, label: i.name }))
 }
 
 /** 导航全局原始数据（保留 updatedAt 供版本号计算）；后台不可用时返回 null */
@@ -498,7 +535,7 @@ async function buildSyncSnapshot(): Promise<SyncSnapshot> {
   }
   setSnapshot(snapshot)
   // 全量数据刚查完，顺手回填探测缓存：digest 路径接下来无需再查库即可给出一致指纹
-  writeProbeCache({ version, digests })
+  setProbe({ version, digests })
   return snapshot
 }
 
@@ -513,33 +550,16 @@ async function buildSyncSnapshot(): Promise<SyncSnapshot> {
 // 保证前台比较 version/digests 字符串时两条路径可互换。
 // ---------------------------------------------------------------------------
 
-export interface SyncProbe {
-  version: string
-  digests: Record<string, string>
-}
-
 /**
- * 探测缓存独立于 sync-cache（后者文件不在本次改动范围）：
- * 同样必须挂 globalThis —— Next 按路由分包，blog-sync 路由里的 blog-sync 模块
- * 与钩子所在实例不是同一份内存，模块级变量会导致缓存各自为政。
+ * 探测缓存放弃本模块私有的 globalThis 槽位，统一收敛进 sync-cache 的 SyncCacheState：
+ * 这样 invalidateAll() 能一并清掉探测缓存（原先漏清，导致 afterChange 后旧指纹仍被
+ * ?digest=1 命中），写入也共用同一份 cacheWriteBypassUntil 静默期。
+ *
+ * TTL 仍由本模块按环境决定（生产 5s / dev 60s）：探测与全量快照的 TTL 取值口径一致。
  */
-const PROBE_STATE_KEY = '__cloudBlogSyncProbeState'
-type ProbeCacheState = { probe: SyncProbe | null; ts: number }
-const probeGlobal = globalThis as typeof globalThis & { [PROBE_STATE_KEY]?: ProbeCacheState }
-
-function getProbeState(): ProbeCacheState {
-  if (!probeGlobal[PROBE_STATE_KEY]) probeGlobal[PROBE_STATE_KEY] = { probe: null, ts: 0 }
-  return probeGlobal[PROBE_STATE_KEY]
-}
 
 /** TTL 与快照一致：生产 5s（限流 3s 轮询），dev 放宽避免跨公网反复重查 */
 const PROBE_TTL_MS = process.env.NODE_ENV === 'production' ? 5_000 : 60_000
-
-function writeProbeCache(probe: SyncProbe): void {
-  const st = getProbeState()
-  st.probe = probe
-  st.ts = Date.now()
-}
 
 /** 单指纹串的格式化：与 computeSourceDigests 的 stampOf 同构（条数:最大 updatedAt） */
 const digestStamp = (count: number, updatedAt?: string): string =>
@@ -586,9 +606,9 @@ async function fetchSyncProbe(): Promise<SyncProbe> {
 
 /** 带 TTL 的探测数据：3s 轮询下绝大多数请求零查库直接命中 */
 export async function getSyncProbe(): Promise<SyncProbe> {
-  const st = getProbeState()
-  if (st.probe && Date.now() - st.ts <= PROBE_TTL_MS) return st.probe
+  const stored = getProbe()
+  if (stored && Date.now() - stored.ts <= PROBE_TTL_MS) return stored.probe
   const probe = await fetchSyncProbe()
-  writeProbeCache(probe)
+  setProbe(probe)
   return probe
 }

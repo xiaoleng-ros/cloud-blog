@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { verifyRequestUser } from '../../../../lib/feishu-session'
+import { getDb } from '../../../../lib/blog-sync'
 
 /**
  * 飞书账号绑定管理（必须已登录）
@@ -46,10 +45,6 @@ type FeishuBinding = {
   unionId?: string | null
   name?: string | null
   avatar?: string | null
-}
-
-async function getDb() {
-  return getPayload({ config })
 }
 
 /** 已登录校验 + 同源校验（写操作防 CSRF） */
@@ -103,7 +98,7 @@ export async function POST(request: Request) {
   const { payload, user, rejection } = await authorize(request)
   if (rejection) return rejection
 
-  let body: { openId?: string; unionId?: string; name?: string; avatar?: string }
+  let body: { openId?: string }
   try {
     body = (await request.json()) as typeof body
   } catch {
@@ -129,17 +124,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '该飞书账号已绑定到其他用户' }, { status: 409 })
   }
 
+  // 只信任客户端提交的 openId（已做格式校验）。name / avatar / unionId 不收：
+  // 它们由 /api/feishu/callback 在下一次扫码登录时从飞书 user_info 接口（服务端持有
+  // user access_token）权威拉取并回填。允许客户端自填会让用户给「已绑定的他人账号」
+  // 贴上任意头像/昵称，污染后台的绑定关系展示。
   try {
     await payload.update({
       collection: 'users',
       id: user!.id,
       data: {
-        feishu: {
-          openId,
-          unionId: (body.unionId ?? '').trim() || undefined,
-          name: (body.name ?? '').trim() || undefined,
-          avatar: (body.avatar ?? '').trim() || undefined,
-        },
+        feishu: { openId, unionId: null, name: null, avatar: null },
       } as never,
     })
   } catch (err) {

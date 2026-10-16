@@ -28,6 +28,7 @@ import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.m
 import { createRehypeImgAttrs } from 'cloud-blog/shared/rehype-img-attrs.mjs'
 // href 协议白名单 + 关于页正文净化：与前台共用同一份实现（escapeAttr 只挡引号，挡不住 javascript:）
 import { safeHref } from 'cloud-blog/shared/html-safety'
+import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines'
 import {
   parseNotes,
   parseSkills,
@@ -146,15 +147,11 @@ const currentYearShanghai = () => Number(toShanghaiParts(new Date())?.year)
 
 function parseSocials(raw?: string): Array<{ platform: string; href: string }> {
   if (!raw) return []
-  const out: Array<{ platform: string; href: string }> = []
-  for (const line of String(raw).split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    const sp = trimmed.indexOf(' ')
-    if (sp === -1) continue
-    out.push({ platform: trimmed.slice(0, sp).trim(), href: trimmed.slice(sp + 1).trim() })
-  }
-  return out
+  // 与前台共用 shared/free-text-lines 解析器：按「最后一个空格」切分
+  // （平台在前、链接在后）。旧实现按「第一个空格」切，平台名带空格时解析错位。
+  return parseFreeTextLines(String(raw), '', false)
+    .filter((i) => i.name && i.href)
+    .map((i) => ({ platform: i.name, href: i.href }))
 }
 
 /**
@@ -184,23 +181,13 @@ function getSocials(settings: Record<string, any> | null) {
 }
 
 function getFooterData(settings: Record<string, any> | null) {
-  const parseFooterLines = (raw?: string | null) => {
-    if (!raw) return []
-    const out: Array<{ name: string; icon: string; href: string }> = []
-    for (const line of String(raw).split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      const sp = trimmed.lastIndexOf(' ')
-      if (sp === -1) {
-        out.push({ name: trimmed, icon: footerIconFor(trimmed), href: '' })
-        continue
-      }
-      const name = trimmed.slice(0, sp).trim()
-      const href = trimmed.slice(sp + 1).trim()
-      if (name) out.push({ name, icon: footerIconFor(name), href })
-    }
-    return out
-  }
+  // 与前台共用 shared/free-text-lines：页脚允许「只有名称没有链接」（纯文字标签）
+  const parseFooterLines = (raw?: string | null) =>
+    parseFreeTextLines(raw, '', true).filter((i) => i.name).map((i) => ({
+      name: i.name,
+      icon: footerIconFor(i.name),
+      href: i.href,
+    }))
 
   if (settings === null) {
     return {

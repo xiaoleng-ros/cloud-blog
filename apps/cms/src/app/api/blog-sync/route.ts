@@ -49,6 +49,19 @@ function isSyncablePath(rawPath: string): boolean {
   if (rawPath.includes('\0') || rawPath.includes('\\')) return false
   const segments = rawPath.split('/')
   if (segments.some((s) => s === '.' || s === '..')) return false
+  // searchParams.get 已做一次 URL 解码（%2e%2e → .. 已被上面拦住）；
+  // 再防一层双重编码：%252e%252e 解一次成 %2e%2e、看似无害，但若再解一次会现出 ..
+  // 虽只污染缓存键（无文件读取），仍一律按非法路径拒收，避免缓存被畸形键撑大。
+  try {
+    const decoded = decodeURIComponent(rawPath)
+    if (decoded !== rawPath) {
+      const decodedSegs = decoded.split('/')
+      if (decodedSegs.some((s) => s === '.' || s === '..')) return false
+    }
+  } catch {
+    // 解码抛错（畸形 % 序列）说明不是合法路径，直接拒收
+    return false
+  }
   // 与 renderBlocksForPathname 的缓存键归一化一致：补尾斜杠再比对
   const path = rawPath.endsWith('/') ? rawPath : `${rawPath}/`
   if (STATIC_SYNC_PATHS.has(path)) return true

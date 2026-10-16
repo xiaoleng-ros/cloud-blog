@@ -54,6 +54,32 @@ const donutStops = stats.categories
   })
   .join(', ');
 
+// 标签墙配色：与 /tags/ 页同一套算法（同色同源），同一标签在两个页面颜色一致。
+// 散列起始色 + 相邻去重：保证刷新稳定、且不会出现相邻两颗同色。
+const TAG_COLORS = [
+  'var(--sticky-yellow)',
+  'var(--sticky-green)',
+  'var(--sticky-cyan)',
+  'var(--sticky-pink)',
+  'var(--sticky-purple)',
+  'var(--brand)',
+];
+
+function hashOf(name: string): number {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.codePointAt(0)!) % 100_000;
+  return hash;
+}
+
+const tagColorSlots: number[] = [];
+let prevTagColor = -1;
+for (const tag of stats.tags) {
+  const base = hashOf(tag.name) % TAG_COLORS.length;
+  const slot = base === prevTagColor ? (base + 1) % TAG_COLORS.length : base;
+  tagColorSlots.push(slot);
+  prevTagColor = slot;
+}
+
 // 逐年归档：字数转成「万字 / 千字」更好读
 const formatWords = (words: number) => {
   if (words >= 10_000) return `${(words / 10_000).toFixed(1)} 万字`;
@@ -159,11 +185,11 @@ const formatWords = (words: number) => {
           <p class="stats-empty">还没有标签。</p>
         ) : (
           <div class="stats-tagwall">
-            {stats.tags.map((tag) => (
+            {stats.tags.map((tag, index) => (
               <a
                 href={getTagPath(tag.name)}
                 class="stats-tag"
-                style={`--tag-scale: ${Math.min(1, 0.78 + tag.count * 0.06).toFixed(2)}`}
+                style={`--tag-scale: ${Math.min(1, 0.78 + tag.count * 0.06).toFixed(2)}; --tag-bg: ${TAG_COLORS[tagColorSlots[index]]}`}
                 title={`${tag.count} 篇`}
               >
                 {tag.name}
@@ -447,21 +473,23 @@ const formatWords = (words: number) => {
     padding: 0.28rem 0.7rem;
     border: 1.5px solid var(--ink);
     border-radius: 12px 5px 14px 6px / 6px 14px 5px 12px;
-    background: var(--surface-muted);
-    color: var(--text);
+    /* 每颗标签一个便利贴底色（--tag-bg 由模板按标签名散列分配）；
+       文字统一走 on-sticky，深浅色底上都不会糊 */
+    background: var(--tag-bg, var(--surface-muted));
+    color: var(--on-sticky);
     /* 出现越多字号越大：用 --tag-scale 让排版跟着数据走 */
     font-size: calc(0.8rem * var(--tag-scale, 1));
     line-height: 1.4;
     text-decoration: none;
-    transition: transform 0.15s ease, background 0.15s ease;
+    transition: transform 0.15s ease, filter 0.15s ease;
   }
 
   .stats-tag:nth-child(3n) { transform: rotate(-1.2deg); }
   .stats-tag:nth-child(3n + 1) { transform: rotate(0.8deg); }
 
   .stats-tag:hover {
-    background: var(--sticky-yellow);
-    color: var(--on-sticky);
+    /* 提亮而不是换色：换色会让 hover 前后的标签「不是同一颗」 */
+    filter: brightness(1.06) saturate(1.1);
     transform: rotate(0deg) translateY(-2px);
   }
 

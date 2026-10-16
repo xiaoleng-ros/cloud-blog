@@ -117,8 +117,13 @@ export async function GET(request: NextRequest) {
   })
 
   // 3. Payload 初始化真实报错
-  const realExit = process.exit.bind(process)
-  ;(process as { exit: unknown }).exit = () => {}
+  // 生产缺配时 payload.config 的 fail-fast 会排程 setTimeout(exit(1))。
+  // 诊断方置全局抑制开关，让 throw 仍发生（本端点捕获展示根因）但不再杀进程。
+  // 旧做法是全局打补丁 process.exit 并在 finally 恢复——恢复早于 0ms 定时器触发，
+  // 实际挡不住退出；改用 payload.config 检查的显式开关后无全局副作用。
+  const g = globalThis as Record<string, unknown>
+  const prevSuppress = g.__cloudSuppressPayloadFailFast
+  g.__cloudSuppressPayloadFailFast = true
   let payload: { ok: true } | { ok: false; error: string }
   try {
     const [{ getPayload }, { default: config }] = await Promise.all([
@@ -132,7 +137,7 @@ export async function GET(request: NextRequest) {
     const cause = e?.cause ? ` | cause: ${e.cause.code ?? ''} ${e.cause.message ?? e.cause}` : ''
     payload = { ok: false, error: `${e?.message ?? String(err)}${cause}`.slice(0, 600) }
   } finally {
-    ;(process as { exit: unknown }).exit = realExit
+    g.__cloudSuppressPayloadFailFast = prevSuppress
   }
 
   return NextResponse.json(

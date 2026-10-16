@@ -39,8 +39,20 @@ export function readCookie(request: Request, name: string): string | null {
 /**
  * 校验当前请求是否携带有效的管理员会话。
  * 校验内容与 Payload 的 jwt strategy 对齐：签名 + exp + collection + sid 必须仍在 sessions 里。
+ *
+ * 性能：每次校验都要 findByID 查 user（确认 sid 仍在 sessions 里、可被吊销）。
+ * 本地直连 Supabase 时这是一次跨公网往返；后台每个受保护接口都过一遍会很卡。
+ * 这里按 `${id}:${sid}` 做 5s 短缓存：重复请求零查库；5s 内会话被吊销（改密 / 后台删会话）
+ * 仍能生效。TTL 取得与 sync-cache 快照一致，吊销延迟可接受。
  * @returns 已登录用户；未登录 / 会话已吊销时返回 null
  */
+const USER_CACHE_TTL_MS = 5_000
+interface UserCacheEntry {
+  result: VerifiedUser | null
+  ts: number
+}
+const userCache = new Map<string, UserCacheEntry>()
+
 export async function verifyRequestUser(
   request: Request,
   payload: Payload,
@@ -59,8 +71,19 @@ export async function verifyRequestUser(
 
   if (!decoded.id || decoded.collection !== 'users') return null
 
+  const cacheKey = `${decoded.id}:${decoded.sid ?? ''}`
+  const cached = userCache.get(cacheKey)
+  const now = Date.now()
+  if (cached && now - cached.ts <= USER_CACHE_TTL_MS) {
+    return cached.result
+  }
+
   const user = await payload.findByID({ collection: 'users', id: decoded.id, depth: 0 }).catch(() => null)
-  if (!user) return null
+  if (!user) {
+    // 负缓存也写：避免被删用户每个请求都查一次库
+    userCache.set(cacheKey, { result: null, ts: now })
+    return null
+  }
 
   // useSessions 开启时，令牌必须携带仍然存在的 sid（等同「可吊销」）
   const useSessions = (payload.collections.users?.config.auth as { useSessions?: boolean } | undefined)
@@ -68,8 +91,13 @@ export async function verifyRequestUser(
   if (useSessions) {
     const sessions = ((user as unknown as { sessions?: Array<{ id: string; expiresAt: string | Date }> })
       .sessions ?? []).filter((s) => new Date(s.expiresAt) > new Date())
-    if (!decoded.sid || !sessions.some((s) => s.id === decoded.sid)) return null
+    if (!decoded.sid || !sessions.some((s) => s.id === decoded.sid)) {
+      userCache.set(cacheKey, { result: null, ts: now })
+      return null
+    }
   }
 
-  return { id: decoded.id, email: (user as { email?: string }).email, sid: decoded.sid }
+  const result = { id: decoded.id, email: (user as { email?: string }).email, sid: decoded.sid }
+  userCache.set(cacheKey, { result, ts: now })
+  return result
 }

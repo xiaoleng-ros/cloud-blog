@@ -40,6 +40,15 @@ export interface SyncSnapshot {
 }
 
 /**
+ * 轻量探测结果（/api/blog-sync?digest=1 / ?version=1）。
+ * 与全量快照的 version/digests 同构，两条路径可互换比较。
+ */
+export interface SyncProbe {
+  version: string
+  digests: Record<string, string>
+}
+
+/**
  * 快照最大存活时间：超过则视为过期，下次取用时重新查库（多实例自愈兜底）。
  *
  * dev 下放宽到 60s：本地直连东京库时一次全量快照要跑 6 条跨公网查询，5s 一过期
@@ -72,9 +81,11 @@ interface SyncCacheState {
   /**
    * 缓存写入静默期截止（epoch ms）。afterChange 钩子跑在事务提交**之前**：
    * 若此刻有并发读者拿旧数据重建快照并缓存，会把「已失效」悄悄变回「缓存旧内容直到 TTL」。
-   * 失效钩子触发后短暂拒绝写入新快照/区块（读请求照常实时查库），跨过提交窗口。
+   * 失效钩子触发后短暂拒绝写入新快照/区块/探测（读请求照常实时查库），跨过提交窗口。
    */
   cacheWriteBypassUntil: number
+  /** 轻量探测缓存：与快照同源同失效，挂在同一份全局状态上，invalidateAll 时一并清掉 */
+  probeCache: { probe: SyncProbe; ts: number } | null
 }
 
 const STATE_KEY = '__cloudBlogSyncCacheState'
@@ -88,6 +99,7 @@ function createState(): SyncCacheState {
     clientIdSeq: 0,
     sweepGeneration: 0,
     cacheWriteBypassUntil: 0,
+    probeCache: null,
   }
 }
 
@@ -142,13 +154,31 @@ export function setBlock(pathname: string, block: CachedBlock): void {
   blockCache.set(pathname, block)
 }
 
-/** 清除所有缓存（快照 + 区块）。afterChange/afterDelete 钩子调用 */
+/** 清除所有缓存（快照 + 区块 + 探测）。afterChange/afterDelete 钩子调用 */
 export function invalidateAll(): void {
   blockCache.clear()
   state.snapshotCache = null
+  state.probeCache = null
   // 钩子先于事务提交触发：接下来 1.5s 内禁止把（可能仍是提交前旧数据的）重建结果写回缓存，
   // 读请求不阻塞、只是不缓存，跨过提交窗口后恢复正常缓存。
   state.cacheWriteBypassUntil = Math.max(state.cacheWriteBypassUntil, Date.now() + 1_500)
+}
+
+// --- 轻量探测缓存 ---
+
+/** 取探测缓存（不含 TTL 判断，由调用方按自身 TTL 决定是否采用） */
+export function getProbe(): { probe: SyncProbe; ts: number } | null {
+  return state.probeCache
+}
+
+/**
+ * 写探测缓存。与 setSnapshot/setBlock 同样遵守 cacheWriteBypassUntil：
+ * afterChange 在事务提交前触发，此刻查库拿到的还是旧数据，若不挡，
+ * 旧指纹会被缓存一整个 TTL（dev 60s），前台 digest 轮询在提交后才看到「已变化」。
+ */
+export function setProbe(probe: SyncProbe): void {
+  if (Date.now() < state.cacheWriteBypassUntil) return
+  state.probeCache = { probe, ts: Date.now() }
 }
 
 // --- SSE ---
@@ -229,11 +259,22 @@ const SSE_SWEEP_MS = 60_000
 
 /**
  * 启动（或接管）定期扫描。
- * 用全局代数保证全进程只有一条定时器链在跑：SSE 路由模块可能被重复实例化，
- * 每次实例化都会让旧的定时器链在下一跳自行退出，避免孤儿扫描越积越多。
+ *
+ * 代数（sweepGeneration）只在**模块实例化时** bump 一次：用于热重载后新实例的定时器
+ * 让上一实例的孤儿定时器在下一跳自行退出。原先每次调用都 bump，导致高频连接下
+ * 当前定时器在被它扫到之前就被新连接顶掉、又起新的 60s 定时器，兜底扫描永不执行，
+ * 丢失断开信号的死连接一直堆到 MAX_SSE_CLIENTS 拒绝新连接。
+ *
+ * 现在用模块级 loopStarted 保证「一个模块实例只起一条定时器链」：第一条连接起链，
+ * 后续连接直接 no-op；热重载时新实例的 loopStarted=false、MODULE_GEN 已 bump，
+ * 新链接管、旧链退出，仍只有一条活跃链。
  */
+const MODULE_SWEEP_GEN = (state.sweepGeneration += 1)
+let sweepLoopStarted = false
 export function ensureSseSweepLoop(): void {
-  const myGeneration = (state.sweepGeneration += 1)
+  if (sweepLoopStarted) return
+  sweepLoopStarted = true
+  const myGeneration = MODULE_SWEEP_GEN
   const tick = () => {
     if (myGeneration !== state.sweepGeneration) return
     sweepSseClients()

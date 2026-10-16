@@ -93,9 +93,13 @@ export async function forwardToWaline(
     if (['host', 'connection', 'content-length', 'accept-encoding'].includes(key.toLowerCase())) return
     headers.set(key, value)
   })
-  // 客户端真实 IP / 协议 / 域名：Waline 用 proxy:true 信任这些头
-  const fwd = request.headers.get('x-forwarded-for')
-  if (fwd) headers.set('x-forwarded-for', fwd)
+  // 客户端真实 IP：只取平台注入的 XFF 首段（与 middleware.ts loginRateLimited 同口径）。
+  // 不原样转发整个 XFF：客户端可在尾部追加伪造条目，Waline 在 proxy:true 下会信任
+  // 末段（视为更靠近源的「真实」地址），从而绕过按 IP 的限频、污染审计记录。
+  // 只回传可信首段；无 XFF 时不设，Waline 退回 req.socket.remoteAddress。
+  const forwarded = request.headers.get('x-forwarded-for')
+  const clientIp = forwarded?.split(',')[0]?.trim()
+  if (clientIp) headers.set('x-forwarded-for', clientIp)
   headers.set('x-forwarded-proto', request.headers.get('x-forwarded-proto') ?? 'https')
   const host = request.headers.get('host')
   if (host) headers.set('x-forwarded-host', host)

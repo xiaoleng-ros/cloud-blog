@@ -111,6 +111,12 @@ const nextConfig = {
   //   - Strict-Transport-Security：EdgeOne 全站 HTTPS，声明一年内只走加密连接，
   //     挡掉首次访问时的协议降级（http:// 劫持/嗅探）。includeSubDomains 覆盖
   //     后台子域 cms.iceuu.com 与前台 blog.iceuu.icu 同族场景。
+  //   - Accept-CH：向浏览器声明后台需要 Sec-CH-Prefers-Color-Scheme 客户端提示。
+  //     Payload 的 getRequestTheme（cookie → 该请求头 → 默认 light）据此在服务端
+  //     直接渲染正确主题，二次起访问首帧即正确色，不需要任何内联脚本
+  //     （旧的内联主题脚本在 flight 流里客户端挂载、从不执行，2026-10-16 移除，
+  //     详见 src/app/(payload)/layout.tsx 顶部注释）。仅一个色偏好的低敏提示，
+  //     首次访问尚无 hint 时回落 Payload 原生行为（hydration 后按 matchMedia 改）。
   // 说明：暂不强上 CSP —— 后台（vditor/lexical/内联样式与脚本）内联内容多，贸然加会碎掉界面；
   //       建议后续单独做 CSP 基线并按 nonce 方案灰度验证后再启用。
   async headers() {
@@ -122,6 +128,7 @@ const nextConfig = {
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'Accept-CH', value: 'Sec-CH-Prefers-Color-Scheme' },
         ],
       },
     ]

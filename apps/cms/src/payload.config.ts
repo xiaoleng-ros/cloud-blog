@@ -182,6 +182,15 @@ const validateSecret = (value: string): string | null => {
 const secretProblem = validateSecret(providedSecret ?? '')
 const mustHardFail = IS_PRODUCTION || REQUIRE_SECRET
 
+/**
+ * 诊断抑制开关：/api/health 排障时会现场 import 本配置做 getPayload 探测。
+ * 若生产缺配，下面各 fail-fast 分支的 `setTimeout(exit(1))` 会杀掉整个进程，
+ * 让诊断响应发不出去（health 端点只能全局打补丁 process.exit 来挡，且 finally 恢复
+ * 早于 0ms 定时器触发、实际挡不住）。改为读全局开关：诊断方置 true 期间这些分支
+ * 仍 throw（health 会捕获展示根因），只是不排程进程退出；正常启动路径不设开关，行为不变。
+ */
+const suppressFailFastExit = Boolean((globalThis as Record<string, unknown>).__cloudSuppressPayloadFailFast)
+
 if (secretProblem && mustHardFail) {
   const banner = '='.repeat(64)
   console.error(`\n${banner}`)
@@ -191,7 +200,7 @@ if (secretProblem && mustHardFail) {
   console.error(`${banner}\n`)
   // 顶层 throw 在 RSC import 上下文里可能被 Next 吞成静默白屏，
   // 因此下一拍强制退出，让平台侧能看到明确的崩溃原因。
-  setTimeout(() => process.exit(1), 0)
+  if (!suppressFailFastExit) setTimeout(() => process.exit(1), 0)
   throw new Error(`[payload] PAYLOAD_SECRET ${secretProblem}`)
 }
 
@@ -236,7 +245,7 @@ if (IS_PRODUCTION && !HAS_S3_CONFIG) {
   console.error(`${banner}\n`)
   // 同 PAYLOAD_SECRET 分支：顶层 throw 在 RSC import 上下文可能被 Next 吞成静默白屏，
   // 下一拍强制退出，保证平台记录到非零退出码与明确原因。
-  setTimeout(() => process.exit(1), 0)
+  if (!suppressFailFastExit) setTimeout(() => process.exit(1), 0)
   throw new Error('[payload] 生产环境必须配置对象存储（SUPABASE_S3_ACCESS_KEY_ID + SUPABASE_S3_SECRET_ACCESS_KEY + SUPABASE_BUCKET）')
 }
 
@@ -356,7 +365,7 @@ if (IS_PRODUCTION && (DATABASE_DRIVER !== 'postgres' || !PG_URL)) {
   console.error(`${banner}\n`)
   // 同 PAYLOAD_SECRET 分支：顶层 throw 在 RSC import 上下文可能被 Next 吞成静默白屏，
   // 下一拍强制退出，保证平台记录到非零退出码与明确原因。
-  setTimeout(() => process.exit(1), 0)
+  if (!suppressFailFastExit) setTimeout(() => process.exit(1), 0)
   throw new Error('[payload] 生产环境必须使用 PostgreSQL（DATABASE_DRIVER=postgres + POSTGRES_URL）')
 }
 

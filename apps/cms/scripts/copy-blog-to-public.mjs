@@ -149,6 +149,75 @@ if (prevManifest !== null) {
   }
 }
 
+/**
+ * 旧 URL 外壳精简：Astro 对「新形态 /posts/{分类}/{id}/ + 旧形态 /posts/{id}/」
+ * 各生成一份完整页面（旧形态还带 301 redirect 标记，无 adapter 时退化成全量副本）。
+ * 同一篇文章两份完整 HTML 意味着：
+ *   1. 双份维护（任何文章改动都要同步两份壳，后台同步注入也要处理两条 URL）
+ *   2. 旧形态壳若被静态层直接命中（绕过注入），用户看到的全量副本与后台数据脱钩
+ * 精简为 meta-refresh 壳：极小体积、无正文、只承载 301 跳转语义（有 adapter/
+ * 浏览器时跳新形态，无 JS 时由 CMS 的 catch-all 路由真 301 兜底）。
+ * 仅处理「同名新形态也在 __blog 里」的旧形态条目，避免误伤没有新形态的页面。
+ */
+const redirectCount = shrinkLegacyDuplicateShells(HTML_ROOT);
+if (redirectCount > 0) {
+  console.log(`[copy-blog] 旧 URL 形态精简为 meta-refresh 壳 ${redirectCount} 个（真 301 由 CMS catch-all 负责）`);
+}
+
+function shrinkLegacyDuplicateShells(htmlRoot) {
+  let count = 0;
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (entry.name !== 'index.html') continue;
+      // 旧形态路径：/posts/<纯数字>/index.html（或 /notes/...），同级同目录下
+      // 的「上一级 {分类名}」里应存在同名 id 的新形态外壳
+      const rel = relative(htmlRoot, full).split(/[\\/]+/);
+      // 形如 ['posts', '1', 'index.html']：纯数字段即旧形态
+      if (rel.length < 3) return;
+      const parentDir = rel[0];
+      const idSeg = rel[1];
+      if (!/^\d+$/.test(idSeg)) return;
+      const canonicalDir = join(dir, '..');
+      const canonicalList = readdirSync(canonicalDir, { withFileTypes: true });
+      const hasNewForm = canonicalList.some((e) => e.isDirectory() && e.name === idSeg);
+      if (!hasNewForm) return;
+      // 没有新形态 → 这是唯一入口，保留全量壳
+      const categoryPath = findCategoryForId(canonicalDir, idSeg);
+      if (!categoryPath) return;
+      const target = `/${parentDir}/${encodeURIComponent(categoryPath)}/${idSeg}/`;
+      writeFileSync(
+        full,
+        `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${target}"><title>Redirecting…</title></head><body><a href="${target}">跳转到 ${target}</a></body></html>\n`,
+      );
+      count += 1;
+    }
+  };
+  walk(htmlRoot);
+  return count;
+}
+
+/** 找与旧形态同 id 的新形态所属分类名；多分类时取字典序最小 */
+function findCategoryForId(canonicalDir, idSeg) {
+  try {
+    const cats = readdirSync(canonicalDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== 'index.html')
+      .map((e) => e.name)
+      .filter((c) => {
+        const idDir = join(canonicalDir, c, idSeg);
+        return existsSync(join(idDir, 'index.html'));
+      })
+      .sort();
+    return cats[0];
+  } catch {
+    return null;
+  }
+}
+
 writeFileSync(MANIFEST_FILE, JSON.stringify({ version: 1, root: copiedRoot }, null, 2));
 console.log('[copy-blog] 已复制：静态资源 → public/ 根，HTML 仅一份 → public/__blog/（供运行时注入）');
 

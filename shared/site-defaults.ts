@@ -50,8 +50,10 @@ export const PLACEHOLDER_SITE_SINCE = '2026-10-06';
  *
  * 与其他文案不同：备案号写错等于给网站引入合规问题，宁可空着也不猜。
  * 需要在无后台环境下看到这一块，把真实备案号填进来（或启动后台在「站点设置 → 网站配置」填）。
+ * 旧值曾硬编码一份 ICP 号：宕机兜底时后台没起来，前台却显示一个可能已变更/错误的备案号，
+ * 比「空白」更危险（合规风险 > 可用性损失）。
  */
-export const OFFLINE_ICP = '豫ICP备2020031049-1';
+export const OFFLINE_ICP = '';
 
 export const OFFLINE_HERO: OfflineHero = {
   greeting: '嗨，我是',

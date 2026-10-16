@@ -113,25 +113,56 @@ flowchart LR
 
 ## 🚀 本地开发
 
-> [!TIP]
-> 前端会优先从后台取数；**同时启动两个应用**才能看到完整内容。
+> [!IMPORTANT]
+> **本地开发默认连的是**线上 Supabase** Postgres 库（`apps/cms/.env.local` 已配好），
+> 与生产共用同一个数据库 —— 这是有意设计，不是失误：本地看到的内容/评论就是线上真实数据。
+> 因此：
+> - **直接 `npm run dev:cms` 起后台即可，无需本地 PG**（本地绿色版 PG 的 `dev:cms:warm` 仍保留，
+>   但需要本机装好 `D:\pglocal`，默认路径未安装时不要用它）。
+> - 本地改动（后台改文案、发文章、评论、建标签）**会直接写进线上库**，前台轮询也会把线上改动拉进本地，属正常现象。
+> - 评论服务（`/api/waline`）同样指向线上 Supabase：`.env.local` 里除 `POSTGRES_URL`（给 Payload）
+>   外还配了 Waline 用的拆分变量组（`POSTGRES_HOST/PORT/USER/PASSWORD/DATABASE` + `POSTGRES_PREFIX=wl_` +
+>   `POSTGRES_SSL=true`），表 `wl_comment / wl_counter / wl_users` 已在线上 `public` schema 就位。
+
+### 快速开始（连线上库）
 
 ```bash
-# 🛠️ 首次：分别安装两个应用的依赖
+# 🛠️ 首次：安装两个应用的依赖
 npm run setup
 
 # 🖥️ 终端 1：博客前端 → http://localhost:3000
 npm run dev:blog
 
-# 🗄️ 终端 2：内容后台 → http://localhost:9527
-npm run dev:cms:warm     # 推荐：按需启动本地 PG → 拉起 Next → 预热常用接口
-# 也可用 npm run dev:local --prefix apps/cms（起 PG + 后台，不做预热）
+# 🗄️ 终端 2：内容后台（直连线上 Supabase）→ http://localhost:9527
+npm run dev:cms
 ```
+
+> 起 CMS 后首次访问后台页面（`/admin`）会触发 Turbopack 冷编译，可能 30–60s 才返回 200；
+> 评论/同步接口（`/api/blog-sync`、`/api/waline/api/comment`）首请求也会编译一遍，重试即正常。
+> 建议先跑 `npm run dev:proxy`（端口 4321，同源代理）把 SSE/评论的同源行为验证掉。
+
+### 可选：本地独立 Postgres（绿色版）
+
+若你想让本地与线上**物理隔离**（避免误写线上数据），可改用本地 `D:\pglocal` 绿色版 PG：
+
+```bash
+# 起本地 PG + 后台（端口 5433，库 blog_dev）
+npm run dev:cms:warm     # 按需启停 PG，零常驻；首次需手动 import schema（见 apps/cms/scripts/waline/schema.sql）
+# 或不起预热
+npm run dev:local --prefix apps/cms
+```
+
+- 本地 PG 需要自备 `waline_user` 角色与 `waline.wl_*` 表结构（`apps/cms/scripts/waline/README.md` 有说明）；
+  不装本地 PG 就走上面的线上库模式。
+- ⚠️ 本地 PG 模式下 Waline 的拆分变量回落 `.env`（`127.0.0.1:5433` + `waline_user`），与 Payload 的
+  `POSTGRES_URL`（仍指向 Supabase）各走各的；两套连接的 schema 前缀都是 `wl_`，但表所在的
+  search_path 不同（本地 `waline` schema，线上 `public` schema），按 README 建对应表即可。
+
+### 通用说明
 
 - 📡 前端构建/开发时从后台 API（`PUBLIC_PAYLOAD_URL`，默认 `http://localhost:9527`）拉取内容；**后台未运行时文章/随笔/项目为空**，但页面仍可正常访问（站点默认值兜底）。
 - ⚡ 开发期后台数据变更会热同步到前台页面（`payload-hot-reload`：loader 检测变化后 touch 标记文件并广播整页刷新；生产走 SSE + 轮询）。
 - 🔀 需要**同源 `/api/*`**（验证评论、SSE 等依赖同源的行为）时，用 `npm run dev:proxy`：它会在 `4321` 起一个代理并把 Astro 一并拉起；纯 UI 调试跑 `dev:blog` 单进程即可。
-- 🐘 本地 Postgres 使用 `D:\pglocal` 绿色版（端口 5433，库 `blog_dev`），由 `apps/cms` 的 `pg:start` / `pg:stop` / `pg:status` 按需启停，**零常驻**。
 
 ---
 
@@ -148,14 +179,19 @@ npm run dev:cms:warm     # 推荐：按需启动本地 PG → 拉起 Next → �
 
 > 前台取数地址的优先级：`PUBLIC_PAYLOAD_URL` → `SITE_URL`（一体化部署前后台同域）→ `http://localhost:9527`。
 
-`apps/cms` 环境变量（复制 `apps/cms/.env.example` 为 `.env`；本地开发同样默认 postgres，指向 `D:\pglocal` 绿色版 PG）：
+`apps/cms` 环境变量（复制 `apps/cms/.env.example` 为 `.env`；本地开发同样默认 postgres）：
 
 | 🎛️ 变量 | 💡 用途 |
 | --- | --- |
 | `DATABASE_DRIVER` | `postgres`（默认，本地与生产一致）/ `sqlite`（保留的历史分支，迁移是 Postgres 方言，不推荐） |
-| `POSTGRES_URL` | 连接串：本地 `postgresql://postgres@127.0.0.1:5433/blog_dev`；生产填托管库（如 Supabase / Neon） |
+| `POSTGRES_URL` | 连接串：`.env.local` 已配**线上 Supabase**（本地默认即连线上库）；要物理隔离时改成本地 `postgresql://postgres@127.0.0.1:5433/blog_dev` |
+| `POSTGRES_HOST/PORT/USER/PASSWORD/DATABASE` | Waline（进程内 `@waline/vercel`）用的**拆分变量组**：与 `POSTGRES_URL` 分离，各读各的。`.env.local` 已把这套指向线上 Supabase（含 `POSTGRES_PREFIX=wl_` + `POSTGRES_SSL=true`）；本地 PG 模式下回落 `.env` 里的 `127.0.0.1:5433` + `waline_user` |
 | `PAYLOAD_SECRET` | Payload 加密密钥（生产必填） |
-| `PAYLOAD_FORCE_PUSH=1` | 首次向线上库非交互建表 |
+| `PAYLOAD_FORCE_PUSH=0` | 连**线上库**时保持 `0`：dev 的 push 会改生产库 schema。首次向全新库建表时才临时设 `1` |
+
+> [!NOTE]
+> 本地 `.env`（绿色版 PG）与 `.env.local`（线上 Supabase）**同时存在**时，`.env.local` 覆盖 `.env`。
+> 这是当前有意配置（dev = prod 同库），详见上面「本地开发」段。
 
 ---
 
@@ -207,7 +243,8 @@ npm run dev:cms:warm     # 推荐：按需启动本地 PG → 拉起 Next → �
 
 | 📜 脚本 | ✨ 作用 |
 | --- | --- |
-| `npm run dev:cms:warm` | 本地一键：起 PG → 起后台 → 预热常用接口（含评论路由，避免首次点击卡编译） |
+| `npm run dev:cms` | 起后台（默认 `.env.local` 连线上 Supabase） |
+| `npm run dev:cms:warm` | 本地一键：起**本地** PG → 起后台 → 预热常用接口（需 `D:\pglocal`；不装本地 PG 就用 `dev:cms`） |
 | `npm run build:all` | 构建前台 + 后台，并把博客产物复制进 CMS 的 `public/` |
 | `npm run sync:blog` | 把最新博客外壳同步到 CMS（`apps/cms/scripts/sync-blog-shells.mjs`） |
 | `apps/cms/scripts/copy-blog-to-public.mjs` | 构建站点后把博客产物复制到 CMS public 目录（`build:all` 时执行） |

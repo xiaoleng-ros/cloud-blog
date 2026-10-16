@@ -22,6 +22,9 @@ apps/cms/media/
 apps/blog/node_modules/
 apps/blog/dist/
 apps/blog/.astro/
+apps/blog/dev.log
+# 临时诊断/复现脚本（Vite 8 module-runner 排查用，不入库）
+apps/blog/repro-vite.mjs
 
 # CMS public 中由 Astro 构建生成的博客静态文件（每次构建重新复制，不提交）
 apps/cms/public/*

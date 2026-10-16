@@ -155,15 +155,11 @@ export const CustomNav = () => {
           </div>
         </div>
 
-        {/* 首帧前定位：SSR HTML 里这段同步脚本在解析阶段就把 scrollTop 摆好，
-            早于浏览器首次绘制，消除刷新时「先画顶部再跳下来」的一帧闪烁。
-            SPA 重挂载不重跑此脚本，由上面的 useEffect 兜底。 */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "(function(){try{var t=sessionStorage.getItem('admin-nav-scroll-top');if(t){var n=document.querySelector('.nav__wrap');if(n)n.scrollTop=parseInt(t,10)||0}}catch(e){}})();",
-          }}
-        />
+        {/* 滚动恢复只靠上面的 useEffect：早先在这里放的内联 <script> 与主题脚本同病——
+            Payload 后台的页面内容整体在 RSC flight 流里客户端挂载，SSR HTML 中不存在
+            该 script 实体标签，永远不会执行，只会额外触发 React 19 dev 的
+            "Encountered a script tag" 警告，2026-10-16 移除。整页刷新时恢复时机
+            晚一帧（useEffect 在 hydration 后跑），可接受。 */}
       </div>
     </aside>
   )

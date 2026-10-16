@@ -298,21 +298,43 @@ const mapToSortedTerms = (counts: Map<string, number>) =>
       (a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'),
     );
 
-/** 提取所有分类（含频次统计） */
+/**
+ * 标签/分类名做 URL 段安全清洗：带 `/`、`#`、`%` 的后台脏值会让前台路由
+ * （/categories/{名}/、/tags/{名}/）404。统一清洗为连字符。
+ * 前台（payload-api 映射）与后台（blog-sync 区块渲染 + postPathOf）共用同一份实现。
+ */
+export const sanitizeTerm = (name: string): string =>
+  name
+    .trim()
+    .replace(/[/#%]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+/** 提取所有分类（含频次统计），名称已做 URL 段安全清洗 */
 export const getCategories = <T extends PostEntry>(
   posts: T[],
 ): Array<{ name: string; count: number }> =>
   mapToSortedTerms(
     countItems(
-      posts.flatMap((post) => getVal<string[]>(post, 'categories') ?? []),
+      posts
+        .flatMap((post) => getVal<string[]>(post, 'categories') ?? [])
+        .map(sanitizeTerm)
+        .filter(Boolean),
     ),
   );
 
-/** 提取所有标签（含频次统计） */
+/** 提取所有标签（含频次统计），名称已做 URL 段安全清洗 */
 export const getTags = <T extends PostEntry>(
   posts: T[],
 ): Array<{ name: string; count: number }> =>
-  mapToSortedTerms(countItems(posts.flatMap((post) => getPostTags(post))));
+  mapToSortedTerms(
+    countItems(
+      posts
+        .flatMap((post) => getPostTags(post))
+        .map(sanitizeTerm)
+        .filter(Boolean),
+    ),
+  );
 
 /** 分类归档路径 */
 export const getCategoryPath = (category: string) =>

@@ -169,6 +169,9 @@ const icp = settings === null ? OFFLINE_ICP : (settings.siteIcp?.trim() ?? '');
 
     // footerBar 会被后台同步整块替换，重跑本脚本时先解绑上一轮的监听，
     // 否则 astro 的 is:inline + rerun 会让同一条滚动监听叠加多份。
+    // __blogFooterYearCleanup 必须在重跑开头被调用（原先赋值后从未被调，
+    // 上一轮的 sync 监听器会永久残留叠加）。
+    window.__blogFooterYearCleanup?.();
     const onSync = () => {
       setYear();
       update();

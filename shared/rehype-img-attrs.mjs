@@ -49,17 +49,33 @@ function applyImgAttrs(tree, altMap) {
 
     // alt 补齐策略：
     // 1) markdown 里 `![alt](url)` 显式写了非空 alt → 保留（remark 会转成 properties.alt = "文本"）
-    // 2) 无 alt 或空 alt（markdown 的 `![](url)` 语法默认就是空） → 用 url 反查 Media.alt
+    // 2) 无 alt 或空 alt（markdown 的 `![](url)` 语法默认就是空） → 用 src 反查 Media.alt
     // 3) 都拿不到 → 保持空字符串，保证属性存在（比无属性对搜索引擎更友好）
     const existingAlt = node.properties.alt;
     const hasExplicitAlt = typeof existingAlt === 'string' && existingAlt.length > 0;
     if (!hasExplicitAlt) {
       const src = node.properties.src;
-      if (typeof src === 'string' && lookup.has(src)) {
-        node.properties.alt = lookup.get(src);
-      } else {
-        node.properties.alt = '';
+      // 与 fetchMediaAltMap 的 urlNormalizationKeys 同口径：逐形态查
+      // （原值 / 去 # 锚点 / 去 ?query / 纯 path），命中即用，未命中保持空
+      const candidates = [];
+      if (typeof src === 'string') {
+        const noHash = src.split('#')[0];
+        const noQuery = noHash.split('?')[0];
+        candidates.push(src, noHash, noQuery);
+        try {
+          if (/^https?:\/\//.test(noQuery)) candidates.push(new URL(noQuery).pathname);
+        } catch {
+          // 非法 URL 按原样处理
+        }
       }
+      let found = '';
+      for (const key of new Set(candidates)) {
+        if (key && lookup.has(key)) {
+          found = lookup.get(key);
+          break;
+        }
+      }
+      node.properties.alt = found || '';
     }
   });
 }

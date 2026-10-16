@@ -14,7 +14,8 @@
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { safeHref } from 'cloud-blog/shared/html-safety';
-import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils';
+import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils';
+import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines';
 
 /**
  * 后台地址解析优先级：
@@ -153,12 +154,18 @@ export type ProjectEntry = {
   sortOrder: number;
 }
 
-/** 把浅关系字段（单选或多选）归一为字符串名列表 */
+/**
+ * 把浅关系字段（单选或多选）归一为字符串名列表。
+ * Payload 对 status !== published 的关联文档会回退为裸数字 id（depth 过滤后不展开）：
+ * 数字只当无效条目丢弃（不渲染为 "123" 假标签）；若同一条目还有已展开的 name，照常保留。
+ */
 function namesOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] | undefined {
   if (!refs) return undefined;
   const arr = Array.isArray(refs) ? refs : [refs];
-  if (arr.length === 0) return undefined;
-  const names = arr.map((r) => (typeof r === 'object' && r !== null ? r.name : String(r))).filter(Boolean);
+  const names = arr
+    .filter((r): r is RefDoc => typeof r === 'object' && r !== null && !Number.isNaN(r.id))
+    .map((r) => r.name)
+    .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
   return names.length > 0 ? names : undefined;
 }
 
@@ -221,6 +228,24 @@ export async function fetchSyncDigest(timeoutMs = 8000): Promise<SyncDigests | n
  * 说明：Astro 构建期把 altMap 注入 rehype-img-attrs.mjs 的全局变量，
  * 与前台 CMS SSR 链路（blog-sync.fetchMediaAltMap）保持同一套策略。
  */
+/** 归一化 key 集合（M3）：同一 URL 存多形态（原值、去 # 锚点、去 ?query、纯 path），
+ *  markdown 里无论写成 `![x](/media/a.svg)`、`![x](/media/a.svg#top)` 还是
+ *  绝对 URL，都能命中 alt。原实现只存「原值 + basename」两形态，
+ *  正文里带锚点/查询串的同图对不上，alt 缺失。 */
+function urlNormalizationKeys(url: string): string[] {
+  const noHash = url.split('#')[0];
+  const noQuery = noHash.split('?')[0];
+  let pathOnly = noQuery;
+  try {
+    if (/^https?:\/\//.test(noQuery)) pathOnly = new URL(noQuery).pathname;
+  } catch {
+    // 非法 URL 时按原样处理
+  }
+  const keys = new Set<string>([url, noHash, noQuery]);
+  if (pathOnly && pathOnly !== noQuery) keys.add(pathOnly);
+  return [...keys];
+}
+
 export async function fetchMediaAltMap(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   try {
@@ -231,7 +256,7 @@ export async function fetchMediaAltMap(): Promise<Map<string, string>> {
       const url = doc?.url;
       const alt = typeof doc?.alt === 'string' ? doc.alt.trim() : undefined;
       if (!url || !alt) continue;
-      map.set(url, alt);
+      for (const key of urlNormalizationKeys(url)) map.set(key, alt);
       // 兜底：按 basename 再存一份，让 markdown 里的相对路径也能命中
       map.set(basenameOfUrl(url), alt);
     }
@@ -274,8 +299,9 @@ export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[
           date: String(doc.createdAt),
           cover,
           coverAlt,
-          categories: namesOf(doc.categories),
-          tags: namesOf(doc.tags),
+          // 分类/标签名做 URL 段安全清洗：带 / # % 的后台脏值会让路由 404
+          categories: namesOf(doc.categories)?.map(sanitizeTerm).filter(Boolean) || undefined,
+          tags: namesOf(doc.tags)?.map(sanitizeTerm).filter(Boolean) || undefined,
           keywords: linesOf(doc.keywords),
           ai: linesOf(doc.ai),
           sticky: doc.sticky ?? undefined,
@@ -302,7 +328,7 @@ export async function fetchNotes(): Promise<MdEntry[]> {
         date: doc.date,
         title: doc.title ?? undefined,
         mood: doc.mood ?? undefined,
-        tags: namesOf(doc.tags),
+        tags: namesOf(doc.tags)?.map(sanitizeTerm).filter(Boolean) || undefined,
       },
       body: doc.content ?? '',
     }));
@@ -318,29 +344,18 @@ export async function fetchSiteSettings(): Promise<Record<string, any> | null> {
   }
 }
 
-/** 把后台「每行一条 「文字 链接」」的导航文本解析为结构化数组（与后台字段格式一致） */
-function parseNavLines(text?: string | null): Array<{ href: string; label: string }> {
-  if (!text) return []
-  const out: Array<{ href: string; label: string }> = []
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    // 用最后一个空格切分，文字可含空格，链接为 URL 通常不含空格
-    const sp = trimmed.lastIndexOf(' ')
-    if (sp === -1) continue
-    const label = trimmed.slice(0, sp).trim()
-    const href = trimmed.slice(sp + 1).trim()
-    // 协议白名单：javascript: 之类的导航项退化成惰性链接，不进 href
-    if (label && href) out.push({ href: safeHref(href, '#'), label })
-  }
-  return out
-}
-
-/** 导航项（来自后台「导航管理」Global 单例）；不可用时返回 null */
+/**
+ * 导航项（来自后台「导航管理」Global 单例）；不可用时返回 null。
+ * 行格式「文字 链接」共用 shared/free-text-lines 解析器（与社交/页脚同一套，M4）。
+ */
 export async function fetchNavItems(): Promise<Array<{ href: string; label: string }> | null> {
   try {
     const data = await fetchJson<{ navItems?: string | null }>('/api/globals/navigation');
-    return parseNavLines(data?.navItems);
+    // 导航条目必须有链接：allowEmptyHref=false，惰性 '#' 不出现
+    return parseFreeTextLines(data?.navItems, '#', false).map((i) => ({
+      href: i.href,
+      label: i.name,
+    }));
   } catch {
     return null;
   }
