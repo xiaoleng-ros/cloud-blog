@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatDate } from 'cloud-blog/shared/post-utils'
 import { MarkdownEditor } from '../../../editor/MarkdownEditor'
 import { PageHeader } from '../../components/PageHeader'
+import { Toast, useToast } from '../../components/Toast'
 import {
   ApiError,
   createDoc,
@@ -89,6 +90,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   // 元信息弹窗：null=关闭，'publish'=发布弹窗，'draft'=仅为存草稿补选分类/元信息
   const [modal, setModal] = useState<null | 'publish' | 'draft'>(null)
   const [publishSaving, setPublishSaving] = useState(false)
+  const { toast, show } = useToast()
   // 操作提示（存草稿结果 / 自动保存状态）
   const [saveTip, setSaveTip] = useState('')
   // 未同步改动标记（离开拦截用）
@@ -364,7 +366,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
       submittingRef.current = false
       setPublishSaving(false)
       // 与 saveDraft 保持同一套错误文案映射（401/403 等认证类错误明确提示）
-      alert(`发布失败：${describeApiError(error)}`)
+      show('error', `发布失败：${describeApiError(error)}`)
     }
   }
 
@@ -419,6 +421,8 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
           }}
         />
       )}
+
+      <Toast toast={toast} />
     </div>
   )
 }

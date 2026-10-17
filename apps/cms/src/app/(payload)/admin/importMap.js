@@ -4,6 +4,7 @@ import { MarkdownEditorField as MarkdownEditorField_39f26ae0489753f9c48c7dcf90ee
 import { ManageListView as ManageListView_73e62e78b473461b8f71e9dc8c2a32e4 } from '../../../../src/admin/views/manage/ManageListView.tsx'
 import { CategoriesListView as CategoriesListView_04455d182a2a787ecb77abe09ca9dee3 } from '../../../../src/admin/views/categories/CategoriesListView.tsx'
 import { TagsListView as TagsListView_3d89435d3501d2d917eb5ad710f3d99f } from '../../../../src/admin/views/tags/TagsListView.tsx'
+import { MediaListView as MediaListView_d9afbf8c83de5b5ba40a3278666bde4d } from '../../../../src/admin/views/media/MediaListView.tsx'
 import { SocialLinksField as SocialLinksField_1abbff97fa1db6a0b8127a2e95003282 } from '../../../../src/admin/components/SocialLinksField.tsx'
 import { SettingsEditView as SettingsEditView_a0483073a84181b706dc6515a5f5484a } from '../../../../src/admin/views/settings/SettingsEditView.tsx'
 import { NavigationEditView as NavigationEditView_1a7ae34319671bedacdee41f2e6db9aa } from '../../../../src/admin/views/navigation/NavigationEditView.tsx'
@@ -30,6 +31,7 @@ export const importMap = {
   "/src/admin/views/manage/ManageListView.tsx#ManageListView": ManageListView_73e62e78b473461b8f71e9dc8c2a32e4,
   "/src/admin/views/categories/CategoriesListView.tsx#CategoriesListView": CategoriesListView_04455d182a2a787ecb77abe09ca9dee3,
   "/src/admin/views/tags/TagsListView.tsx#TagsListView": TagsListView_3d89435d3501d2d917eb5ad710f3d99f,
+  "/src/admin/views/media/MediaListView.tsx#MediaListView": MediaListView_d9afbf8c83de5b5ba40a3278666bde4d,
   "/src/admin/components/SocialLinksField.tsx#SocialLinksField": SocialLinksField_1abbff97fa1db6a0b8127a2e95003282,
   "/src/admin/views/settings/SettingsEditView.tsx#SettingsEditView": SettingsEditView_a0483073a84181b706dc6515a5f5484a,
   "/src/admin/views/navigation/NavigationEditView.tsx#NavigationEditView": NavigationEditView_1a7ae34319671bedacdee41f2e6db9aa,

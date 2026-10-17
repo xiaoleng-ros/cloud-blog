@@ -3,16 +3,18 @@
 /**
  * 标签管理双栏视图（替换 Payload 默认列表）
  *
- * 版式对齐设计图：左「全部标签」表格（ID/标签名称/关联文章/操作 + 搜索），
+ * 版式对齐设计图：左「全部标签」表格（勾选/ID/标签名称/关联文章/操作 + 搜索），
  * 右侧常驻「新建标签」面板；点编辑时该面板切换为编辑态回填名称，保存后回到新建态。
  *
  * - 关联文章数 = 文章 + 随笔引用该标签的篇数，加载时并行聚合
  * - 删除被引用的标签不拦截，但确认框警告「将自动从 N 篇内容上移除」
+ * - 多选：勾选列 + 批量删除（串行 + 进度显示）
  * - 加载中仅刷新数据区，页头 / 面板骨架常驻
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
-import { createTerm, deleteTag, fetchTagUsage, fetchTerms, updateTag, type TermOption } from '../lib/api'
+import { Toast, useToast } from '../../components/Toast'
+import { createTerm, deleteTag, describeApiError, fetchTagUsage, fetchTerms, updateTag, type TermOption } from '../lib/api'
 
 export const TagsViewInner = () => {
   const [docs, setDocs] = useState<TermOption[]>([])
@@ -25,6 +27,14 @@ export const TagsViewInner = () => {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmDel, setConfirmDel] = useState<TermOption | null>(null)
+
+  // ---- 多选 ----
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState<number[] | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null)
+  const [batchBusy, setBatchBusy] = useState(false)
+
+  const { toast, show } = useToast()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -73,6 +83,7 @@ export const TagsViewInner = () => {
       else await createTerm('tags', v)
       resetPanel()
       await load()
+      show('success', editingId != null ? '已保存' : '已创建')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -86,23 +97,95 @@ export const TagsViewInner = () => {
     setError('')
   }
 
+  // ---- 多选控制 ----
+
+  const toggleRow = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id))
+  const toggleSelectAll = () => {
+    setSelected((prev) => {
+      if (allFilteredSelected) return new Set()
+      return new Set(filtered.map((d) => d.id))
+    })
+  }
+
+  // ---- 单条删除 ----
+
   const handleDelete = async () => {
     if (!confirmDel) return
     setBusy(true)
     try {
       await deleteTag(confirmDel.id)
       if (editingId === confirmDel.id) resetPanel()
+      // 清除选中状态
+      setSelected((prev) => {
+        if (!prev.has(confirmDel.id)) return prev
+        const next = new Set(prev)
+        next.delete(confirmDel.id)
+        return next
+      })
       setConfirmDel(null)
       await load()
+      show('success', '已删除')
     } catch (e) {
-      alert((e as Error).message)
+      show('error', describeApiError(e))
       setConfirmDel(null)
     } finally {
       setBusy(false)
     }
   }
 
+  // ---- 批量删除 ----
+
+  const confirmBatchDeleteAction = async () => {
+    if (!confirmBatchDelete || confirmBatchDelete.length === 0) return
+    setBatchBusy(true)
+
+    const ids = confirmBatchDelete
+    let ok = 0
+    let fail = 0
+
+    for (let i = 0; i < ids.length; i++) {
+      setBatchProgress({ current: i + 1, total: ids.length })
+      try {
+        await deleteTag(ids[i])
+        ok++
+      } catch {
+        fail++
+      }
+    }
+
+    setBatchProgress(null)
+    setBatchBusy(false)
+    setConfirmBatchDelete(null)
+    setSelected(new Set())
+    await load()
+
+    // 清除正在编辑的被删除标签
+    if (editingId != null && ids.includes(editingId)) resetPanel()
+
+    if (fail === 0) {
+      show('success', ok > 1 ? `已删除 ${ok} 个标签` : '已删除')
+    } else if (ok > 0) {
+      show('error', `删除 ${ok} 个，失败 ${fail} 个（部分可能已删除，请刷新确认）`)
+    } else {
+      show('error', '删除失败：后台响应过慢。请刷新列表确认真实状态')
+    }
+  }
+
   const delCount = confirmDel ? (usage[confirmDel.id] ?? 0) : 0
+
+  // 批量删除的关联文章总数
+  const batchDelCount = useMemo(() => {
+    if (!confirmBatchDelete) return 0
+    return confirmBatchDelete.reduce((sum, id) => sum + (usage[id] ?? 0), 0)
+  }, [confirmBatchDelete, usage])
 
   return (
     <div className="drafts tag">
@@ -116,15 +199,40 @@ export const TagsViewInner = () => {
               全部标签
               <span className="tag__count">{filtered.length}</span>
             </h2>
-            <input
-              type="search"
-              className="trash__search tag__search"
-              placeholder="搜索标签名称..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              aria-label="搜索标签名称"
-            />
+            <div className="tag__panel-head-actions">
+              <input
+                type="search"
+                className="trash__search tag__search"
+                placeholder="搜索标签名称..."
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                aria-label="搜索标签名称"
+              />
+              <button
+                type="button"
+                className="manage__action manage__action--danger"
+                disabled={selected.size === 0 || batchBusy}
+                onClick={() => setConfirmBatchDelete([...selected])}
+              >
+                批量删除{selected.size ? `（${selected.size}）` : ''}
+              </button>
+            </div>
           </header>
+
+          {/* 全选栏 */}
+          {!loading && filtered.length > 0 && (
+            <div className="tag__select-bar">
+              <label className="tag__select-all">
+                <input
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  onChange={toggleSelectAll}
+                  aria-label="全选可见标签"
+                />
+                <span>全选（{filtered.length}）</span>
+              </label>
+            </div>
+          )}
 
           {loading ? (
             <p className="drafts__empty">加载中…</p>
@@ -144,6 +252,14 @@ export const TagsViewInner = () => {
             <table className="tag__table">
               <thead>
                 <tr>
+                  <th className="tag__col-check">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="全选本页标签"
+                    />
+                  </th>
                   <th className="tag__col-id">ID</th>
                   <th>标签名称</th>
                   <th className="tag__col-usage">关联文章</th>
@@ -153,6 +269,14 @@ export const TagsViewInner = () => {
               <tbody>
                 {filtered.map((d) => (
                   <tr key={d.id}>
+                    <td className="tag__col-check">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(d.id)}
+                        onChange={() => toggleRow(d.id)}
+                        aria-label={`选择 ${d.name}`}
+                      />
+                    </td>
                     <td className="tag__col-id">{d.id}</td>
                     <td className="tag__cell-name">{d.name}</td>
                     <td className="tag__col-usage">{usage[d.id] ?? 0}</td>
@@ -215,6 +339,7 @@ export const TagsViewInner = () => {
         </aside>
       </div>
 
+      {/* 单条删除确认 */}
       {confirmDel && (
         <div className="drafts__confirm-mask" onClick={() => setConfirmDel(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
@@ -240,6 +365,41 @@ export const TagsViewInner = () => {
           </div>
         </div>
       )}
+
+      {/* 批量删除确认（带进度显示） */}
+      {confirmBatchDelete && (
+        <div className="drafts__confirm-mask" onClick={() => !batchBusy && setConfirmBatchDelete(null)}>
+          <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
+            <h3>确认批量删除</h3>
+            <p>
+              确定删除选中的 {confirmBatchDelete.length} 个标签吗？
+              {batchDelCount > 0
+                ? `这些标签正被 ${batchDelCount} 篇内容使用，删除后将自动从内容上移除。`
+                : ''}
+            </p>
+            {batchProgress && (
+              <p className="manage__delete-progress">
+                删除中 {batchProgress.current} / {batchProgress.total}…
+              </p>
+            )}
+            <div className="drafts__confirm-actions">
+              <button type="button" className="drafts__op" disabled={batchBusy} onClick={() => setConfirmBatchDelete(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="drafts__op drafts__op--danger"
+                disabled={batchBusy}
+                onClick={() => void confirmBatchDeleteAction()}
+              >
+                {batchProgress ? '删除中…' : '删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Toast toast={toast} />
     </div>
   )
 }

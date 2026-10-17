@@ -345,3 +345,78 @@ export async function setCommentStatus(id: number, status: 'approved' | 'spam' |
 export async function deleteComment(id: number): Promise<void> {
   await request<unknown>('DELETE', `/api/comments/${id}`)
 }
+
+/* ---------------- 图片管理（Media 集合） ---------------- */
+
+/** 图片文档（归一化后的视图层结构） */
+export interface MediaDoc {
+  id: number
+  filename?: string | null
+  url?: string | null
+  thumbnailURL?: string | null
+  mimeType?: string | null
+  filesize?: number | null
+  width?: number | null
+  height?: number | null
+  alt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** 图片列表分页结果 */
+export interface MediaListResult {
+  docs: MediaDoc[]
+  totalDocs: number
+  totalPages: number
+  page: number
+  limit: number
+}
+
+/** 分页拉取图片列表 */
+export async function listMedia(
+  page = 1,
+  size = 20,
+  sort = '-createdAt',
+  keyword?: string,
+): Promise<MediaListResult> {
+  const and: Record<string, unknown>[] = []
+  if (keyword) and.push({ filename: { like: keyword } })
+  const query = new URLSearchParams({
+    page: String(page),
+    limit: String(size),
+    sort,
+    depth: '0',
+    where: and.length ? JSON.stringify({ and }) : JSON.stringify({}),
+  })
+  return request<MediaListResult>('GET', `/api/media?${query.toString()}`)
+}
+
+/** 更新图片 alt 文本 */
+export async function updateMedia(id: number, data: Record<string, unknown>): Promise<MediaDoc> {
+  return request<MediaDoc>('PATCH', `/api/media/${id}`, data)
+}
+
+/** 删除图片 */
+export async function deleteMedia(id: number): Promise<void> {
+  await request<unknown>('DELETE', `/api/media/${id}`)
+}
+
+/** 批量删除图片（逐个串行删除，避免压垮后端） */
+export async function deleteMediaBatch(
+  ids: number[],
+  onProgress?: (current: number, total: number) => void,
+): Promise<{ ok: number; fail: number }> {
+  let ok = 0
+  let fail = 0
+  for (let i = 0; i < ids.length; i++) {
+    onProgress?.(i + 1, ids.length)
+    try {
+      await deleteMedia(ids[i])
+      ok++
+    } catch {
+      fail++
+    }
+  }
+  return { ok, fail }
+}
+

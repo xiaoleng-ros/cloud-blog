@@ -16,8 +16,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useConfig } from '@payloadcms/ui'
 import { PageHeader } from '../../components/PageHeader'
 import { DateRangeField } from '../../components/DateField'
+import { Toast, useToast } from '../../components/Toast'
 import { clip, extractNames, fmt, tagPill } from '../lib/format'
-import { listDocs, trashDoc, type AdminNote, type AdminPost } from '../lib/api'
+import { describeApiError, listDocs, trashDoc, type AdminNote, type AdminPost } from '../lib/api'
 
 type Tab = 'posts' | 'notes'
 
@@ -54,6 +55,7 @@ export const DraftsViewInner = () => {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState<ConfirmState | null>(null)
+  const { toast, show } = useToast()
 
   // 输入停顿 400ms 后才发起查询，避免每敲一个字打一次 API
   useEffect(() => {
@@ -122,7 +124,7 @@ export const DraftsViewInner = () => {
       setDeleting(null)
       void load()
     } catch (error) {
-      alert(`删除失败：${(error as Error).message}`)
+      show('error', `删除失败：${describeApiError(error)}`)
       setDeleting(null)
     }
   }
@@ -267,6 +269,8 @@ export const DraftsViewInner = () => {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} />
     </div>
   )
 }

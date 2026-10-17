@@ -22,6 +22,17 @@ import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES } from '../lib/media-upload'
  */
 export const Media: CollectionConfig = {
   slug: 'media',
+  admin: {
+    useAsTitle: 'filename',
+    components: {
+      // 定制图片管理页：网格缩略图 + 上传/搜索/多选删除
+      views: {
+        list: {
+          Component: '/src/admin/views/media/MediaListView.tsx#MediaListView',
+        },
+      },
+    },
+  },
   access: {
     read: () => true, // 公开可读，保证文章图片可访问
   },

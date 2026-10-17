@@ -3,16 +3,18 @@
 /**
  * 分类管理树视图（替换 Payload 默认列表）
  *
- * 版式对齐设计图：页头「分类管理」+ 新增分类；工具栏（类型图例 / 搜索名称或标识 / 全部展开、折叠）；
+ * 版式对齐设计图：页头「分类管理」+ 新增分类；工具栏（类型图例 / 搜索名称或标识 / 全部展开、折叠 / 批量删除）；
  * 树形行（缩进 + 展开箭头 + 类型色点 + 名称 + 标识 + 隐藏标记 + 编辑/删除）。
  *
  * - 数据一次全量拉取，客户端建树（权重→名称排序）；搜索命中保留祖先并临时展开
  * - 新建 / 编辑走 CategoryModal；删除复用确认框样式，后端 beforeDelete 会给可读报错
+ * - 多选：勾选列 + 批量删除（串行 + 进度显示）
  * - 加载中仅刷新数据区，页头 / 工具栏骨架常驻
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
-import { deleteCategory, listCategoryDocs, type CategoryDoc } from '../lib/api'
+import { Toast, useToast } from '../../components/Toast'
+import { deleteCategory, describeApiError, listCategoryDocs, type CategoryDoc } from '../lib/api'
 import { CategoryModal, flattenWithDepth, parentIdOf } from './CategoryModal'
 
 interface TreeNode {
@@ -96,6 +98,14 @@ export const CategoriesViewInner = () => {
   const [confirmDel, setConfirmDel] = useState<CategoryDoc | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // ---- 多选 ----
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState<number[] | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null)
+  const [batchBusy, setBatchBusy] = useState(false)
+
+  const { toast, show } = useToast()
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -138,18 +148,81 @@ export const CategoriesViewInner = () => {
       return next
     })
 
+  // ---- 多选控制 ----
+
+  const toggleRow = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const allVisibleSelected = rows.length > 0 && rows.every((r) => selected.has(r.doc.id))
+  const toggleSelectAll = () => {
+    setSelected((prev) => {
+      if (allVisibleSelected) return new Set()
+      return new Set(rows.map((r) => r.doc.id))
+    })
+  }
+
+  // ---- 单条删除 ----
+
   const handleDelete = async () => {
     if (!confirmDel) return
     setBusy(true)
     try {
       await deleteCategory(confirmDel.id)
+      // 清除选中状态（如果该行被选中）
+      setSelected((prev) => {
+        if (!prev.has(confirmDel.id)) return prev
+        const next = new Set(prev)
+        next.delete(confirmDel.id)
+        return next
+      })
       setConfirmDel(null)
       await load()
+      show('success', '已删除')
     } catch (e) {
-      alert((e as Error).message)
+      show('error', describeApiError(e))
       setConfirmDel(null)
     } finally {
       setBusy(false)
+    }
+  }
+
+  // ---- 批量删除 ----
+
+  const confirmBatchDeleteAction = async () => {
+    if (!confirmBatchDelete || confirmBatchDelete.length === 0) return
+    setBatchBusy(true)
+
+    const ids = confirmBatchDelete
+    let ok = 0
+    let fail = 0
+
+    for (let i = 0; i < ids.length; i++) {
+      setBatchProgress({ current: i + 1, total: ids.length })
+      try {
+        await deleteCategory(ids[i])
+        ok++
+      } catch {
+        fail++
+      }
+    }
+
+    setBatchProgress(null)
+    setBatchBusy(false)
+    setConfirmBatchDelete(null)
+    setSelected(new Set())
+    await load()
+
+    if (fail === 0) {
+      show('success', ok > 1 ? `已删除 ${ok} 个分类` : '已删除')
+    } else if (ok > 0) {
+      show('error', `删除 ${ok} 个，失败 ${fail} 个（被引用或有子分类的分类会被拦截）`)
+    } else {
+      show('error', '删除失败：后台响应过慢。请刷新列表确认真实状态')
     }
   }
 
@@ -167,7 +240,7 @@ export const CategoriesViewInner = () => {
       />
 
       <div className="cat__panel">
-        {/* 工具栏：图例 + 搜索 + 展开/折叠 */}
+        {/* 工具栏：图例 + 搜索 + 展开/折叠 + 批量删除 */}
         <div className="cat__toolbar">
           <div className="cat__legend" aria-hidden="true">
             <span>
@@ -195,8 +268,31 @@ export const CategoriesViewInner = () => {
             <button type="button" className="cat__tool-btn" onClick={collapseAll} title="全部折叠" aria-label="全部折叠">
               ⇈
             </button>
+            <button
+              type="button"
+              className="manage__action manage__action--danger"
+              disabled={selected.size === 0 || batchBusy}
+              onClick={() => setConfirmBatchDelete([...selected])}
+            >
+              批量删除{selected.size ? `（${selected.size}）` : ''}
+            </button>
           </div>
         </div>
+
+        {/* 全选栏 */}
+        {!loading && rows.length > 0 && (
+          <div className="cat__select-bar">
+            <label className="cat__select-all">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleSelectAll}
+                aria-label="全选可见分类"
+              />
+              <span>全选可见分类（{rows.length}）</span>
+            </label>
+          </div>
+        )}
 
         <div className="cat__tree">
           {loading ? (
@@ -224,6 +320,13 @@ export const CategoriesViewInner = () => {
               const isOpen = keyword.trim() ? true : !collapsed.has(d.id)
               return (
                 <div className="cat__row" key={d.id} style={{ paddingLeft: 14 + row.depth * 24 }}>
+                  <input
+                    type="checkbox"
+                    className="cat__row-check"
+                    checked={selected.has(d.id)}
+                    onChange={() => toggleRow(d.id)}
+                    aria-label={`选择 ${d.name}`}
+                  />
                   {hasChildren ? (
                     <button
                       type="button"
@@ -276,6 +379,7 @@ export const CategoriesViewInner = () => {
         />
       )}
 
+      {/* 单条删除确认 */}
       {confirmDel && (
         <div className="drafts__confirm-mask" onClick={() => setConfirmDel(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
@@ -299,6 +403,38 @@ export const CategoriesViewInner = () => {
           </div>
         </div>
       )}
+
+      {/* 批量删除确认（带进度显示） */}
+      {confirmBatchDelete && (
+        <div className="drafts__confirm-mask" onClick={() => !batchBusy && setConfirmBatchDelete(null)}>
+          <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
+            <h3>确认批量删除</h3>
+            <p>
+              确定删除选中的 {confirmBatchDelete.length} 个分类吗？被内容引用或有子分类的分类会被拦截。
+            </p>
+            {batchProgress && (
+              <p className="manage__delete-progress">
+                删除中 {batchProgress.current} / {batchProgress.total}…
+              </p>
+            )}
+            <div className="drafts__confirm-actions">
+              <button type="button" className="drafts__op" disabled={batchBusy} onClick={() => setConfirmBatchDelete(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="drafts__op drafts__op--danger"
+                disabled={batchBusy}
+                onClick={() => void confirmBatchDeleteAction()}
+              >
+                {batchProgress ? '删除中…' : '删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Toast toast={toast} />
     </div>
   )
 }
