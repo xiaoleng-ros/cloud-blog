@@ -35,7 +35,9 @@ import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs';
  */
 const AUTO_REFRESH_MS = (() => {
   const raw = Number(process.env.PAYLOAD_POLL_MS)
-  return Number.isFinite(raw) && raw >= 1_000 ? raw : 3_000
+  // 默认 5s：3 loader × 每 3s 轮询 × 后台单查 20s 会堆出 ~20 条并发，
+  // 压垮 Supabase 免费档 pooler；5s 降到 ~12 条，仍够 dev 近实时。
+  return Number.isFinite(raw) && raw >= 1_000 ? raw : 5_000
 })()
 /** 与 astro.config.mjs 约定的刷新信号文件 */
 const SYNC_MARKER = path.join(process.cwd(), '.astro', 'payload-sync-touch')

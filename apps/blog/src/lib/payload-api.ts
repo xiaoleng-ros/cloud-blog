@@ -41,8 +41,10 @@ function resolvePayloadUrl(): string {
 
 export const PAYLOAD_URL = resolvePayloadUrl();
 
-/** 基于 node:http 的 GET+JSON 请求，超时或非 2xx 时抛错（超时放宽以容忍后台首次编译） */
-function fetchJson<T>(path: string, timeoutMs = 20000): Promise<T> {
+/** 基于 node:http 的 GET+JSON 请求，超时或非 2xx 时抛错
+ *  超时 30s：容忍后台 Turbopack 冷编译 + Supabase pooler 偶发慢查询（免费档连接池
+ *  在并发下单查询可达 20s，20s 超时刚好踩在边界上会误杀正常请求） */
+function fetchJson<T>(path: string, timeoutMs = 30000): Promise<T> {
   const url = `${PAYLOAD_URL}${path}`;
   // http / https 共用同一套 options 与回调签名，按协议选择模块
   const get = url.startsWith('https:') ? httpsGet : httpGet;
@@ -212,8 +214,9 @@ export interface SyncDigests {
 /**
  * 轻量探测各数据源指纹（<1KB，命中后台快照缓存时零查库、不渲染区块）。
  * 失败时返回 null，由调用方退回「无条件重拉全量」的旧行为。
+ * 超时 15s：Supabase 免费档 pooler 单查可达 8s，8s 超时刚好踩在边界上会误杀。
  */
-export async function fetchSyncDigest(timeoutMs = 8000): Promise<SyncDigests | null> {
+export async function fetchSyncDigest(timeoutMs = 15000): Promise<SyncDigests | null> {
   try {
     return await fetchJson<SyncDigests>('/api/blog-sync?digest=1', timeoutMs);
   } catch (error) {
