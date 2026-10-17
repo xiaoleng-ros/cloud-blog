@@ -189,6 +189,56 @@ const routeMotion = {
     </script>
     <ClientRouter />
     <script is:inline>
+      // ── 导航可靠性加固（仅 dev 体验；prod 静态产物不走 ClientRouter 的 fetch 路径）──
+      //
+      // 根因：ClientRouter 的 fetchHTML 无超时；Vite dev SSR 冷编译一条未访问过的路由
+      // 要 2-10s，期间点击后 URL 不变、无加载态，看起来像「点不动」。内置 prefetch 有
+      // 80ms hover 延迟，快速点击抢不过。三管齐下：
+      //   ① 5s 超时 → 放弃 SPA 换页、整页跳转（有反馈 > 无反馈）；
+      //   ② astro:before-preparation → 光标变 progress，让用户知道点击已被接收；
+      //   ③ mousedown 抢先 fetch：比 hover-prefetch 更早（不等 80ms），
+      //      点击时 Vite 模块缓存大概率已热，fetch 走缓存命中而非冷编译。
+      (() => {
+        const NAV_TIMEOUT_MS = 5000;
+        let navTimer = 0;
+
+        document.addEventListener('astro:before-preparation', (event) => {
+          document.documentElement.style.cursor = 'progress';
+          navTimer = setTimeout(() => {
+            if (!event.signal.aborted) location.href = event.to.href;
+          }, NAV_TIMEOUT_MS);
+        });
+
+        const clearNavState = () => {
+          clearTimeout(navTimer);
+          navTimer = 0;
+          document.documentElement.style.cursor = '';
+        };
+        document.addEventListener('astro:after-swap', clearNavState);
+        // full-reload（payload-hot-reload 触发的整页刷新）不走 swap，也要清掉光标
+        document.addEventListener('astro:page-load', clearNavState);
+
+        // mousedown 抢跑预取：比 ClientRouter 的 80ms hover-prefetch 更早，
+        // 用户按下鼠标的瞬间就开始 fetch，点击触发 navigate() 时 fetch 已在路上。
+        // 用 WeakMap 而非 Set：链接 DOM 会被 ClientRouter 换页替换，Set 会泄漏。
+        const inflight = new WeakSet();
+        document.addEventListener('mousedown', (event) => {
+          const anchor = event.target instanceof Element ? event.target.closest('a') : null;
+          if (!anchor) return;
+          // 只预取同源、同标签页打开的链接；新标签页/下载/外部链接交给浏览器原生处理
+          const target = anchor.target || '_self';
+          if (target !== '_self' || anchor.hasAttribute('download')) return;
+          let url;
+          try { url = new URL(anchor.href, location.href); } catch { return; }
+          if (url.origin !== location.origin) return;
+          if (url.pathname === location.pathname && url.search === location.search) return;
+          if (inflight.has(anchor)) return;
+          inflight.add(anchor);
+          fetch(url.href, { cache: 'default', credentials: 'same-origin' }).catch(() => {});
+        }, { passive: true });
+      })();
+    </script>
+    <script is:inline>
       (() => {
         const storageKey = 'blog-theme';
         const lightColor = '#fbf7ed';
