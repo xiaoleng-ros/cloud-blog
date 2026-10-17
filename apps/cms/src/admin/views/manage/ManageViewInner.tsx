@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useConfig } from '@payloadcms/ui'
 import { PageHeader } from '../../components/PageHeader'
 import { DateRangeField } from '../../components/DateField'
+import { Toast, useToast } from '../../components/Toast'
 import { clip, extractNames, fmt, tagPill } from '../lib/format'
 import {
   ApiError,
@@ -112,6 +113,8 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [confirmIds, setConfirmIds] = useState<number[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState<{ current: number; total: number } | null>(null)
+  const { toast, show } = useToast()
 
   const [exportOpen, setExportOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -215,19 +218,48 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
     })
   }
 
-  /** 确认删除：软删除移入回收站（各条独立，并行提交消除 N+1 串行等待） */
+  /**
+   * 确认删除：软删除移入回收站
+   *
+   * 设计要点（修复「删除卡死 / alert 阻塞」问题）：
+   * 1. Promise.allSettled：每条独立处理，部分失败不中断其余
+   * 2. 串行提交（非并发）：避免同时压垮 Supabase pooler
+   * 3. 进度反馈：确认弹窗内显示「删除中 3/9…」，不弹 alert
+   * 4. toast 结果：非阻塞，页面始终可操作
+   * 5. 无论成败都刷新列表：让用户看到真实状态（超时可能已生效）
+   */
   const confirmDelete = async () => {
     if (!confirmIds || confirmIds.length === 0) return
     setBusy(true)
-    try {
-      await Promise.all(confirmIds.map((id) => trashDoc(collection, id)))
-      setConfirmIds(null)
-      await load()
-    } catch (error) {
-      alert(`删除失败：${friendlyError(error)}`)
-      setConfirmIds(null)
-    } finally {
-      setBusy(false)
+
+    const total = confirmIds.length
+    let okCount = 0
+    let failCount = 0
+
+    for (let i = 0; i < total; i++) {
+      setDeleting({ current: i + 1, total })
+      try {
+        await trashDoc(collection, confirmIds[i])
+        okCount++
+      } catch {
+        failCount++
+      }
+    }
+
+    setDeleting(null)
+    setBusy(false)
+    setConfirmIds(null)
+
+    // 始终刷新列表，让用户看到真实状态
+    void load()
+
+    // 结果反馈
+    if (failCount === 0) {
+      show('success', okCount > 1 ? `已移入回收站 ${okCount} 条` : '已移入回收站')
+    } else if (okCount > 0) {
+      show('error', `成功 ${okCount} 条，失败 ${failCount} 条（部分可能已移入，请刷新确认）`)
+    } else {
+      show('error', '删除失败：后台响应过慢。请刷新列表确认真实状态')
     }
   }
 
@@ -287,7 +319,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
       }
       downloadJson(`${collection}-${fmt(new Date().toISOString())}.json`, docs.map(docToExport))
     } catch (error) {
-      alert(`导出失败：${(error as Error).message}`)
+      show('error', '导出失败')
     } finally {
       setBusy(false)
     }
@@ -309,7 +341,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
       )
       downloadJson(`${collection}-selected-${fmt(new Date().toISOString())}.json`, res.docs.map(docToExport))
     } catch (error) {
-      alert(`导出失败：${(error as Error).message}`)
+      show('error', '导出失败')
     } finally {
       setBusy(false)
     }
@@ -386,12 +418,13 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
       // 导入可能新建了标签，刷新标签下拉
       void fetchTerms('tags').then(setTags).catch(() => undefined)
       await load()
-      alert(
+      show(
+        'success',
         `导入完成：成功 ${ok} 条` +
-          (skipped.length ? `，跳过 ${skipped.length} 条（分类缺失或必填字段为空）` : ''),
+          (skipped.length ? `，跳过 ${skipped.length} 条` : ''),
       )
     } catch (error) {
-      alert(`导入失败：${(error as Error).message}`)
+      show('error', `导入失败：${(error as Error).message}`)
     } finally {
       setBusy(false)
     }
@@ -629,7 +662,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
       )}
 
       {confirmIds && (
-        <div className="drafts__confirm-mask" onClick={() => setConfirmIds(null)}>
+        <div className="drafts__confirm-mask" onClick={() => !deleting && setConfirmIds(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认删除</h3>
             <p>
@@ -637,22 +670,30 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
                 ? `确定将选中的 ${confirmIds.length} 条移入回收站吗？`
                 : '确定将这条内容移入回收站吗？'}
             </p>
+            {deleting && (
+              <p className="manage__delete-progress">
+                删除中 {deleting.current} / {deleting.total}…
+              </p>
+            )}
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" onClick={() => setConfirmIds(null)}>
+              <button type="button" className="drafts__op" disabled={deleting !== null} onClick={() => setConfirmIds(null)}>
                 取消
               </button>
               <button
                 type="button"
                 className="drafts__op drafts__op--danger"
-                disabled={busy}
+                disabled={deleting !== null}
                 onClick={() => void confirmDelete()}
               >
-                移入回收站
+                {deleting ? '删除中…' : '移入回收站'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* 非阻塞 toast：替代 alert()，页面始终可操作 */}
+      <Toast toast={toast} />
     </div>
   )
 }

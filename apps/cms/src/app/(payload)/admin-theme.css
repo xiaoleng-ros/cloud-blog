@@ -1504,6 +1504,53 @@ img.gravatar-account {
   }
 }
 
+/* ─── 共用 toast（非阻塞，所有管理视图统一用 .admin-toast） ─── */
+.admin-toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 22px 13px 16px;
+  border-radius: 12px;
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--theme-elevation-150);
+  box-shadow:
+    0 22px 60px rgb(15 35 70 / 0.22),
+    0 3px 10px rgb(15 35 70 / 0.08);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--theme-elevation-850);
+  pointer-events: none;
+  animation: account-toast-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  max-width: 90vw;
+}
+
+.admin-toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  color: var(--success);
+}
+
+.admin-toast--error .admin-toast__icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.admin-toast__text {
+  min-width: 0;
+  word-break: break-word;
+}
+
 /* ---------- 15. 创作页（ComposeView） ----------
    根容器度量见 §2.5 的视图根容器规则；这里只写创作页独有的块。
    曾经限过 max-width: 960px，但那样页头卡右边缘和内容列对不齐，整列像没对齐的网格。 */
