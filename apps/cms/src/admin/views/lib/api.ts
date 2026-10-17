@@ -32,15 +32,15 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * 把 ApiError 映射成给用户看的中文提示。
- * 401/403 必须给「重新登录/授权」类明确文案，避免用户误以为数据丢失；
- * 5xx 与网络抖动统一通用文案，不回显原始状态码。
+/** 把 ApiError 映射成给用户看的中文提示。
+ *  401/403 必须给「重新登录/授权」类明确文案，避免用户误以为数据丢失；
+ *  408/5xx 与网络抖动统一提示可重试，不回显原始状态码。
  */
 export const describeApiError = (error: unknown): string => {
   if (error instanceof ApiError) {
     if (error.status === 401) return '登录已过期，请重新登录后再操作'
     if (error.status === 403) return '无操作权限，请确认当前账号是否已授权'
+    if (error.status === 408) return '操作超时：后台响应过慢。文章可能已被删除，请刷新列表确认真实状态'
     if (error.status === 429) return '操作过于频繁，请稍后重试'
     if (error.status >= 500) return '操作失败，请稍后重试'
     // 其余 4xx（含后端 APIError 抛出的中文业务提示）保留展示
@@ -49,13 +49,35 @@ export const describeApiError = (error: unknown): string => {
   return '操作失败，请稍后重试'
 }
 
-/** 基础 JSON 请求（支持 GET/POST/PATCH/DELETE） */
+/**
+ * 后台管理视图请求的总超时：Supabase 免费档 pooler 抖动时服务端响应可能超过 1 分钟，
+ * 浏览器 fetch 默认无超时 —— 删除/保存操作会「停住、什么也干不了」（UI busy 态永久挂起）。
+ * 35s 内没响应就按可重试失败处理，让按钮回到可点状态并给出明确提示；
+ * 操作是否已在服务端生效未知，刷新列表即可确认真实状态。
+ */
+const REQUEST_TIMEOUT_MS = 35_000
+
+/** 基础 JSON 请求（支持 GET/POST/PATCH/DELETE；带 35s 超时兜底） */
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method,
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    // AbortError 单独归类为「超时」；其余网络错误（断网/服务重启）也视为可重试
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('请求超时：后台响应过慢，请刷新列表后重试', 408, true)
+    }
+    throw new ApiError('网络异常，请检查后台服务是否可访问', 0, true)
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
