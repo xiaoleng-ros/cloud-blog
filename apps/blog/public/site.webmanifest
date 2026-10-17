@@ -1,0 +1,9 @@
+{
+  "name": "云岫的博客",
+  "short_name": "云岫",
+  "description": "记录 AI、代码、网站搭建和技术观察",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf7ed",
+  "theme_color": "#fbf7ed"
+}

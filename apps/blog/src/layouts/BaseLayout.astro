@@ -73,6 +73,13 @@ try {
   walineOrigin = '';
 }
 
+// 客户端实时同步（SSE + 轮询）开关：
+//   dev 模式下前台(3000)与后台(9527)不同源，/api/blog-sync 相对路径会打到前台 → 404。
+//   dev 的数据同步已由服务端 payload-loader（每 3s 轮询 + touch marker → full-reload）覆盖，
+//   客户端同步是冗余的，直接禁用可消除 404 噪音。
+//   prod 下前后台同域（CMS catch-all 托管前台），相对路径正常，同步启用。
+const syncEnabled = !import.meta.env.DEV;
+
 const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
@@ -133,6 +140,7 @@ const routeMotion = {
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" type="image/png" href={siteIcon} />
     <link rel="apple-touch-icon" href={siteIcon} />
+    <link rel="manifest" href="/site.webmanifest" />
     {walineServer && <meta name="waline-server" content={walineServer} />}
     {walineOrigin && <link rel="preconnect" href={walineOrigin} crossorigin />}
     <link rel="preconnect" href="https://cravatar.cn" />
@@ -869,6 +877,7 @@ const routeMotion = {
     </script>
     <!-- 客户端净化白名单数据：与服务端净化链同源（shared/md-sanitize-schema），走 set:html 注入（同 JSON-LD 用法），内联脚本里不能写模板表达式 -->
     <script is:inline data-astro-rerun set:html={`window.__mdSanitizeLists=${JSON.stringify(mdSanitizeLists).replace(/</g, '\\u003c')};`}></script>
+    <script is:inline data-astro-rerun set:html={`window.__blogSyncConfig=${JSON.stringify({ enabled: syncEnabled })};`}></script>
     <script is:inline data-astro-rerun>
       (() => {
         // 后台数据实时同步：SSE 为主通道（近实时推送），轮询为兜底（30s 间隔）。
@@ -889,6 +898,15 @@ const routeMotion = {
             } catch {}
           };
         })();
+
+        // dev 模式：前后台不同源，/api/blog-sync 相对路径打到前台 → 404；
+        // dev 的数据同步已由服务端 payload-loader 覆盖，客户端同步禁用。
+        // 仍需 resolve __blogSyncReady，否则 MusicPlayer 会等 2.5s 超时才初始化。
+        const CFG = window.__blogSyncConfig || { enabled: true };
+        if (!CFG.enabled) {
+          markFirstSyncDone();
+          return;
+        }
 
         // 同步配置常量（集中定义避免魔法值散落在逻辑中）
         const KEY = 'blog-data-version';
