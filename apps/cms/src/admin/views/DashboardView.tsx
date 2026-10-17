@@ -22,6 +22,7 @@
  */
 import { Link, useConfig } from '@payloadcms/ui'
 import React, { useEffect, useState } from 'react'
+import { REQUEST_TIMEOUT_MS } from './lib/api'
 import { PageHeader } from '../components/PageHeader'
 
 /** 统计卡片数据结构 */
@@ -99,6 +100,10 @@ export const DashboardView = () => {
      *      depth=0 不展开关联，进一步减小响应体积。
      */
     const load = async () => {
+      // Supabase pooler 抖动时这些 GET 可能挂 60s+，统一挂 35s 超时，
+      // 任一请求超时/失败 → 走 catch 置错误态（卡片显示「加载失败」而不是永久转圈）
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
       try {
         const [
           postsRes,
@@ -109,13 +114,13 @@ export const DashboardView = () => {
           latestPostsRes,
           latestNotesRes,
         ] = await Promise.all([
-          fetch('/api/posts?limit=1&depth=0'),
-          fetch('/api/notes?limit=1&depth=0'),
-          fetch('/api/categories?limit=1&depth=0'),
-          fetch('/api/tags?limit=1&depth=0'),
-          fetch('/api/media?limit=1&depth=0'),
-          fetch('/api/posts?sort=-createdAt&limit=5&depth=0'),
-          fetch('/api/notes?sort=-date&limit=5&depth=0'),
+          fetch('/api/posts?limit=1&depth=0', { signal: controller.signal }),
+          fetch('/api/notes?limit=1&depth=0', { signal: controller.signal }),
+          fetch('/api/categories?limit=1&depth=0', { signal: controller.signal }),
+          fetch('/api/tags?limit=1&depth=0', { signal: controller.signal }),
+          fetch('/api/media?limit=1&depth=0', { signal: controller.signal }),
+          fetch('/api/posts?sort=-createdAt&limit=5&depth=0', { signal: controller.signal }),
+          fetch('/api/notes?sort=-date&limit=5&depth=0', { signal: controller.signal }),
         ])
 
         // 解析列表响应：非 2xx（未登录 401/403、服务端 5xx）时抛错，交由下方 catch 统一置错误态，
@@ -148,6 +153,7 @@ export const DashboardView = () => {
       } catch {
         setError(true)
       } finally {
+        clearTimeout(timer)
         setLoading(false)
       }
     }

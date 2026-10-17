@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { REQUEST_TIMEOUT_MS } from '../views/lib/api'
 
 /**
  * 飞书登录入口（登录页 beforeLogin 插槽）
@@ -128,7 +129,14 @@ export function FeishuLoginLink() {
     const init = async () => {
       try {
         // 1. 每次打开/刷新都从服务端取新的 state（二维码不可复用）
-        const res = await fetch('/api/feishu/redirect?mode=json', { cache: 'no-store' })
+        //    加 35s 超时：Supabase pooler 抖动时避免弹窗永久转圈
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+        const res = await fetch('/api/feishu/redirect?mode=json', {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        clearTimeout(timer)
         if (!res.ok) throw new Error('获取飞书授权地址失败')
         const data = (await res.json()) as { qrAuthUrl?: string }
         if (!data.qrAuthUrl) throw new Error('飞书授权地址为空')

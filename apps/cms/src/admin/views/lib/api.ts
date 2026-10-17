@@ -55,7 +55,7 @@ export const describeApiError = (error: unknown): string => {
  * 35s 内没响应就按可重试失败处理，让按钮回到可点状态并给出明确提示；
  * 操作是否已在服务端生效未知，刷新列表即可确认真实状态。
  */
-const REQUEST_TIMEOUT_MS = 35_000
+export const REQUEST_TIMEOUT_MS = 35_000
 
 /** 基础 JSON 请求（支持 GET/POST/PATCH/DELETE；带 35s 超时兜底） */
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {

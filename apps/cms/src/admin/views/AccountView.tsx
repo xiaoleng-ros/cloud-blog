@@ -12,6 +12,7 @@
 import React, { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { PASSWORD_RULE_TEXT, validatePasswordStrength } from '../../lib/password'
+import { REQUEST_TIMEOUT_MS } from './lib/api'
 import { PageHeader } from '../components/PageHeader'
 
 /** 当前登录用户（仅取用到的字段） */
@@ -113,8 +114,10 @@ export const AccountView = () => {
   // —— 挂载时读取当前登录用户 ——
   useEffect(() => {
     const load = async () => {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
       try {
-        const res = await fetch('/api/users/me', { credentials: 'include' })
+        const res = await fetch('/api/users/me', { credentials: 'include', signal: controller.signal })
         const json = await res.json()
         const u = json?.user as MeUser | undefined
         if (u) {
@@ -125,8 +128,9 @@ export const AccountView = () => {
           showNotice('error', '未能读取当前登录账户，请刷新页面。')
         }
       } catch {
-        showNotice('error', '加载账户信息失败，请检查网络后重试。')
+        showNotice('error', '加载账户信息失败（可能后台响应过慢），请刷新页面。')
       } finally {
+        clearTimeout(timer)
         setLoading(false)
       }
     }
@@ -164,12 +168,15 @@ export const AccountView = () => {
       return
     }
     setSavingProfile(true)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const res = await fetch(`/api/users/${user.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ name: name.trim(), email: email.trim() }),
+        signal: controller.signal,
       })
       const json = await res.json()
       if (!res.ok) throw new Error(errorMessage(json, '保存失败，请稍后重试'))
@@ -179,6 +186,7 @@ export const AccountView = () => {
     } catch (e) {
       showNotice('error', (e as Error).message)
     } finally {
+      clearTimeout(timer)
       setSavingProfile(false)
     }
   }
@@ -203,12 +211,15 @@ export const AccountView = () => {
       return
     }
     setSavingPassword(true)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const res = await fetch('/api/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ currentPassword, newPassword }),
+        signal: controller.signal,
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(errorMessage(json, '修改失败，请稍后重试'))
@@ -220,6 +231,7 @@ export const AccountView = () => {
     } catch (e) {
       showNotice('error', (e as Error).message)
     } finally {
+      clearTimeout(timer)
       setSavingPassword(false)
     }
   }

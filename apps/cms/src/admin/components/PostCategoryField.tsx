@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { FieldError, FieldLabel, useField } from '@payloadcms/ui'
+import { REQUEST_TIMEOUT_MS } from '../views/lib/api'
 
 /**
  * 文章分类字段（单选，只能从系统已有分类中挑一个）
@@ -34,12 +35,16 @@ export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
   const [loaded, setLoaded] = useState(false)
 
   // 挂载时拉取「可选分类」：只列节点类型=分类且前台可见的节点，按权重→名称排序
+  // Supabase pooler 抖动时加 35s 超时，避免下拉框永久转圈
   useEffect(() => {
     const where = encodeURIComponent(
       JSON.stringify({ nodeType: { equals: 'category' }, visible: { not_equals: false } }),
     )
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     fetch(`/api/categories?limit=0&sort=name&where=${where}`, {
       headers: { accept: 'application/json' },
+      signal: controller.signal,
     })
       .then((res) => res.json() as Promise<CategoryListResponse>)
       .then((json) => {
@@ -48,7 +53,10 @@ export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
         setCategories(docs)
       })
       .catch(() => setCategories([]))
-      .finally(() => setLoaded(true))
+      .finally(() => {
+        clearTimeout(timer)
+        setLoaded(true)
+      })
   }, [])
 
   /** 将 Payload 返回的 value（可能是 {id,name} 对象或裸 id）归一为字符串 id */
