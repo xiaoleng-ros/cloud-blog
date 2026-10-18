@@ -17,7 +17,7 @@
  * 改由同域 /api/changelog 在服务端聚合（详见该路由顶部注释）。
  * 缓存分两层：sessionStorage（浏览器，5 分钟）+ 服务端进程内（5 分钟）。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PageHeader } from '../../components/PageHeader'
 
@@ -122,6 +122,8 @@ export function ChangelogViewInner() {
   const [data, setData] = useState<ChangelogData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [yearOpen, setYearOpen] = useState(false)
+  const yearRef = useRef<HTMLDivElement>(null)
 
   const loadData = useCallback(
     async (targetYear: number, force = false) => {
@@ -165,32 +167,71 @@ export function ChangelogViewInner() {
     void loadData(year)
   }, [year, loadData])
 
+  // 下拉：点外面或按 Esc 收起
+  useEffect(() => {
+    if (!yearOpen) return
+    const onPointerDown = (e: MouseEvent) => {
+      if (yearRef.current && !yearRef.current.contains(e.target as Node)) setYearOpen(false)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setYearOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [yearOpen])
+
   const weeks = useMemo(() => buildWeeks(data?.contributions?.days ?? []), [data])
   const total = data?.contributions?.total ?? 0
-  const yearOptions = [nowYear, nowYear - 1, nowYear - 2]
+  const yearOptions = Array.from({ length: 5 }, (_, i) => nowYear - i)
 
   return (
     <div className="changelog">
       <PageHeader
         title="更新日志"
         actions={
-          <label className="changelog__year">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
-              <path d="M3.5 9.5h17M8 3v4M16 3v4" />
-            </svg>
-            <select
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              aria-label="选择年份"
+          <div className="changelog__year" ref={yearRef}>
+            <button
+              type="button"
+              className={`changelog__year-trigger${yearOpen ? ' changelog__year-trigger--open' : ''}`}
+              onClick={() => setYearOpen((open) => !open)}
+              aria-haspopup="listbox"
+              aria-expanded={yearOpen}
             >
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+              </svg>
+              <span className="changelog__year-label">年份</span>
+              <span className="changelog__year-value">{year}</span>
+              <svg className="changelog__year-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9.5l6 6 6-6" />
+              </svg>
+            </button>
+
+            {yearOpen ? (
+              <div className="changelog__year-menu" role="listbox" aria-label="选择年份">
+                {yearOptions.map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    role="option"
+                    aria-selected={y === year}
+                    className={`changelog__year-option${y === year ? ' changelog__year-option--active' : ''}`}
+                    onClick={() => {
+                      setYear(y)
+                      setYearOpen(false)
+                    }}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         }
       />
 
