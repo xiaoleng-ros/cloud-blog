@@ -1,0 +1,16 @@
+diff --git a/node_modules/astro/dist/vite-plugin-astro-server/trailing-slash.js b/node_modules/astro/dist/vite-plugin-astro-server/trailing-slash.js
+index b69f46e..e1e8b97 100644
+--- a/node_modules/astro/dist/vite-plugin-astro-server/trailing-slash.js
++++ b/node_modules/astro/dist/vite-plugin-astro-server/trailing-slash.js
+@@ -43,7 +43,10 @@ export function trailingSlashMiddleware(settings) {
+ 		}
+ 		const decision = evaluateTrailingSlash(pathname, url.search, trailingSlash);
+ 		switch (decision.action) {
+-			case "redirect": return writeRedirectResponse(res, decision.status, decision.location);
++			case "redirect": {
++				// 修复：Location 头必须编码，避免中文路径触发 Node.js "Invalid character in header content"
++				return writeRedirectResponse(res, decision.status, encodeURI(decision.location));
++			}
+ 			case "reject": {
+ 				const html = trailingSlashMismatchTemplate(decision.pathname, trailingSlash);
+ 				return writeHtmlResponse(res, decision.status, html);
