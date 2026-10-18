@@ -145,6 +145,34 @@ const nextConfig = {
       },
     ]
   },
+  // 后台未登录时的 HTTP 307 跳转（不依赖 middleware）。
+  //
+  // 背景（2026-10-18 后台打不开事故）：`src/middleware.ts` 里那段「未登录 → 307 到
+  // /admin/login」在 EdgeOne 上**根本没有执行**（实测连打 14 次登录接口无 429，
+  // 说明限频也没跑；/admin 返回 200 且 body 里带 NEXT_REDIRECT）。而 Next 自带的
+  // RSC 重定向在 EdgeOne 上会间歇 500 → 后台白屏，这正是当初加 middleware 的原因。
+  //
+  // 这里用 Next 的路由层 redirects 兜底：它由主应用（Node 函数）处理，不经过
+  // edge middleware 那条链路，平台侧一定生效。判断依据是 Payload 的登录 cookie
+  // `payload-token` 是否存在（middleware.ts 里的 COOKIE_NAME，改名需同步）。
+  //   - 没有 cookie → 307 到 /admin/login（登录页本身不在规则内，无死循环）
+  //   - 有 cookie（哪怕已过期）→ 放行，交给 Payload 自己校验签名
+  async redirects() {
+    // 只兜底主入口 `/admin`（用户实际访问的地址）。
+    // 为什么不覆盖子路径：path-to-regexp 的自定义正则只匹配单段，写出既能跨段、
+    // 又能排除 /admin/login 的 source 会解析失败（实测 build 直接报
+    // "Invalid redirect found"）。而 /admin/login 必须放行，否则 307 死循环。
+    // 未登录深链（/admin/collections/...）暂由 middleware 负责——平台恢复后自动生效；
+    // 登录后的子页面导航都带 cookie，不受影响。
+    return [
+      {
+        source: '/admin',
+        missing: [{ type: 'cookie', key: 'payload-token' }],
+        destination: '/admin/login',
+        permanent: false,
+      },
+    ]
+  },
   // 注意：不需要 rewrites，静态博客文件由 src/app/[[...path]]/route.ts 提供
 }
 
