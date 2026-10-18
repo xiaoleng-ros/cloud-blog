@@ -4,7 +4,7 @@
  * 更新日志页（/admin/changelog）
  *
  * 版式对齐参考图：页头（标题 + 年份选择）→ GitHub 贡献热力图卡片 →
- * 「仓库最近提交」分隔标题 → 三个仓库卡片（虚线时间线 + 圆点 + 时间 + 提交信息）。
+ * 「最近提交」分隔标题 → 前台 / 后台两张卡片（虚线时间线 + 圆点 + 时间 + 提交信息）。
  *
  * 数据获取顺序（照需求约定）：
  *   loadData() 先查 sessionStorage 缓存
@@ -23,13 +23,14 @@ import { PageHeader } from '../../components/PageHeader'
 
 type ContributionDay = { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }
 type RepoCommit = { sha: string; date: string; message: string; url: string }
-type RepoResult = { name: string; label: string; hint: string; commits: RepoCommit[]; error?: string }
+type GroupResult = { key: string; label: string; hint: string; path: string; commits: RepoCommit[]; error?: string }
 type ChangelogData = {
   user: string
+  repo: string
   year: number
   fetchedAt: string
   contributions: { total: number; days: ContributionDay[] } | null
-  repos: RepoResult[]
+  groups: GroupResult[]
 }
 
 const CACHE_PREFIX = 'wb-changelog:v1'
@@ -113,7 +114,7 @@ function buildWeeks(days: ContributionDay[]): WeekColumn[] {
   return weeks
 }
 
-const REPO_TINT = ['green', 'amber', 'violet'] as const
+const GROUP_TINT = ['green', 'violet'] as const
 
 export function ChangelogViewInner() {
   const nowYear = new Date().getFullYear()
@@ -143,9 +144,9 @@ export function ChangelogViewInner() {
         // map 成时间线需要的形态：{ label: 'MM-DD HH:mm', children: message }
         const normalized: ChangelogData = {
           ...json,
-          repos: (json.repos || []).map((repo) => ({
-            ...repo,
-            commits: (repo.commits || []).map((c) => ({ ...c, date: c.date })),
+          groups: (json.groups || []).map((group) => ({
+            ...group,
+            commits: (group.commits || []).map((c) => ({ ...c, date: c.date })),
           })),
         }
         writeCache(targetYear, normalized)
@@ -261,11 +262,11 @@ export function ChangelogViewInner() {
         )}
       </section>
 
-      {/* ── 仓库最近提交 ────────────────────────────────────── */}
+      {/* ── 本仓库最近提交（前台 apps/blog / 后台 apps/cms 两条线） ── */}
       <div className="changelog__divider">
         <span className="changelog__divider-line" />
-        <span className="changelog__divider-text">仓库最近提交</span>
-        <span className="changelog__divider-hint">各展示最近 10 条</span>
+        <span className="changelog__divider-text">最近提交</span>
+        <span className="changelog__divider-hint">{data?.repo ?? 'cloud-blog'} · 前台 / 后台各 10 条</span>
         <span className="changelog__divider-line" />
       </div>
 
@@ -279,28 +280,37 @@ export function ChangelogViewInner() {
       ) : null}
 
       <div className="changelog__repos">
-        {(data?.repos ?? []).map((repo, index) => (
-          <article className="changelog__repo" key={repo.name}>
+        {(data?.groups ?? []).map((group, index) => (
+          <article className="changelog__repo" key={group.key}>
             <header className="changelog__repo-head">
-              <span className={`changelog__repo-badge changelog__repo-badge--${REPO_TINT[index % REPO_TINT.length]}`} aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />
-                </svg>
+              <span className={`changelog__repo-badge changelog__repo-badge--${GROUP_TINT[index % GROUP_TINT.length]}`}>
+                {group.key === 'blog' ? (
+                  // 前台：显示器
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3.5" y="4.5" width="17" height="12" rx="2" />
+                    <path d="M9 19.5h6M12 16.5v3" />
+                  </svg>
+                ) : (
+                  // 后台：服务器机箱
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3.5" y="4" width="17" height="7" rx="1.8" />
+                    <rect x="3.5" y="13" width="17" height="7" rx="1.8" />
+                    <path d="M7 7.5h.01M7 16.5h.01" />
+                  </svg>
+                )}
               </span>
               <div className="changelog__repo-titles">
-                <h3 className="changelog__repo-name">{repo.label}</h3>
-                <p className="changelog__repo-hint">
-                  {data?.user}/{repo.name}
-                </p>
+                <h3 className="changelog__repo-name">{group.label}</h3>
+                <p className="changelog__repo-hint">{group.hint}</p>
               </div>
-              <span className={`changelog__repo-count changelog__repo-count--${REPO_TINT[index % REPO_TINT.length]}`}>
-                {repo.error ? '—' : `${repo.commits.length} 条`}
+              <span className={`changelog__repo-count changelog__repo-count--${GROUP_TINT[index % GROUP_TINT.length]}`}>
+                {group.error ? '—' : `${group.commits.length} 条`}
               </span>
             </header>
 
-            {repo.commits.length ? (
+            {group.commits.length ? (
               <ol className="changelog__timeline">
-                {repo.commits.map((commit) => (
+                {group.commits.map((commit) => (
                   <li className="changelog__commit" key={commit.sha + commit.date}>
                     <span className="changelog__commit-dot" aria-hidden="true" />
                     <div className="changelog__commit-body">
@@ -326,14 +336,14 @@ export function ChangelogViewInner() {
                     <path d="M6.5 5.5h11l2.5 6.5v5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 17v-5z" />
                   </svg>
                 </span>
-                {repo.error ? `加载失败：${repo.error}` : '暂无最近提交'}
+                {group.error ? `加载失败：${group.error}` : '暂无最近提交'}
               </div>
             )}
           </article>
         ))}
 
         {loading && !data
-          ? Array.from({ length: 3 }).map((_, i) => (
+          ? Array.from({ length: 2 }).map((_, i) => (
               <article className="changelog__repo changelog__repo--skeleton" key={`sk-${i}`}>
                 <span className="changelog__skeleton-line" />
                 <span className="changelog__skeleton-line changelog__skeleton-line--short" />

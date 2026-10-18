@@ -6,34 +6,41 @@ import { NextResponse } from 'next/server'
  * 为什么要中转：后台在国内访问，浏览器直接打 api.github.com 经常超时/被重置；
  * 而 EdgeOne 的函数在海外节点，出去稳定。前端只请求本域名，稳定性高得多。
  *
+ * 范围：**只看本项目仓库 cloud-blog**，不掺其它仓库。
+ * 提交按目录拆分（GitHub REST 的 `?path=` 过滤）：
+ *   - 前台：apps/blog（Astro 站点）
+ *   - 后台：apps/cms（Payload CMS + Next 一体化应用）
+ * 根目录/共享代码的提交不计入任何一组，避免同一条提交在两边重复出现。
+ *
  * 数据源：
- *   - 提交列表：GitHub REST `/repos/{owner}/{repo}/commits?per_page=10`（无需 token）
+ *   - 提交列表：`/repos/{owner}/{repo}/commits?path=<dir>&per_page=10`（无需 token）
  *   - 贡献热力图：GitHub 没有公开的 REST 接口，用社区维护的 jogruber contributions API
  *
  * 缓存：进程内 5 分钟（同一个函数实例内复用），避免反复打 GitHub 的 60 次/小时限流。
- * 容错：任一上游失败都只降级对应区块（repos[].error / contributions:null），不整体 500。
+ * 容错：任一上游失败都只降级对应区块（groups[].error / contributions:null），不整体 500。
  */
 
 const GITHUB_USER = 'xiaoleng-ros'
-/** 展示的三个仓库：按「最近有更新」挑的，改这里即可调整卡片 */
-const REPOS = [
-  { name: 'cloud-blog', label: '云岫博客', hint: 'Blog' },
-  { name: 'KeNan', label: '柯南的世界', hint: 'KeNan' },
-  { name: 'Travel', label: '人间快照', hint: 'Travel' },
-]
-const COMMITS_PER_REPO = 10
+/** 本项目仓库：固定单一仓库，提交按下面的目录拆成前台/后台两组 */
+const REPO = 'cloud-blog'
+const GROUPS = [
+  { key: 'blog', label: '前台', hint: 'apps/blog · Astro 站点', path: 'apps/blog' },
+  { key: 'cms', label: '后台', hint: 'apps/cms · Payload 后台', path: 'apps/cms' },
+] as const
+const COMMITS_PER_GROUP = 10
 const CACHE_TTL_MS = 5 * 60 * 1000
 
 type RepoCommit = { sha: string; date: string; message: string; url: string }
-type RepoResult = { name: string; label: string; hint: string; commits: RepoCommit[]; error?: string }
+type GroupResult = { key: string; label: string; hint: string; path: string; commits: RepoCommit[]; error?: string }
 type ContributionDay = { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }
 
 type Payload = {
   user: string
+  repo: string
   year: number
   fetchedAt: string
   contributions: { total: number; days: ContributionDay[] } | null
-  repos: RepoResult[]
+  groups: GroupResult[]
 }
 
 /** 进程内缓存：key = year */
@@ -82,10 +89,11 @@ async function loadContributions(year: number): Promise<Payload['contributions']
   }
 }
 
-async function loadRepo(repo: (typeof REPOS)[number]): Promise<RepoResult> {
+async function loadGroup(group: (typeof GROUPS)[number]): Promise<GroupResult> {
   try {
+    // path 过滤：只取改到这个目录的提交，于是同一仓库能拆成前台/后台两条线
     const raw = (await fetchJson(
-      `https://api.github.com/repos/${GITHUB_USER}/${repo.name}/commits?per_page=${COMMITS_PER_REPO}`,
+      `https://api.github.com/repos/${GITHUB_USER}/${REPO}/commits?per_page=${COMMITS_PER_GROUP}&path=${encodeURIComponent(group.path)}`,
       { accept: 'application/vnd.github+json' },
     )) as Array<{ sha: string; html_url: string; commit: { message: string; author?: { date?: string } } }>
     const commits = (Array.isArray(raw) ? raw : []).map((c) => ({
@@ -95,9 +103,9 @@ async function loadRepo(repo: (typeof REPOS)[number]): Promise<RepoResult> {
       message: String(c.commit?.message || '').split('\n')[0].trim(),
       url: c.html_url || '',
     }))
-    return { ...repo, commits }
+    return { ...group, commits }
   } catch (err) {
-    return { ...repo, commits: [], error: err instanceof Error ? err.message : '加载失败' }
+    return { ...group, commits: [], error: err instanceof Error ? err.message : '加载失败' }
   }
 }
 
@@ -114,8 +122,8 @@ export async function GET(request: Request) {
     return NextResponse.json(hit.data, { headers: { 'x-changelog-cache': 'hit' } })
   }
 
-  const [contributions, ...repos] = await Promise.all([loadContributions(year), ...REPOS.map(loadRepo)])
-  const data: Payload = { user: GITHUB_USER, year, fetchedAt: new Date().toISOString(), contributions, repos }
+  const [contributions, ...groups] = await Promise.all([loadContributions(year), ...GROUPS.map(loadGroup)])
+  const data: Payload = { user: GITHUB_USER, repo: REPO, year, fetchedAt: new Date().toISOString(), contributions, groups }
   cache.set(year, { at: Date.now(), data })
 
   return NextResponse.json(data, { headers: { 'x-changelog-cache': 'miss' } })
