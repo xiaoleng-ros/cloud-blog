@@ -264,6 +264,9 @@ export function ChangelogViewInner() {
         )}
       </section>
 
+      {/* 热力图卡片与下方「最近提交」之间的细分隔线 */}
+      <div className="changelog__rule" aria-hidden="true" />
+
       {/* ── 本仓库最近提交（前台 apps/blog / 后台 apps/cms 两条线） ── */}
       <div className="changelog__divider">
         <span className="changelog__divider-line" />

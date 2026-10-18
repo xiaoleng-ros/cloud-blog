@@ -4963,9 +4963,10 @@ section.template-minimal.login .feishu-login-icon {
   display: flex;
   flex-direction: column;
   gap: var(--card-gap, 14px);
-  padding: 0 var(--gutter, 24px) 40px;
-  max-width: 1180px;
-  margin: 0 auto;
+  /* 与评论/设置等自定义视图一致：直接吃满内容列，宽度由 DefaultTemplate 的
+     --gutter 统一控制。这里再加一层 padding + max-width 会比顶栏窄一圈。 */
+  width: 100%;
+  padding-bottom: 32px;
 }
 
 /* 页头右侧的年份选择：胶囊形，与截图里的「年份 2026」一致 */
@@ -5188,19 +5189,24 @@ section.template-minimal.login .feishu-login-icon {
 /* ── 仓库卡片 ─────────────────────────────────────────── */
 .changelog__repos {
   display: grid;
-  /* 只有前台 / 后台两张卡片：两列并排，整体收窄居中，避免卡片过宽把时间线拉散 */
+  /* 只有前台 / 后台两张卡片：两列并排，宽度跟着热力图卡片一起吃满内容列 */
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--card-gap, 14px);
   align-items: start;
   width: 100%;
-  max-width: 880px;
-  margin: 0 auto;
 }
 
 @media (max-width: 780px) {
   .changelog__repos {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* 热力图卡片与下方内容之间的细分隔线（通栏 1px） */
+.changelog__rule {
+  height: 1px;
+  background: var(--card-line);
+  margin: 4px 0;
 }
 
 .changelog__repo {
