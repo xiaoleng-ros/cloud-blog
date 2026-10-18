@@ -4962,14 +4962,14 @@ section.template-minimal.login .feishu-login-icon {
 .changelog {
   display: flex;
   flex-direction: column;
-  gap: var(--card-gap, 14px);
+  gap: 8px;
   /* 与评论/设置等自定义视图一致：直接吃满内容列，宽度由 DefaultTemplate 的
      --gutter 统一控制。这里再加一层 padding + max-width 会比顶栏窄一圈。 */
   width: 100%;
   /* 整页不滚：高度锁定到视口剩余空间，滚动条只出现在「前台/后台」卡片的
      提交列表内部。min-height 兜住小视口，避免热力图把下面的卡片挤没。 */
   height: calc(100vh - var(--shell-content-top));
-  min-height: 560px;
+  min-height: 380px;
   overflow: hidden;
 }
 
@@ -5174,7 +5174,7 @@ section.template-minimal.login .feishu-login-icon {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 6px 0 2px;
+  margin: 0 0 2px;
   font-size: 12.5px;
   color: var(--theme-elevation-550);
 }
@@ -5201,7 +5201,10 @@ section.template-minimal.login .feishu-login-icon {
   /* 只有前台 / 后台两张卡片：两列并排，宽度跟着热力图卡片一起吃满内容列 */
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--card-gap, 14px);
-  align-items: start;
+  /* 行高必须显式 minmax(0,1fr)：grid 隐式行是 auto，会被卡片内容撑高，
+     等于内部滚动根本不会触发 */
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   width: 100%;
   /* 占满页头 / 热力图剩下的高度，卡片内部再滚动 */
   flex: 1;
@@ -5229,7 +5232,7 @@ section.template-minimal.login .feishu-login-icon {
 .changelog__rule {
   height: 1px;
   background: var(--card-line);
-  margin: 4px 0;
+  margin: 0;
 }
 
 .changelog__repo {

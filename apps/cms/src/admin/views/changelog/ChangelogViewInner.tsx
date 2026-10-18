@@ -270,7 +270,7 @@ export function ChangelogViewInner() {
       {/* ── 本仓库最近提交（前台 apps/blog / 后台 apps/cms 两条线） ── */}
       <div className="changelog__divider">
         <span className="changelog__divider-line" />
-        <span className="changelog__divider-text">最近提交</span>
+        <span className="changelog__divider-text">仓库最近提交</span>
         <span className="changelog__divider-hint">{data?.repo ?? 'cloud-blog'} · 前台 / 后台各 10 条</span>
         <span className="changelog__divider-line" />
       </div>
