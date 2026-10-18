@@ -4966,7 +4966,16 @@ section.template-minimal.login .feishu-login-icon {
   /* 与评论/设置等自定义视图一致：直接吃满内容列，宽度由 DefaultTemplate 的
      --gutter 统一控制。这里再加一层 padding + max-width 会比顶栏窄一圈。 */
   width: 100%;
-  padding-bottom: 32px;
+  /* 整页不滚：高度锁定到视口剩余空间，滚动条只出现在「前台/后台」卡片的
+     提交列表内部。min-height 兜住小视口，避免热力图把下面的卡片挤没。 */
+  height: calc(100vh - var(--shell-content-top));
+  min-height: 560px;
+  overflow: hidden;
+}
+
+/* 热力图卡片不参与压缩，高度按内容走 */
+.changelog__heat-card {
+  flex: none;
 }
 
 /* 页头右侧的年份选择：胶囊形，与截图里的「年份 2026」一致 */
@@ -5194,11 +5203,25 @@ section.template-minimal.login .feishu-login-icon {
   gap: var(--card-gap, 14px);
   align-items: start;
   width: 100%;
+  /* 占满页头 / 热力图剩下的高度，卡片内部再滚动 */
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 780px) {
+  /* 窄屏两卡纵向堆叠：页面恢复整页滚动，改为每张卡各自限高、内部滚 */
+  .changelog {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
   .changelog__repos {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .changelog__repo {
+    max-height: 62vh;
   }
 }
 
@@ -5213,13 +5236,18 @@ section.template-minimal.login .feishu-login-icon {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 220px;
+  /* 高度由网格行决定（= repos 区剩余高度），超出部分交给内部时间线滚动，
+     不把整页撑长 */
+  min-height: 0;
+  overflow: hidden;
 }
 
 .changelog__repo-head {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* 卡片限高后头部不参与压缩，只让下面的时间线滚 */
+  flex: none;
 }
 
 .changelog__repo-badge {
@@ -5287,7 +5315,12 @@ section.template-minimal.login .feishu-login-icon {
 .changelog__timeline {
   list-style: none;
   margin: 0;
-  padding: 0;
+  /* 提交多时只在这一块内部滚动 */
+  padding: 0 4px 0 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .changelog__commit {
