@@ -120,16 +120,28 @@ const nextConfig = {
   // 说明：暂不强上 CSP —— 后台（vditor/lexical/内联样式与脚本）内联内容多，贸然加会碎掉界面；
   //       建议后续单独做 CSP 基线并按 nonce 方案灰度验证后再启用。
   async headers() {
+    const securityHeaders = [
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+      { key: 'Accept-CH', value: 'Sec-CH-Prefers-Color-Scheme' },
+      // 关掉浏览器用不到的强能力（摄像头/麦克风/定位/支付等），减少第三方脚本的可用面。
+      // 音乐播放器走 <audio>，不受 Permissions-Policy 影响。
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+    ]
     return [
       {
         source: '/:path*',
-        headers: [
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-          { key: 'Accept-CH', value: 'Sec-CH-Prefers-Color-Scheme' },
-        ],
+        headers: securityHeaders,
+      },
+      // 2026-10-18：线上实测 `/` 响应缺全部安全头，而 `/archive`、`/admin`、`/api/*` 都有
+      // （本地 dev 的 `/` 也正常）。`/:path*` 匹配零段路径，理论上应覆盖 `/`，
+      // 但 EdgeOne 上根路径走的是另一条处理路径，命不中。这里显式再声明一条，
+      // 让根路径的响应也带上同一组头；两条规则对非根路径重复无害（值完全相同）。
+      {
+        source: '/',
+        headers: securityHeaders,
       },
     ]
   },
