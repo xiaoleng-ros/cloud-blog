@@ -211,13 +211,15 @@ export function ChangelogViewInner() {
         </header>
 
         {loading && !data ? (
-          <div className="changelog__heat-skeleton" aria-label="加载中">
-            {Array.from({ length: 53 }).map((_, i) => (
-              <span key={i} />
-            ))}
+          <div className="changelog__heat-wrap">
+            <div className="changelog__heat-skeleton" aria-label="加载中">
+              {Array.from({ length: 53 }).map((_, i) => (
+                <span key={i} />
+              ))}
+            </div>
           </div>
         ) : weeks.length ? (
-          <>
+          <div className="changelog__heat-wrap">
             <div className="changelog__heat">
               {weeks.map((week, wi) => (
                 <div className="changelog__heat-col" key={wi}>
@@ -248,7 +250,7 @@ export function ChangelogViewInner() {
                 More
               </span>
             </footer>
-          </>
+          </div>
         ) : (
           <div className="changelog__empty changelog__empty--heat">
             <span className="changelog__empty-icon" aria-hidden="true">

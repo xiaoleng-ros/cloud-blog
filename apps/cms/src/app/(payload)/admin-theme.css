@@ -5053,6 +5053,14 @@ section.template-minimal.login .feishu-login-icon {
 }
 
 /* ── 热力图 ───────────────────────────────────────────── */
+/* 热力图整体居中：卡片宽度远大于一年 53 列（约 792px），
+   用 max-content + margin auto 让格网和底部图例作为一整块居中，而不是贴左边。 */
+.changelog__heat-wrap {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
+
 .changelog__heat {
   display: flex;
   gap: 3px;
