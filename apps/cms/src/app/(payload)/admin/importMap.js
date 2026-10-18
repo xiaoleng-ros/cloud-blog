@@ -13,7 +13,6 @@ import { CloudLogo as CloudLogo_d06fa95a4848ce56f762457715ce74a8 } from '../../.
 import { FeishuLoginLink as FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593 } from '../../../../src/admin/components/FeishuLoginLink.tsx'
 import { LoginBrand as LoginBrand_6a9d4450ccefb77d748f6fa2e00f2590 } from '../../../../src/admin/components/LoginBrand.tsx'
 import { AdminShell as AdminShell_f209b93b646b4cabbc227d16b216c7fb } from '../../../../src/admin/shell/AdminShell.tsx'
-import { S3ClientUploadHandler as S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24 } from '@payloadcms/storage-s3/client'
 import { DashboardView as DashboardView_1b3552f3c55b03dbdd4b9732a8e74d1d } from '../../../../src/admin/views/DashboardView.tsx'
 import { AccountView as AccountView_b1e2354f00c039951dd0009e54fea135 } from '../../../../src/admin/views/AccountView.tsx'
 import { PostComposeView as PostComposeView_c48bc1412d48efbcf260795811a628d2 } from '../../../../src/admin/views/write/PostComposeView.tsx'
@@ -21,7 +20,9 @@ import { NoteComposeView as NoteComposeView_af4b37b184560c1455536f139ac92696 } f
 import { DraftsView as DraftsView_e8ffb8e11909aedb00bac5188e12dcc7 } from '../../../../src/admin/views/drafts/DraftsView.tsx'
 import { TrashView as TrashView_dfd0e9988da2b44465fe388ce4eeaedf } from '../../../../src/admin/views/trash/TrashView.tsx'
 import { CommentsView as CommentsView_bca6cb4e0718965f747bf2b12956b35b } from '../../../../src/admin/views/comments/CommentsView.tsx'
+import { ChangelogView as ChangelogView_6be6ec0f15d7a3a3da7fa078f6170f63 } from '../../../../src/admin/views/changelog/ChangelogView.tsx'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
+import { S3ClientUploadHandler as S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24 } from '@payloadcms/storage-s3/client'
 
 /** @type import('payload').ImportMap */
 export const importMap = {
@@ -40,7 +41,6 @@ export const importMap = {
   "/src/admin/components/FeishuLoginLink.tsx#FeishuLoginLink": FeishuLoginLink_0f328b3dd0359a00a9fa353533b9b593,
   "/src/admin/components/LoginBrand.tsx#LoginBrand": LoginBrand_6a9d4450ccefb77d748f6fa2e00f2590,
   "/src/admin/shell/AdminShell.tsx#AdminShell": AdminShell_f209b93b646b4cabbc227d16b216c7fb,
-  "@payloadcms/storage-s3/client#S3ClientUploadHandler": S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24,
   "/src/admin/views/DashboardView.tsx#DashboardView": DashboardView_1b3552f3c55b03dbdd4b9732a8e74d1d,
   "/src/admin/views/AccountView.tsx#AccountView": AccountView_b1e2354f00c039951dd0009e54fea135,
   "/src/admin/views/write/PostComposeView.tsx#PostComposeView": PostComposeView_c48bc1412d48efbcf260795811a628d2,
@@ -48,5 +48,7 @@ export const importMap = {
   "/src/admin/views/drafts/DraftsView.tsx#DraftsView": DraftsView_e8ffb8e11909aedb00bac5188e12dcc7,
   "/src/admin/views/trash/TrashView.tsx#TrashView": TrashView_dfd0e9988da2b44465fe388ce4eeaedf,
   "/src/admin/views/comments/CommentsView.tsx#CommentsView": CommentsView_bca6cb4e0718965f747bf2b12956b35b,
-  "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1
+  "/src/admin/views/changelog/ChangelogView.tsx#ChangelogView": ChangelogView_6be6ec0f15d7a3a3da7fa078f6170f63,
+  "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
+  "@payloadcms/storage-s3/client#S3ClientUploadHandler": S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24
 }

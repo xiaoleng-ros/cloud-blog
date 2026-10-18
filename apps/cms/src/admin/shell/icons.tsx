@@ -135,6 +135,14 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M18 14v5.5H4.5V6H10" />
     </>
   ),
+  // 更新日志：逆时针回环箭头 + 时钟指针，表示「历史 / 变更记录」
+  changelog: (
+    <>
+      <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+      <path d="M20 4v4.2h-4.2" />
+      <path d="M12 8.2V12l2.6 1.7" />
+    </>
+  ),
 }
 
 export type IconName = ShellIconKey | 'search' | 'sun' | 'moon' | 'close' | 'chevronDown' | 'logout' | 'command' | 'external'

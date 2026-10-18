@@ -18,6 +18,7 @@ export type ShellIconKey =
   | 'comments'
   | 'navigation'
   | 'settings'
+  | 'changelog'
   | 'account'
 
 export type NavItem = {
@@ -64,6 +65,8 @@ export const navSections: NavSection[] = [
     label: '系统',
     items: [
       { label: '站点设置', path: '/globals/site-settings', icon: 'settings', keywords: 'settings site shezhi' },
+      // 更新日志：GitHub 贡献热力图 + 三个仓库的近期提交（紧挨站点设置，同属「系统」）
+      { label: '更新日志', path: '/changelog', icon: 'changelog', keywords: 'changelog update log git commit gengxin rizhi' },
       { label: '账号设置', path: '/account', icon: 'account', keywords: 'account profile zhanghao' },
     ],
   },

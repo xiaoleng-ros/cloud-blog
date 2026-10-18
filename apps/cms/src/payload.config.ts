@@ -467,6 +467,13 @@ export default buildConfig({
           Component: '/src/admin/views/comments/CommentsView.tsx#CommentsView',
           path: '/comments',
         },
+        // 更新日志：GitHub 贡献热力图 + 三个仓库的近期提交（路由 /admin/changelog）
+        changelog: {
+          Component: '/src/admin/views/changelog/ChangelogView.tsx#ChangelogView',
+          path: '/changelog',
+          // 浏览器标签标题（否则回落到「Payload - Payload」）
+          meta: { title: '更新日志' },
+        },
       },
     },
     // 自定义 favicon（浏览器标签页图标，统一使用透明底深色云）

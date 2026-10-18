@@ -4952,3 +4952,464 @@ section.template-minimal.login .feishu-login-icon {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * 更新日志页（/admin/changelog）
+ * 版式对齐参考图：页头 + 贡献热力图卡片 + 仓库最近提交三列卡片。
+ * 配色全部走主题变量，`.dark` 下单独覆盖热力图的绿色梯度。
+ * ───────────────────────────────────────────────────────────── */
+
+.changelog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap, 14px);
+  padding: 0 var(--gutter, 24px) 40px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* 页头右侧的年份选择：胶囊形，与截图里的「年份 2026」一致 */
+.changelog__year {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 34px;
+  border: 1px solid var(--card-line);
+  border-radius: 999px;
+  background: var(--theme-elevation-0);
+  color: var(--theme-elevation-600);
+  font-size: 13px;
+}
+
+.changelog__year select {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 14px 0 0;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 4px center, right 0 center;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.changelog__year select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 卡片外壳 */
+.changelog__card,
+.changelog__repo {
+  background: var(--theme-elevation-0);
+  border: 1px solid var(--card-line);
+  border-radius: var(--card-radius, 14px);
+  padding: var(--card-pad, 18px) var(--card-pad-x, 20px);
+}
+
+.changelog__card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.changelog__brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-650);
+  flex: none;
+}
+
+.changelog__card-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.changelog__card-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--theme-text);
+}
+
+.changelog__card-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--theme-elevation-550);
+}
+
+/* ── 热力图 ───────────────────────────────────────────── */
+.changelog__heat {
+  display: flex;
+  gap: 3px;
+  padding: 6px 2px 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.changelog__heat-col {
+  position: relative;
+  padding-top: 16px;
+  flex: none;
+}
+
+.changelog__heat-month {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--theme-elevation-500);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.changelog__heat-cells {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.changelog__cell {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2.5px;
+  background: #ebedf0;
+  flex: none;
+}
+
+.changelog__cell--void {
+  background: transparent;
+}
+
+.changelog__cell--l1 { background: #9be9a8; }
+.changelog__cell--l2 { background: #40c463; }
+.changelog__cell--l3 { background: #30a14e; }
+.changelog__cell--l4 { background: #216e39; }
+
+.dark .changelog__cell { background: rgba(255, 255, 255, 0.07); }
+.dark .changelog__cell--void { background: transparent; }
+.dark .changelog__cell--l1 { background: #0e4429; }
+.dark .changelog__cell--l2 { background: #006d32; }
+.dark .changelog__cell--l3 { background: #26a641; }
+.dark .changelog__cell--l4 { background: #39d353; }
+
+.changelog__heat-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--theme-elevation-550);
+}
+
+.changelog__heat-foot strong {
+  color: var(--theme-text);
+  font-weight: 650;
+}
+
+.changelog__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+}
+
+.changelog__legend i {
+  width: 11px;
+  height: 11px;
+}
+
+/* 骨架 */
+.changelog__heat-skeleton {
+  display: grid;
+  grid-template-columns: repeat(53, 12px);
+  gap: 3px;
+  overflow: hidden;
+}
+
+.changelog__heat-skeleton span {
+  height: 96px;
+  border-radius: 3px;
+  background: var(--theme-elevation-100);
+  animation: changelog-pulse 1.4s ease-in-out infinite;
+}
+
+/* ── 分隔标题 ─────────────────────────────────────────── */
+.changelog__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  font-size: 12.5px;
+  color: var(--theme-elevation-550);
+}
+
+.changelog__divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--card-line);
+}
+
+.changelog__divider-text {
+  font-weight: 600;
+  color: var(--theme-elevation-650);
+}
+
+.changelog__divider-hint {
+  font-size: 11.5px;
+  color: var(--theme-elevation-450);
+}
+
+/* ── 仓库卡片 ─────────────────────────────────────────── */
+.changelog__repos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--card-gap, 14px);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .changelog__repos {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .changelog__repos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.changelog__repo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 220px;
+}
+
+.changelog__repo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.changelog__repo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex: none;
+}
+
+.changelog__repo-badge--green { background: rgba(48, 161, 78, 0.12); color: #30a14e; }
+.changelog__repo-badge--amber { background: rgba(217, 143, 35, 0.14); color: #b9770e; }
+.changelog__repo-badge--violet { background: rgba(124, 92, 214, 0.14); color: #6f4fcf; }
+
+.dark .changelog__repo-badge--green { background: rgba(57, 211, 83, 0.16); color: #39d353; }
+.dark .changelog__repo-badge--amber { background: rgba(240, 173, 78, 0.16); color: #f0ad4e; }
+.dark .changelog__repo-badge--violet { background: rgba(156, 130, 240, 0.18); color: #9c82f0; }
+
+.changelog__repo-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.changelog__repo-name {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.changelog__repo-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--theme-elevation-450);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.changelog__repo-count {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.changelog__repo-count--green { background: rgba(48, 161, 78, 0.12); color: #2c8b45; }
+.changelog__repo-count--amber { background: rgba(217, 143, 35, 0.14); color: #a86a0d; }
+.changelog__repo-count--violet { background: rgba(124, 92, 214, 0.14); color: #6344bd; }
+
+.dark .changelog__repo-count--green { background: rgba(57, 211, 83, 0.16); color: #63dd7d; }
+.dark .changelog__repo-count--amber { background: rgba(240, 173, 78, 0.16); color: #f0ad4e; }
+.dark .changelog__repo-count--violet { background: rgba(156, 130, 240, 0.18); color: #ab95f5; }
+
+/* ── 时间线 ───────────────────────────────────────────── */
+.changelog__timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.changelog__commit {
+  position: relative;
+  padding: 0 0 14px 18px;
+}
+
+.changelog__commit::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 9px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--card-line);
+}
+
+.changelog__commit:last-child {
+  padding-bottom: 0;
+}
+
+.changelog__commit:last-child::before {
+  content: none;
+}
+
+.changelog__commit-dot {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--theme-elevation-250);
+  box-shadow: 0 0 0 2px var(--theme-elevation-0);
+}
+
+.changelog__commit-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.changelog__commit-time {
+  font-size: 11px;
+  color: var(--theme-elevation-450);
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog__commit-msg {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--theme-text);
+  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.changelog__commit-msg:hover {
+  color: var(--accent);
+}
+
+/* ── 空态 / 骨架 / 错误 ───────────────────────────────── */
+.changelog__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  min-height: 150px;
+  padding: 18px 12px;
+  border: 1px dashed var(--card-line);
+  border-radius: 12px;
+  color: var(--theme-elevation-450);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.changelog__empty--heat {
+  min-height: 110px;
+}
+
+.changelog__empty-icon {
+  color: var(--theme-elevation-350);
+  display: inline-flex;
+}
+
+.changelog__repo--skeleton {
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+.changelog__skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--theme-elevation-100);
+  animation: changelog-pulse 1.4s ease-in-out infinite;
+}
+
+.changelog__skeleton-line--short {
+  width: 55%;
+}
+
+.changelog__error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.changelog__retry {
+  margin-left: auto;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.changelog__retry:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+@keyframes changelog-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
