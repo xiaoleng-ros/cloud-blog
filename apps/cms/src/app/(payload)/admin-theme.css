@@ -751,9 +751,10 @@ textarea:focus-visible {
 }
 
 /* ---------- 8.5 自定义工作台 ----------
-   版式：页头卡（右侧副标题）→ 三张指标卡（等高，首卡高亮）→ 一张空态大卡。
-   卡片是「图标块 + 数值列」的横向排布，与仪表盘 .dashboard__stat 同族但更紧凑：
-   数字与单位同一行、子标签在下一行，视觉重心比仪表盘矮一档，适合当概览入口页。 */
+   版式照抄标签管理（18.8）：页头卡 + 「左目录、右详情」双栏。
+   左栏是待处理目录（图标 / 名称 / 数量，选中行高亮），右栏是选中项的
+   汇总数字 + 明细 + 跳转入口。圆角、边框、间距全部走主题变量，
+   不引入新配色，保证和其它自定义页面是同一套视觉。 */
 
 /* 页头右侧副标题 */
 .page-header__subtitle {
@@ -762,157 +763,280 @@ textarea:focus-visible {
   font-weight: 400;
 }
 
-.workbench__cards {
+/* 双栏栅格：与 .tag__layout 同款（左自适应 + 右固定宽），窄屏转单列 */
+.workbench__layout {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--card-gap);
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
 }
 
-.workbench__card {
-  position: relative;
+@media (max-width: 1024px) {
+  .workbench__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 左栏：待处理目录卡 */
+.workbench__panel {
+  background: var(--theme-elevation-0);
+  border: var(--card-line);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.workbench__panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--theme-elevation-100);
+}
+
+.workbench__panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--theme-elevation-800);
+}
+
+/* 条目数徽标：复用 .tag__count 的胶囊造型 */
+.workbench__count {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 目录列表 */
+.workbench__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 每一行是一枚通栏按钮：图标 + 名称 + 右侧数量 */
+.workbench__row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 18px 20px;
-  border-radius: var(--card-radius);
-  border: var(--card-line);
-  background: var(--theme-elevation-0);
-  text-decoration: none;
-  transition: box-shadow 140ms ease, border-color 140ms ease;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 16px;
+  border: none;
+  border-bottom: 1px solid var(--theme-elevation-100);
+  background: transparent;
+  font-family: inherit;
+  font-size: 14.5px;
+  text-align: left;
+  color: var(--theme-elevation-800);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
-.workbench__card:hover {
-  box-shadow: var(--shadow-overlay);
+.workbench__row:last-child {
+  border-bottom: none;
 }
 
-/* 首卡高亮：淡蓝底 + 蓝图标块，右上角一枚对勾角标表示「当前关注项」 */
-.workbench__card--primary {
+.workbench__row:hover {
+  background: var(--theme-elevation-50);
+}
+
+/* 选中行：淡蓝底 + 左侧指示条，和标签表格 hover 的 accent-soft 同源 */
+.workbench__row--active,
+.workbench__row--active:hover {
   background: var(--accent-soft);
-  border-color: #cfe0f7;
+  color: var(--accent-text);
+  font-weight: 600;
 }
 
-.workbench__card--primary .workbench__card-icon {
-  background: var(--accent);
-  color: #fff;
-}
-
-.workbench__card-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+.workbench__row-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-}
-
-.workbench__card-badge svg {
-  width: 12px;
-  height: 12px;
-}
-
-.workbench__card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   background: var(--theme-elevation-100);
   color: var(--theme-elevation-500);
 }
 
-.workbench__card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.workbench__row--active .workbench__row-icon {
+  background: var(--accent);
+  color: #fff;
+}
+
+.workbench__row-label {
   min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.workbench__card-value {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  font-size: 28px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  color: var(--theme-elevation-900);
-  line-height: 1.15;
+.workbench__row-count {
+  flex: none;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
+  color: var(--theme-elevation-500);
 }
 
-.workbench__card--primary .workbench__card-value {
+.workbench__row--active .workbench__row-count {
   color: var(--accent-text);
 }
 
-.workbench__card-unit {
+/* 右栏：选中项详情卡，造型同 .tag__side */
+.workbench__side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 16px;
+  background: var(--theme-elevation-0);
+  border: var(--card-line);
+  border-radius: var(--card-radius);
+}
+
+.workbench__side-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--theme-elevation-100);
+}
+
+.workbench__side-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.workbench__side-head-text {
+  min-width: 0;
+}
+
+.workbench__side-head-text h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--theme-elevation-800);
+}
+
+.workbench__side-head-text p {
+  margin: 3px 0 0;
   font-size: 13px;
+  line-height: 1.5;
+  color: var(--theme-elevation-400);
+}
+
+/* 汇总数字：大号 + 单位同一 baseline 行 */
+.workbench__side-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--theme-elevation-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.workbench__side-unit {
+  font-size: 14px;
   font-weight: 500;
   color: var(--theme-elevation-500);
 }
 
-.workbench__card--primary .workbench__card-unit {
-  color: #5c8fd6;
+/* 明细键值对（草稿内容的文章 / 随笔拆分） */
+.workbench__side-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
 }
 
-.workbench__card-sublabel {
-  font-size: 13px;
-  color: var(--theme-elevation-400);
+.workbench__side-meta > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
 }
 
-.workbench__card--primary .workbench__card-sublabel {
-  color: #5c8fd6;
+.workbench__side-meta dt {
+  color: var(--theme-elevation-500);
 }
 
-/* 空态大卡：与内容卡同宽，内部垂直居中；只在「三项全为 0 且加载成功」时出现 */
-.workbench__empty {
+.workbench__side-meta dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--theme-elevation-800);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 右栏空态：复用 .tag__empty 的居中构图，只换图标尺寸 */
+.workbench__side-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 12px;
+  padding: 40px 12px;
+  color: var(--theme-elevation-500);
+  font-size: 14.5px;
+}
+
+.workbench__side-empty-icon {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 1.25rem;
-  min-height: 300px;
-  padding: 3rem 1.5rem;
-  background: var(--theme-elevation-0);
-  border: var(--card-line);
-  border-radius: var(--card-radius);
-}
-
-.workbench__empty-art {
-  width: 130px;
-  height: 130px;
-}
-
-.workbench__empty-art svg {
-  width: 100%;
-  height: 100%;
-}
-
-.workbench__empty-text {
-  margin: 0;
-  font-size: 14px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--theme-elevation-100);
   color: var(--theme-elevation-400);
 }
 
-.workbench__error {
+.workbench__side-empty p {
   margin: 0;
-  padding: 14px 18px;
-  font-size: 14px;
-  color: var(--theme-error-500);
-  background: var(--theme-elevation-0);
-  border: var(--card-line);
-  border-radius: var(--card-radius);
 }
 
-@media (max-width: 860px) {
-  .workbench__cards {
-    grid-template-columns: 1fr;
-  }
+/* 跳转按钮：贴底，样式对齐 .cat__btn--primary */
+.workbench__side-btn {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.workbench__side-btn:hover {
+  filter: brightness(1.06);
 }
 
 /* ---------- 9. Payload 组件级覆盖 ---------- */

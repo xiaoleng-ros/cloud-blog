@@ -1,15 +1,21 @@
 'use client'
 
 /**
- * 工作台视图：集中展示需要管理员处理的待审 / 待处理事项。
+ * 工作台视图：集中处理待审 / 待处理事项。
  *
- * 数据来源：
- * - 草稿内容：GET /api/posts?where[status][equals]=draft&limit=1&depth=0 → totalDocs
- *             GET /api/notes?where[status][equals]=draft&limit=1&depth=0 → totalDocs
- * - 待审评论：GET /api/comments?status=waiting&pageSize=1 → total
- * - 全部留言：GET /api/comments?status=all&pageSize=1 → total
+ * 版式与标签管理 / 分类管理一致 —— 页头卡 + 「左目录、右详情」双栏：
+ *   左栏列出全部待处理项（图标 / 名称 / 当前数量），点击切换右侧详情；
+ *   右栏展示选中项的汇总数字、明细与跳转入口。
+ * 这样工作台不是一张孤立的概览页，而是后台里一个普通的「列表 + 详情」页。
  *
- * 卡片可点击跳转到对应的管理入口。
+ * 数据来源（Payload REST，同源相对路径，登录态由 cookie 会话兜住）：
+ * - GET /api/posts?limit=1&depth=0&where[status][equals]=draft → totalDocs
+ * - GET /api/notes?limit=1&depth=0&where[status][equals]=draft → totalDocs
+ * - GET /api/comments?status=waiting&pageSize=1 → total
+ * - GET /api/comments?status=all&pageSize=1      → total
+ *
+ * 计数一律用 limit=1 只读 totalDocs：limit=0 在 Payload REST 里是「取消上限、
+ * 返回全表」，会把含正文的文档全部拉回来（同 DashboardView 的约定）。
  */
 import { Link, useConfig } from '@payloadcms/ui'
 import React, { useEffect, useState } from 'react'
@@ -18,12 +24,25 @@ import { PageHeader } from '../../components/PageHeader'
 import { ShellIcon } from '../../shell/icons'
 import { REQUEST_TIMEOUT_MS } from '../lib/api'
 
+type ItemId = 'drafts' | 'waiting' | 'all'
+
 type Counts = {
   drafts: number
   draftPosts: number
   draftNotes: number
   waitingComments: number
   totalComments: number
+}
+
+/** 待处理项的静态定义（顺序即左栏目录顺序） */
+type WorkbenchItem = {
+  id: ItemId
+  label: string
+  icon: 'posts' | 'comments' | 'note'
+  /** 右栏标题下方的一句话说明 */
+  desc: string
+  count: number
+  href: string
 }
 
 /** Payload REST 列表响应结构 */
@@ -38,6 +57,7 @@ type CommentsResponse = {
 }
 
 export const WorkbenchView = () => {
+  // 读取 admin 根路由用于拼接跳转链接
   const { config } = useConfig()
   const adminRoute = config.routes.admin
 
@@ -50,6 +70,8 @@ export const WorkbenchView = () => {
     waitingComments: 0,
     totalComments: 0,
   })
+  // 左栏当前选中项（默认落在数量最可能堆积的「草稿内容」上）
+  const [activeId, setActiveId] = useState<ItemId>('drafts')
 
   useEffect(() => {
     const load = async () => {
@@ -95,14 +117,40 @@ export const WorkbenchView = () => {
     void load()
   }, [])
 
-  const formatValue = (value: number) => {
+  const items: WorkbenchItem[] = [
+    {
+      id: 'drafts',
+      label: '草稿内容',
+      icon: 'posts',
+      desc: '还没发布的文章与随笔',
+      count: counts.drafts,
+      href: `${adminRoute}/drafts`,
+    },
+    {
+      id: 'waiting',
+      label: '待审评论',
+      icon: 'comments',
+      desc: '读者留言，通过后才在前台显示',
+      count: counts.waitingComments,
+      href: `${adminRoute}/comments`,
+    },
+    {
+      id: 'all',
+      label: '全部留言',
+      icon: 'note',
+      desc: '站内全部评论记录（含已通过与垃圾）',
+      count: counts.totalComments,
+      href: `${adminRoute}/comments`,
+    },
+  ]
+
+  const active = items.find((item) => item.id === activeId) ?? items[0]
+
+  const rowCount = (item: WorkbenchItem) => {
     if (loading) return '…'
     if (error) return '—'
-    return String(value)
+    return String(item.count)
   }
-
-  const hasNothing =
-    !loading && !error && counts.drafts === 0 && counts.waitingComments === 0 && counts.totalComments === 0
 
   return (
     <div className="workbench">
@@ -111,103 +159,92 @@ export const WorkbenchView = () => {
         actions={<span className="page-header__subtitle">集中处理待审核内容</span>}
       />
 
-      <section className="workbench__cards" aria-label="待处理事项">
-        <Link
-          className="workbench__card workbench__card--primary"
-          href={`${adminRoute}/drafts`}
-          prefetch={false}
-        >
-          <span className="workbench__card-badge" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 13l4.5 4.5L19 7" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-          <span className="workbench__card-icon">
-            <ShellIcon name="posts" size={22} />
-          </span>
-          <div className="workbench__card-body">
-            <div className="workbench__card-value">
-              {formatValue(counts.drafts)}
-              <span className="workbench__card-unit">条</span>
-            </div>
-            <div className="workbench__card-sublabel">
-              文章 {loading || error ? '—' : counts.draftPosts} · 随笔{' '}
-              {loading || error ? '—' : counts.draftNotes}
+      <div className="workbench__layout">
+        {/* 左：待处理目录 */}
+        <section className="workbench__panel">
+          <header className="workbench__panel-head">
+            <h2 className="workbench__panel-title">
+              待处理事项
+              <span className="workbench__count">{items.length}</span>
+            </h2>
+          </header>
+
+          <ul className="workbench__list">
+            {items.map((item) => {
+              const isActive = item.id === activeId
+              return (
+                <li key={item.id}>
+                  <button
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`workbench__row${isActive ? ' workbench__row--active' : ''}`}
+                    onClick={() => setActiveId(item.id)}
+                    type="button"
+                  >
+                    <span className="workbench__row-icon">
+                      <ShellIcon name={item.icon} size={18} />
+                    </span>
+                    <span className="workbench__row-label">{item.label}</span>
+                    <span className="workbench__row-count">{rowCount(item)}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+
+        {/* 右：选中项详情 */}
+        <aside className="workbench__side">
+          <div className="workbench__side-head">
+            <span className="workbench__side-icon">
+              <ShellIcon name={active.icon} size={22} />
+            </span>
+            <div className="workbench__side-head-text">
+              <h3>{active.label}</h3>
+              <p>{active.desc}</p>
             </div>
           </div>
-        </Link>
 
-        <Link
-          className="workbench__card"
-          href={`${adminRoute}/comments`}
-          prefetch={false}
-        >
-          <span className="workbench__card-icon">
-            <ShellIcon name="comments" size={22} />
-          </span>
-          <div className="workbench__card-body">
-            <div className="workbench__card-value">
-              {formatValue(counts.waitingComments)}
-              <span className="workbench__card-unit">条</span>
+          {loading ? (
+            <p className="drafts__empty">加载中…</p>
+          ) : error ? (
+            <p className="drafts__empty">加载失败，请刷新页面重试。</p>
+          ) : active.count === 0 ? (
+            <div className="workbench__side-empty">
+              <span className="workbench__side-empty-icon" aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z" />
+                  <path d="M4 8l3-4h10l3 4M9.5 12.5h5" />
+                </svg>
+              </span>
+              <p>空空如也</p>
             </div>
-            <div className="workbench__card-sublabel">待审评论</div>
-          </div>
-        </Link>
+          ) : (
+            <>
+              <div className="workbench__side-value">
+                {active.count}
+                <span className="workbench__side-unit">条</span>
+              </div>
 
-        <Link
-          className="workbench__card"
-          href={`${adminRoute}/comments`}
-          prefetch={false}
-        >
-          <span className="workbench__card-icon">
-            <ShellIcon name="comments" size={22} />
-          </span>
-          <div className="workbench__card-body">
-            <div className="workbench__card-value">
-              {formatValue(counts.totalComments)}
-              <span className="workbench__card-unit">条</span>
-            </div>
-            <div className="workbench__card-sublabel">全部留言</div>
-          </div>
-        </Link>
-      </section>
+              {active.id === 'drafts' && (
+                <dl className="workbench__side-meta">
+                  <div>
+                    <dt>文章</dt>
+                    <dd>{counts.draftPosts} 篇</dd>
+                  </div>
+                  <div>
+                    <dt>随笔</dt>
+                    <dd>{counts.draftNotes} 条</dd>
+                  </div>
+                </dl>
+              )}
+            </>
+          )}
 
-      {hasNothing && (
-        <div className="workbench__empty">
-          <div className="workbench__empty-art" aria-hidden="true">
-            <svg viewBox="0 0 160 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* 底部阴影 */}
-              <ellipse cx="80" cy="126" rx="52" ry="9" fill="var(--theme-elevation-100)" />
-              {/* 箱子后盖 */}
-              <path d="M38 62h84v52a6 6 0 0 1-6 6H44a6 6 0 0 1-6-6V62Z" fill="#cfe0f7" />
-              {/* 箱内投下的暗面 */}
-              <path d="M38 62h84v12H38z" fill="#b8d2f2" />
-              {/* 打开的左右翼 */}
-              <path d="M38 62 18 40l-4 44 24-6Z" fill="#e3effd" stroke="#cfe0f7" strokeWidth="2.5" strokeLinejoin="round" />
-              <path d="M122 62l20-22 4 44-24-6Z" fill="#e3effd" stroke="#cfe0f7" strokeWidth="2.5" strokeLinejoin="round" />
-              {/* 箱口前沿 */}
-              <path
-                d="M34 58h92v10a6 6 0 0 1-6 6H40a6 6 0 0 1-6-6V58Z"
-                fill="#fff"
-                stroke="#cfe0f7"
-                strokeWidth="2.5"
-              />
-              {/* 飞出的星星 */}
-              <path d="M70 26l3 8 8 3-8 3-3 8-3-8-8-3 8-3 3-8Z" fill="#3d82e8" />
-              <path d="M104 20l2.2 5.8L112 28l-5.8 2.2L104 36l-2.2-5.8L96 28l5.8-2.2L104 20Z" fill="#7fb0f0" />
-              <path d="M126 40l1.8 4.6 4.6 1.8-4.6 1.8L126 53l-1.8-4.8-4.6-1.8 4.6-1.8L126 40Z" fill="#a8cdf5" />
-              {/* 上升的小点 */}
-              <circle cx="52" cy="34" r="3" fill="#7fb0f0" />
-              <circle cx="118" cy="60" r="2.6" fill="#a8cdf5" />
-            </svg>
-          </div>
-          <p className="workbench__empty-text">空空如也</p>
-        </div>
-      )}
-
-      {error && !loading && (
-        <p className="workbench__error">加载失败，请刷新页面重试。</p>
-      )}
+          <Link className="workbench__side-btn" href={active.href} prefetch={false}>
+            去处理 →
+          </Link>
+        </aside>
+      </div>
     </div>
   )
 }
