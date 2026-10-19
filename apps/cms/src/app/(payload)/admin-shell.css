@@ -258,10 +258,18 @@ html[data-theme='dark'] .template-minimal__wrap {
   color: var(--theme-elevation-450);
 }
 
-/* 分组标题 */
+/* 分组标题。
+   间距原先三层叠加：Payload 默认 `.nav-group` 的 margin-bottom:10px +
+   toggle 自己的 margin-top 1.2rem + margin-bottom 0.4rem，折叠态下四个分组
+   之间行距实测约 65px，显得空。这里把外层 margin 归零、toggle 收到 0.5rem/0.3rem，
+   行距降到约 42px：层级仍分得清，但不再散。 */
+.nav-group {
+  margin-bottom: 0;
+}
+
 .nav-group__toggle {
   width: calc(100% - 1.5rem);
-  margin: 1.2rem 0.75rem 0.4rem;
+  margin: 0.5rem 0.75rem 0.3rem;
   color: var(--theme-elevation-450);
 }
 
@@ -285,6 +293,17 @@ html[data-theme='dark'] .template-minimal__wrap {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-900);
   box-shadow: 0 1px 3px rgb(20 27 38 / 0.05);
+}
+
+/* 压平成一级的菜单项（仪表盘）：外面没有分组标题，左缩进回到「分组标题那一档」
+   （.nav-group__toggle 的文字起点 = margin 0.75rem + padding 0.5rem），
+   而不是子项那种深一级的 1.75rem，否则会像个没爹的孤儿项往右缩。 */
+.nav__link--top {
+  margin: 0.2rem 0.75rem 0.4rem;
+  padding-left: 0.5rem;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--theme-elevation-700);
 }
 
 .nav__link--active {

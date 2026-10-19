@@ -163,9 +163,22 @@ async function ensureAdminAccountId(): Promise<number> {
 function mintAdminToken(): string {
   const key = process.env.JWT_TOKEN
   if (!key) throw new WalineAdminError('未配置 JWT_TOKEN，后台无法访问评论服务', 500)
-  // 管理令牌必须有过期时间：服务端签发的内部令牌泄露即永久可用是不可接受的。
-  // 12h 覆盖一次后台连续操作窗口；过期后下一次调用会重新签发（adminId 已缓存，无额外查库）。
-  return jwt.sign(String(adminId!), key, { expiresIn: '12h' })
+  /*
+   * payload 必须**就是 id 本身**，不能包成对象：
+   * Waline 的 resolveSession（@waline/core dist/index.js）拿到 verify 的结果后直接当 objectId 用 ——
+   *   id = tokenService.verify(token)
+   *   Users.select({ objectId: id, ... })
+   * 换成 { user_id: id } / { objectId: id } 都会查不到人，鉴权静默失败。
+   *
+   * 也正因如此这里**不能带 expiresIn**：jsonwebtoken 9 禁止 string payload 与 expiresIn 同用，
+   * 直接抛 `invalid expiresIn option for string payload`（2026-10-19 评论页「操作失败」的根因）。
+   * exp 属于 claim，只能挂在对象 payload 上，与上面的 id 语义互斥。
+   *
+   * 过期时间在这是「防令牌泄露后长期可用」，可这枚令牌并不具备那个暴露面：
+   * 每次调用现签、只塞进服务端自造的 waline.internal 请求头、绝不下发给浏览器，
+   * 请求结束即随内存丢弃。真要过期，得改 Waline 的 token 服务（patch-package），不值当。
+   */
+  return jwt.sign(String(adminId!), key)
 }
 
 /**
@@ -410,6 +423,51 @@ export async function removeComment(id: number) {
     method: 'DELETE',
     query: { id: String(id) },
   })
+}
+
+/**
+ * 以站长身份回复一条评论。
+ *
+ * Waline 的 create 对管理员有特殊分支：`if (isAdmin(ctx)) data.status = 'approved'`，
+ * 所以回复会立刻出现在前台，不用再走一次审核；内容清洗、属地/UA、邮件通知、webhook
+ * 也都复用它自己的流水线，我们只负责把字段拼对。
+ *
+ * 两个字段的坑：
+ * - `url` 必须与被回复评论**完全一致**（Waline 用 url 把评论挂到文章上），
+ *   所以由调用方把父评论的 url 原样带过来，这里不做任何规范化。
+ * - `pid` 指向父评论 id，`rid`（根评论 id）留空让 Waline 自己推导，手动填反而容易挂错层级。
+ */
+export async function replyToComment(options: {
+  /** 被回复的评论 id */
+  parentId: number
+  /** 父评论所属文章的 url（原样透传，不是展示用的路径） */
+  url: string
+  /** 回复正文（markdown 原文） */
+  content: string
+  /** 回复者昵称（后台取站点设置的「作者」） */
+  nick: string
+}) {
+  const content = options.content.trim()
+  if (!content) throw new WalineAdminError('回复内容不能为空', 400)
+  if (!options.url.trim()) throw new WalineAdminError('这条评论缺少所属文章地址，无法回复', 400)
+
+  const created = await callWaline<RawAdminComment>('/api/comment', {
+    method: 'POST',
+    body: {
+      comment: content,
+      url: options.url,
+      pid: options.parentId,
+      nick: options.nick.trim() || '站长',
+      // 不给读者看到后台内部邮箱，但 Waline 需要 mail 才能走通知/头像逻辑
+      mail: ADMIN_EMAIL,
+      link: '',
+    },
+  })
+
+  return {
+    id: Number(created?.objectId ?? 0),
+    status: created?.status ?? 'approved',
+  }
 }
 
 export { WalineAdminError }

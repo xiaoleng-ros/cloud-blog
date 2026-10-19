@@ -19,6 +19,7 @@ import {
   deleteComment,
   describeApiError,
   listComments,
+  replyComment,
   setCommentStatus,
   type CommentFilter,
   type CommentRow,
@@ -164,6 +165,9 @@ export const CommentsViewInner = () => {
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [busyId, setBusyId] = useState<number | null>(null)
   const [confirmRow, setConfirmRow] = useState<CommentRow | null>(null)
+  // 详情面板底部的回复框：草稿只存在当前这条评论上，切换选中就清空（见下面的 effect）
+  const [replyText, setReplyText] = useState('')
+  const [replyBusy, setReplyBusy] = useState(false)
   // 列表请求序号：快速切换筛选时只采用最新响应，丢弃过期响应（防竞态覆盖）
   const reqSeq = useRef(0)
   // 选中项同步存一份 ref：load 读它而不进依赖表，否则点一行就要重拉一次列表
@@ -243,6 +247,12 @@ export const CommentsViewInner = () => {
     void load()
   }, [load])
 
+  // 切换选中项时清掉回复草稿：否则点开另一条评论，上一条没发出去的话还留在框里，
+  // 很容易顺手发给一个不相干的人。（load 刷新后若选中项没变，selectedId 不变，草稿照旧保留）
+  useEffect(() => {
+    setReplyText('')
+  }, [selectedId])
+
   const counts = useMemo<Record<CommentFilter, number | null>>(
     () => ({ all: null, waiting: waitingCount, approved: null, spam: spamCount }),
     [waitingCount, spamCount],
@@ -306,6 +316,30 @@ export const CommentsViewInner = () => {
   const runAction = (row: CommentRow, action: RowAction) => {
     if (action === 'delete') setConfirmRow(row)
     else void changeStatus(row, action === 'approve' ? 'approved' : action)
+  }
+
+  /**
+   * 发送回复。
+   * url 原样取这条评论自己的 url —— Waline 靠它把回复挂到同一篇文章下，
+   * 拼错就等于挂到一座前台查不到的空页面。
+   * 发完把这条展开再刷新，新回复立刻出现在表格里（Waline 对管理员直接置 approved）。
+   */
+  const submitReply = async () => {
+    if (!selected) return
+    const content = replyText.trim()
+    if (!content || replyBusy) return
+    setReplyBusy(true)
+    setActionError('')
+    try {
+      await replyComment(selected.id, content, selected.url)
+      setReplyText('')
+      setExpanded((prev) => new Set([...prev, selected.id]))
+      await load()
+    } catch (error) {
+      setActionError(describeApiError(error))
+    } finally {
+      setReplyBusy(false)
+    }
   }
 
   const pageCount = Math.max(1, totalPages)
@@ -611,6 +645,45 @@ export const CommentsViewInner = () => {
                   )}
                 </dl>
               </div>
+
+              {/* 回复框：以站长身份发（署名取站点设置的「作者」），发出去即是 approved */}
+              <form
+                className="comments__reply"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void submitReply()
+                }}
+              >
+                <textarea
+                  className="comments__reply-input"
+                  rows={3}
+                  maxLength={2000}
+                  placeholder={`回复 @${selected.nick}…（支持 Markdown）`}
+                  value={replyText}
+                  disabled={replyBusy}
+                  onChange={(event) => setReplyText(event.target.value)}
+                  onKeyDown={(event) => {
+                    // Ctrl/Cmd+Enter 发送；单独回车留给换行
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.preventDefault()
+                      void submitReply()
+                    }
+                  }}
+                />
+                <div className="comments__reply-foot">
+                  <span className="comments__reply-hint">
+                    {replyText.length ? `${replyText.length}/2000 · ` : ''}Ctrl + Enter 发送
+                  </span>
+                  <button
+                    type="submit"
+                    className="comments__act comments__act--primary"
+                    disabled={replyBusy || !replyText.trim()}
+                  >
+                    {replyBusy ? '发送中…' : '发送回复'}
+                  </button>
+                </div>
+              </form>
+
               <footer className="comments__detail-foot">
                 {selected.status !== 'approved' && (
                   <button

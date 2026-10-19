@@ -13,7 +13,7 @@ import { usePathname } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 
 import { ShellIcon } from '../shell/icons'
-import { buildAdminHref, navSections, resolveNavEntry } from '../shell/nav-config'
+import { buildAdminHref, navSections, resolveNavEntry, type NavItem } from '../shell/nav-config'
 import { UserCard } from '../shell/UserCard'
 
 /**
@@ -26,14 +26,54 @@ import { UserCard } from '../shell/UserCard'
 const NAV_SCROLL_KEY = 'admin-nav-scroll-top'
 let persistedScrollTop = 0
 
+/**
+ * 分组的默认开合状态。
+ * 进后台最常见的事是写文章，所以默认只展开「总览」「创作」；
+ * 「管理」「系统」收起，用的时候自己点开。
+ *
+ * 这个状态必须持久化：CustomNav 每次路由切换都会被整块重挂载（同上），
+ * 只放 React state 的话，点开「管理」再点里面的菜单，导航一重挂载又被折回去了。
+ * 存 sessionStorage：同一标签页内保持用户选择，关掉标签页下次回到默认。
+ */
+const NAV_COLLAPSED_KEY = 'admin-nav-collapsed'
+const DEFAULT_COLLAPSED: Readonly<Record<string, boolean>> = { 管理: true, 系统: true }
+
+function readCollapsed(): Record<string, boolean> {
+  try {
+    const raw = window.sessionStorage.getItem(NAV_COLLAPSED_KEY)
+    if (raw) {
+      const saved = JSON.parse(raw) as Record<string, boolean> | null
+      // 与默认值合并：以后新增分组时，老存储里没有它的键也能拿到正确默认值
+      if (saved && typeof saved === 'object') return { ...DEFAULT_COLLAPSED, ...saved }
+    }
+  } catch {
+    // 隐私模式 / 脏数据：回落默认
+  }
+  return { ...DEFAULT_COLLAPSED }
+}
+
 export const CustomNav = () => {
   const { navOpen, setNavOpen, navRef, hydrated, shouldAnimate } = useNav()
   const { config } = useConfig()
   const pathname = usePathname()
   const adminRoute = config.routes.admin
 
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  // 初始值恒为默认折叠：服务端渲染拿不到 sessionStorage，若在这里读会 hydration 不一致
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => ({ ...DEFAULT_COLLAPSED }))
   const wrapRef = useRef<HTMLElement>(null)
+
+  /** 切换分组开合，并记住用户的选择（重挂载后能恢复） */
+  const toggleSection = (label: string) => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [label]: !prev[label] }
+      try {
+        window.sessionStorage.setItem(NAV_COLLAPSED_KEY, JSON.stringify(next))
+      } catch {
+        // 存不进去不影响本次交互
+      }
+      return next
+    })
+  }
 
   /**
    * 点击后的等待指示。
@@ -58,9 +98,45 @@ export const CustomNav = () => {
     if (wrapRef.current) wrapRef.current.scrollTop = persistedScrollTop
   }, [])
 
+  // 恢复用户上次的分组开合状态（放 effect 里：hydration 完成前不碰 DOM 结构，避免水合不一致）
+  useEffect(() => {
+    const saved = readCollapsed()
+    setCollapsed((prev) => (JSON.stringify(prev) === JSON.stringify(saved) ? prev : saved))
+  }, [])
+
   // 当前应高亮的菜单项（与标签页共用同一套匹配规则）
   const activeItem = resolveNavEntry(pathname, adminRoute)
   const activeHref = activeItem ? buildAdminHref(activeItem.path, adminRoute) : ''
+
+  /**
+   * 渲染一条菜单链接。
+   * 一级项（仪表盘）与分组子项共用同一套 DOM 与激活态逻辑，
+   * 靠 extraClass 区分缩进层级，避免两处各写一份。
+   */
+  const renderNavLink = (item: NavItem, extraClass = '') => {
+    const href = buildAdminHref(item.path, adminRoute)
+    const isActive = href === activeHref
+    const isPending = pendingHref === href
+    return (
+      <Link
+        className={`nav__link${extraClass}${isActive ? ' nav__link--active' : ''}${isPending ? ' nav__link--pending' : ''}`}
+        href={href}
+        id={`nav-${item.path.replace(/\//g, '-').replace(/^-/, '')}`}
+        key={item.path}
+        onClick={() => setPendingHref(href)}
+        tabIndex={navOpen ? 0 : -1}
+        // 悬停预取是「双开关」：next.config 的 experimental.dynamicOnHover 只把
+        // process.env.__NEXT_DYNAMIC_ON_HOVER 烘进客户端包，真正把该链接的
+        // fetchStrategy 升到 Full 要靠这个 per-link prop ——
+        // next/dist/client/components/links.js:243 要求两者同时为真，缺一即空转。
+        unstable_dynamicOnHover
+      >
+        {isActive && <span className="nav__link-indicator" />}
+        <ShellIcon name={item.icon} size={16} />
+        <span className="nav__link-label">{item.label}</span>
+      </Link>
+    )
+  }
 
   const asideClasses = ['nav', navOpen && 'nav--nav-open', shouldAnimate && 'nav--nav-animate', hydrated && 'nav--nav-hydrated']
     .filter(Boolean)
@@ -86,13 +162,18 @@ export const CustomNav = () => {
           </div>
 
           {navSections.map((section) => {
+            // 单条目分组（总览 → 仪表盘）：直接渲染成一级项，没有分组标题和折叠箭头
+            if (section.standalone && section.items.length === 1) {
+              return renderNavLink(section.items[0], ' nav__link--top')
+            }
+
             const isCollapsed = collapsed[section.label]
             return (
               <div className={`nav-group${isCollapsed ? ' nav-group--collapsed' : ''}`} key={section.label}>
                 <button
                   aria-expanded={!isCollapsed}
                   className="nav-group__toggle"
-                  onClick={() => setCollapsed((prev) => ({ ...prev, [section.label]: !prev[section.label] }))}
+                  onClick={() => toggleSection(section.label)}
                   tabIndex={navOpen ? 0 : -1}
                   type="button"
                 >
@@ -104,34 +185,7 @@ export const CustomNav = () => {
                   </span>
                 </button>
 
-                {!isCollapsed && (
-                  <div className="nav-group__content">
-                    {section.items.map((item) => {
-                      const href = buildAdminHref(item.path, adminRoute)
-                      const isActive = href === activeHref
-                      const isPending = pendingHref === href
-                      return (
-                        <Link
-                          className={`nav__link${isActive ? ' nav__link--active' : ''}${isPending ? ' nav__link--pending' : ''}`}
-                          href={href}
-                          id={`nav-${item.path.replace(/\//g, '-').replace(/^-/, '')}`}
-                          key={item.path}
-                          onClick={() => setPendingHref(href)}
-                          tabIndex={navOpen ? 0 : -1}
-                          // 悬停预取是「双开关」：next.config 的 experimental.dynamicOnHover 只把
-                          // process.env.__NEXT_DYNAMIC_ON_HOVER 烘进客户端包，真正把该链接的
-                          // fetchStrategy 升到 Full 要靠这个 per-link prop ——
-                          // next/dist/client/components/links.js:243 要求两者同时为真，缺一即空转。
-                          unstable_dynamicOnHover
-                        >
-                          {isActive && <span className="nav__link-indicator" />}
-                          <ShellIcon name={item.icon} size={16} />
-                          <span className="nav__link-label">{item.label}</span>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
+                {!isCollapsed && <div className="nav-group__content">{section.items.map((item) => renderNavLink(item))}</div>}
               </div>
             )
           })}

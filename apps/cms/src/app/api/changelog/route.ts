@@ -12,8 +12,12 @@ import { NextResponse } from 'next/server'
  *   - 后台：apps/cms（Payload CMS + Next 一体化应用）
  * 根目录/共享代码的提交不计入任何一组，避免同一条提交在两边重复出现。
  *
+ * 条数：**该目录下的全部提交**（不再固定 10 条）。GitHub 单页上限 100，
+ * 这里按页循环直到某页不足 100 条（= 到底），最多 5 页 / 500 条兜底，
+ * 避免异常长仓触发未认证的 60 次/小时限流。前端在卡片内部滚动展示全部。
+ *
  * 数据源：
- *   - 提交列表：`/repos/{owner}/{repo}/commits?path=<dir>&per_page=10`（无需 token）
+ *   - 提交列表：`/repos/{owner}/{repo}/commits?path=<dir>&per_page=100&page=N`（无需 token）
  *   - 贡献热力图：GitHub 没有公开的 REST 接口，用社区维护的 jogruber contributions API
  *
  * 缓存：进程内 5 分钟（同一个函数实例内复用），避免反复打 GitHub 的 60 次/小时限流。
@@ -27,11 +31,28 @@ const GROUPS = [
   { key: 'blog', label: '前台', hint: 'apps/blog · Astro 站点', path: 'apps/blog' },
   { key: 'cms', label: '后台', hint: 'apps/cms · Payload 后台', path: 'apps/cms' },
 ] as const
-const COMMITS_PER_GROUP = 10
+/** GitHub REST 单页上限 */
+const PER_PAGE = 100
+/**
+ * 每组的安全上限：正常仓库远到不了，纯粹兜底。
+ * 未认证限流 60 次/小时，配合 5 分钟缓存，2 组 × 最多 5 页仍在安全区。
+ */
+const MAX_COMMITS_PER_GROUP = 500
 const CACHE_TTL_MS = 5 * 60 * 1000
 
 type RepoCommit = { sha: string; date: string; message: string; url: string }
-type GroupResult = { key: string; label: string; hint: string; path: string; commits: RepoCommit[]; error?: string }
+type GroupResult = {
+  key: string
+  label: string
+  hint: string
+  path: string
+  commits: RepoCommit[]
+  /** 该目录下的提交总数（= commits.length，除非触到 MAX_COMMITS_PER_GROUP 被截断） */
+  total: number
+  /** 是否因安全上限被截断 */
+  truncated?: boolean
+  error?: string
+}
 type ContributionDay = { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }
 
 type Payload = {
@@ -90,22 +111,38 @@ async function loadContributions(year: number): Promise<Payload['contributions']
 }
 
 async function loadGroup(group: (typeof GROUPS)[number]): Promise<GroupResult> {
+  // path 过滤：只取改到这个目录的提交，于是同一仓库能拆成前台/后台两条线
+  const commits: RepoCommit[] = []
   try {
-    // path 过滤：只取改到这个目录的提交，于是同一仓库能拆成前台/后台两条线
-    const raw = (await fetchJson(
-      `https://api.github.com/repos/${GITHUB_USER}/${REPO}/commits?per_page=${COMMITS_PER_GROUP}&path=${encodeURIComponent(group.path)}`,
-      { accept: 'application/vnd.github+json' },
-    )) as Array<{ sha: string; html_url: string; commit: { message: string; author?: { date?: string } } }>
-    const commits = (Array.isArray(raw) ? raw : []).map((c) => ({
-      sha: String(c.sha || '').slice(0, 7),
-      date: c.commit?.author?.date || '',
-      // 只取首行，避免正文撑爆卡片
-      message: String(c.commit?.message || '').split('\n')[0].trim(),
-      url: c.html_url || '',
-    }))
-    return { ...group, commits }
+    for (let page = 1; commits.length < MAX_COMMITS_PER_GROUP; page++) {
+      const raw = (await fetchJson(
+        `https://api.github.com/repos/${GITHUB_USER}/${REPO}/commits?per_page=${PER_PAGE}&page=${page}&path=${encodeURIComponent(group.path)}`,
+        { accept: 'application/vnd.github+json' },
+      )) as Array<{ sha: string; html_url: string; commit: { message: string; author?: { date?: string } } }>
+      const batch = Array.isArray(raw) ? raw : []
+      commits.push(
+        ...batch.map((c) => ({
+          sha: String(c.sha || '').slice(0, 7),
+          date: c.commit?.author?.date || '',
+          // 只取首行，避免正文撑爆卡片
+          message: String(c.commit?.message || '').split('\n')[0].trim(),
+          url: c.html_url || '',
+        })),
+      )
+      // 不足一页 = 已经拉到底（GitHub 按时间倒序返回）
+      if (batch.length < PER_PAGE) break
+    }
+    const truncated = commits.length > MAX_COMMITS_PER_GROUP
+    const sliced = truncated ? commits.slice(0, MAX_COMMITS_PER_GROUP) : commits
+    return { ...group, commits: sliced, total: sliced.length, truncated }
   } catch (err) {
-    return { ...group, commits: [], error: err instanceof Error ? err.message : '加载失败' }
+    // 翻页中途失败：已拿到的保留，只标记错误，不整组清空
+    return {
+      ...group,
+      commits,
+      total: commits.length,
+      error: err instanceof Error ? err.message : '加载失败',
+    }
   }
 }
 

@@ -4,7 +4,10 @@
  * 更新日志页（/admin/changelog）
  *
  * 版式对齐参考图：页头（标题 + 年份选择）→ GitHub 贡献热力图卡片 →
- * 「最近提交」分隔标题 → 前台 / 后台两张卡片（虚线时间线 + 圆点 + 时间 + 提交信息）。
+ * 「仓库提交记录」分隔标题 → 前台 / 后台两张卡片（虚线时间线 + 圆点 + 时间 + 提交信息）。
+ *
+ * 提交条数：两张卡片展示的是该目录下的**全部**提交（不再固定 10 条 / 不再分页按钮），
+ * 页面整体不滚，滚动只发生在卡片内部的时间线上（见 admin-theme.css 的 .changelog / .changelog__repos）。
  *
  * 数据获取顺序（照需求约定）：
  *   loadData() 先查 sessionStorage 缓存
@@ -23,7 +26,17 @@ import { PageHeader } from '../../components/PageHeader'
 
 type ContributionDay = { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }
 type RepoCommit = { sha: string; date: string; message: string; url: string }
-type GroupResult = { key: string; label: string; hint: string; path: string; commits: RepoCommit[]; error?: string }
+type GroupResult = {
+  key: string
+  label: string
+  hint: string
+  path: string
+  commits: RepoCommit[]
+  /** 该目录下的提交总数（触到安全上限时小于实际值） */
+  total?: number
+  truncated?: boolean
+  error?: string
+}
 type ChangelogData = {
   user: string
   repo: string
@@ -33,7 +46,7 @@ type ChangelogData = {
   groups: GroupResult[]
 }
 
-const CACHE_PREFIX = 'wb-changelog:v1'
+const CACHE_PREFIX = 'wb-changelog:v2'
 const CACHE_TTL_MS = 5 * 60 * 1000
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -186,6 +199,11 @@ export function ChangelogViewInner() {
 
   const weeks = useMemo(() => buildWeeks(data?.contributions?.days ?? []), [data])
   const total = data?.contributions?.total ?? 0
+  /** 两张卡片（前台 + 后台）合计提交条数，用于分隔标题右侧的提示 */
+  const totalCommits = useMemo(
+    () => (data?.groups ?? []).reduce((sum, g) => sum + (g.commits?.length ?? 0), 0),
+    [data],
+  )
   const yearOptions = Array.from({ length: 5 }, (_, i) => nowYear - i)
 
   return (
@@ -308,11 +326,14 @@ export function ChangelogViewInner() {
       {/* 热力图卡片与下方「最近提交」之间的细分隔线 */}
       <div className="changelog__rule" aria-hidden="true" />
 
-      {/* ── 本仓库最近提交（前台 apps/blog / 后台 apps/cms 两条线） ── */}
+      {/* ── 本仓库全部提交（前台 apps/blog / 后台 apps/cms 两条线，卡片内部滚动） ── */}
       <div className="changelog__divider">
         <span className="changelog__divider-line" />
-        <span className="changelog__divider-text">仓库最近提交</span>
-        <span className="changelog__divider-hint">{data?.repo ?? 'cloud-blog'} · 前台 / 后台各 10 条</span>
+        <span className="changelog__divider-text">仓库提交记录</span>
+        <span className="changelog__divider-hint">
+          {data?.repo ?? 'cloud-blog'} · 全部提交
+          {totalCommits ? ` · 共 ${totalCommits} 条` : ''}
+        </span>
         <span className="changelog__divider-line" />
       </div>
 
@@ -350,7 +371,9 @@ export function ChangelogViewInner() {
                 <p className="changelog__repo-hint">{group.hint}</p>
               </div>
               <span className={`changelog__repo-count changelog__repo-count--${GROUP_TINT[index % GROUP_TINT.length]}`}>
-                {group.error ? '—' : `${group.commits.length} 条`}
+                {group.error && !group.commits.length
+                  ? '—'
+                  : `${group.total ?? group.commits.length} 条${group.truncated ? '+' : ''}`}
               </span>
             </header>
 
@@ -382,7 +405,7 @@ export function ChangelogViewInner() {
                     <path d="M6.5 5.5h11l2.5 6.5v5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 17v-5z" />
                   </svg>
                 </span>
-                {group.error ? `加载失败：${group.error}` : '暂无最近提交'}
+                {group.error ? `加载失败：${group.error}` : '暂无提交记录'}
               </div>
             )}
           </article>

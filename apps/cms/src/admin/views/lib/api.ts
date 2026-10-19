@@ -346,6 +346,16 @@ export async function deleteComment(id: number): Promise<void> {
   await request<unknown>('DELETE', `/api/comments/${id}`)
 }
 
+/**
+ * 以站长身份回复一条评论（署名取站点设置的「作者」）。
+ *
+ * url 必须是这条评论原有的 url，原样传回：Waline 靠它把回复挂到同一篇文章上，
+ * 传错就等于回复挂到了不存在的页面。
+ */
+export async function replyComment(id: number, content: string, url: string): Promise<{ id: number; status: string }> {
+  return request<{ ok: boolean; id: number; status: string }>('POST', `/api/comments/${id}/reply`, { content, url })
+}
+
 /* ---------------- 图片管理（Media 集合） ---------------- */
 
 /** 图片文档（归一化后的视图层结构） */

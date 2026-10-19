@@ -26,6 +26,7 @@ import { SiteSettings } from './globals/SiteSettings'
 import { migrations } from './migrations'
 // Postgres 连接串 / TLS 方案的唯一收敛点（含 2026-10-12 全站 500 的成因说明）
 import { resolvePgTls } from './lib/pg-tls'
+import { resolveStorageConfig } from './lib/supabase-storage'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -53,15 +54,13 @@ const dirname = path.dirname(filename)
 const SUPABASE_S3_ACCESS_KEY_ID = process.env.SUPABASE_S3_ACCESS_KEY_ID
 const SUPABASE_S3_SECRET_ACCESS_KEY = process.env.SUPABASE_S3_SECRET_ACCESS_KEY
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET
-const SUPABASE_PROJECT_REF =
-  process.env.SUPABASE_PROJECT_REF ||
-  (process.env.POSTGRES_URL?.includes('.supabase.com') || process.env.POSTGRES_URL?.includes('.supabase.co')
-    ? new URL(process.env.POSTGRES_URL).hostname.split('.')[0]
-    : undefined)
-
-const SUPABASE_HOST = SUPABASE_PROJECT_REF ? `${SUPABASE_PROJECT_REF}.supabase.co` : undefined
-const SUPABASE_S3_ENDPOINT = process.env.SUPABASE_S3_ENDPOINT || (SUPABASE_HOST ? `https://${SUPABASE_HOST}/storage/v1/s3` : undefined)
-const SUPABASE_PUBLIC_BASE = process.env.SUPABASE_PUBLIC_BASE || (SUPABASE_HOST ? `https://${SUPABASE_HOST}/storage/v1/object/public` : undefined)
+/**
+ * endpoint / publicBase / 缺省的 project ref 推导统一交给 lib/supabase-storage.ts ——
+ * /api/comment-image 用的是同一份，避免「插件能用、上传端点说没配置」的漂移。
+ */
+const STORAGE = resolveStorageConfig()
+const SUPABASE_S3_ENDPOINT = STORAGE.endpoint
+const SUPABASE_PUBLIC_BASE = STORAGE.publicBase
 
 /** S3/Supabase 对象存储凭据是否配齐（缺任何一项都不注入 s3Storage 插件） */
 const HAS_S3_CONFIG = Boolean(

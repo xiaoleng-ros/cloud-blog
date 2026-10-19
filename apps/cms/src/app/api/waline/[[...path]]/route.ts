@@ -1,4 +1,5 @@
 import { forwardToWaline } from '../../../../lib/waline-bridge'
+import { scheduleLazyGc } from '../../../../lib/comment-image-gc'
 
 // Waline 内部是 ThinkJS/Koa + pg 连接，只能在 Node 运行时跑
 export const runtime = 'nodejs'
@@ -12,7 +13,15 @@ export const dynamic = 'force-dynamic'
 async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url)
   const stripped = url.pathname.replace(/^\/api\/waline/, '') || '/'
-  return forwardToWaline(stripped, url.searchParams.toString(), request)
+  const response = await forwardToWaline(stripped, url.searchParams.toString(), request)
+
+  // 访客发评论成功 → 顺手触发一次惰性回收（节流 6 小时，排在响应之后，不拖慢评论提交）。
+  // 垃圾评论正是这类流量带来的：有新的进来，就顺手把过期的清掉。
+  if (request.method === 'POST' && stripped === '/api/comment' && response.ok) {
+    scheduleLazyGc()
+  }
+
+  return response
 }
 
 export const GET = handle

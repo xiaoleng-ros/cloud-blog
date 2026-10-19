@@ -33,11 +33,18 @@ export type NavItem = {
 export type NavSection = {
   label: string
   items: NavItem[]
+  /**
+   * 单条目分组压平成一级导航项：只渲染那条菜单本身，不显示分组标题与折叠箭头。
+   * 「总览 → 仪表盘」用它 —— 仪表盘本来就是一级入口，再套一层折叠框纯属多余。
+   * 约定：只有 items.length === 1 时才生效，多条目分组即使标了也按普通分组渲染。
+   */
+  standalone?: boolean
 }
 
 export const navSections: NavSection[] = [
   {
     label: '总览',
+    standalone: true,
     items: [{ label: '仪表盘', path: '/', icon: 'dashboard', keywords: 'dashboard home shouye' }],
   },
   {

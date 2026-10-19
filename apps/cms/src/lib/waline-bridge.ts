@@ -43,7 +43,19 @@ async function startBridge(): Promise<Bridge> {
     // 因此这里用 createRequire 在运行时解析，绕开打包器的静态分析。
     const require = createRequire(import.meta.url)
     const createApp = require('@waline/vercel') as (config?: Record<string, unknown>) => WalineHandler
-    const handler = createApp({})
+    /*
+     * audit: true = 所有访客评论先进「待审」，必须后台点「批准」才出现在前台。
+     *
+     * 为什么写死在代码里而不是只靠 COMMENT_AUDIT 环境变量：
+     * @waline/vercel 的 config.js 是 `audit: COMMENT_AUDIT && !isFalse(COMMENT_AUDIT)` ——
+     * **变量没配就是 false（自动通过）**，而线上的环境变量在 EdgeOne 控制台，改过之后
+     * 代码里看不出任何痕迹（2026-10-19 用户就遇到「不知道什么时候变成自动审核了」）。
+     * 这里传进去的值会在每个请求处理前 think.config('audit', true)，优先级高于 config.js。
+     *
+     * 不受影响的情况：管理员自己发的评论走 `isAdmin(ctx)` 分支被强制置 approved
+     * （后台回复读者、站长留言都直接上线），审核队列只拦访客。
+     */
+    const handler = createApp({ audit: true })
 
     const server = http.createServer((req, res) => {
       handler(req, res).catch((err) => {

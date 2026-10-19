@@ -9,11 +9,82 @@ import '@waline/client/style';
 </section>
 
 <script>
-  import { init, type WalineEmojiPresets } from '@waline/client';
+  import { init, type WalineEmojiPresets, type WalineImageUploader } from '@waline/client';
 
   // BaseLayout 注入：env PUBLIC_WALINE_URL 优先，默认同域 /api/waline；空串 = 关闭评论
   const getServer = () =>
     document.querySelector('meta[name="waline-server"]')?.getAttribute('content') || '';
+
+  /**
+   * 配图上传端点：由 serverURL 推导，保证和评论接口同源。
+   *   /api/waline              → /api/comment-image
+   *   https://x.com/api/waline → https://x.com/api/comment-image
+   * 不写死相对路径，是因为 PUBLIC_WALINE_URL 可能指向另一个域名。
+   */
+  const uploadEndpoint = () => {
+    const server = getServer();
+    const at = server.indexOf('/api/waline');
+    return at >= 0 ? `${server.slice(0, at)}/api/comment-image` : '/api/comment-image';
+  };
+
+  /**
+   * 浏览器端压缩后再上传。
+   *
+   * 为什么必须压：Supabase 免费版只有 1GB 存储，原图直传平均 3MB ≈ 只能存 340 张；
+   * 缩到长边 1600px 的 WebP（约 150–250KB）能存 4000–6000 张。
+   * 另外手机照片带 EXIF 旋转，createImageBitmap 的 from-image 顺带把它摆正。
+   *
+   * GIF 原样放行：canvas 会丢掉动画。压完反而更大时也用原图。
+   */
+  const MAX_EDGE = 1600;
+  const SKIP_BELOW_BYTES = 300 * 1024;
+
+  const compressImage = async (file: File): Promise<File> => {
+    if (file.type === 'image/gif' || file.size <= SKIP_BELOW_BYTES) return file;
+    try {
+      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close?.();
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/webp', 0.82),
+      );
+      if (!blob || blob.size >= file.size) return file;
+      return new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.webp`, { type: 'image/webp' });
+    } catch {
+      // 老浏览器不认识 createImageBitmap / WebP：退回原图，交给服务端校验
+      return file;
+    }
+  };
+
+  const uploadImage: WalineImageUploader = async (file) => {
+    const payload = await compressImage(file);
+    const form = new FormData();
+    form.append('file', payload, payload.name || 'image');
+    const res = await fetch(uploadEndpoint(), { method: 'POST', body: form });
+    if (!res.ok) {
+      let message = `图片上传失败（HTTP ${res.status}）`;
+      try {
+        const json = (await res.json()) as { errors?: Array<{ message?: string }> };
+        if (json?.errors?.[0]?.message) message = json.errors[0].message;
+      } catch {
+        /* 保留状态码文案 */
+      }
+      throw new Error(message);
+    }
+    const json = (await res.json()) as { url?: string };
+    if (!json?.url) throw new Error('图片上传失败：服务端没有返回地址');
+    return json.url;
+  };
 
   let activeRoot: Element | null = null;
   let cleanup = () => {};
@@ -50,6 +121,9 @@ import '@waline/client/style';
         // 官方默认从 unpkg CDN 拉 weibo 表情，改指构建时落盘的本地副本（见 astro.config walineEmojiVendor）；
         // 字符串形态运行时自动拉 <folder>/info.json，断言只是绕过 `//|https://` 字面量类型
         emoji: ['/waline-emojis/weibo' as WalineEmojiPresets],
+        // 配图上传：浏览器先压缩再传自建端点，落到 Supabase Storage（见上面的 compressImage）
+        // 不配置时 Waline 会回落到 base64 内嵌，单张硬上限 128KB，手机照片根本发不出去
+        imageUploader: uploadImage,
         // GIF 搜索走第三方接口，按零外链口径关闭
         search: false,
         requiredMeta: ['nick'],
