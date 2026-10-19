@@ -40,6 +40,8 @@ export interface WalineComment {
   link: string
   url: string
   text: string
+  /** 评论里的配图地址（从 HTML / markdown 里提取，只保留 http(s) 与站内路径） */
+  images: string[]
   status: string
   like: number
   createdAt: string | null
@@ -246,6 +248,35 @@ const stripHtml = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+/**
+ * 从评论正文里提取配图地址。
+ *
+ * 两个来源都要看：`comment` 是 Waline 渲染后的 HTML（`<img src>`），
+ * `orig` 是提交时的 markdown 原文（`![](url)`）。后台要审核图片内容，
+ * 光有文本没用 —— 前端详情面板靠这个字段渲染缩略图。
+ *
+ * 只保留 http(s) 与站内绝对路径：`javascript:` / `data:`（base64 可夹带 SVG 脚本）
+ * 一律丢弃，避免把访客可控的东西直接塞进 <img>。
+ * 上限 12 张，防止一条评论塞几百张图把后台拖垮。
+ */
+function extractImages(raw: RawAdminComment): string[] {
+  const found = new Set<string>()
+  const push = (value: string | undefined) => {
+    if (!value) return
+    // HTML 实体在属性里很常见（&amp; 之类），先还原再去重
+    const url = value.trim().replace(/&amp;/g, '&')
+    if (/^https?:\/\//i.test(url) || url.startsWith('/')) found.add(url)
+  }
+
+  const imgRe = /<img[^>]+src\s*=\s*["']([^"']+)["']/gi
+  for (let m = imgRe.exec(raw.comment ?? ''); m; m = imgRe.exec(raw.comment ?? '')) push(m[1])
+
+  const mdRe = /!\[[^\]]*\]\(\s*([^)\s]+)/g
+  for (let m = mdRe.exec(raw.orig ?? ''); m; m = mdRe.exec(raw.orig ?? '')) push(m[1])
+
+  return [...found].slice(0, 12)
+}
+
 const normalize = (raw: RawAdminComment): WalineComment => ({
   id: Number(raw.objectId),
   nick: (raw.nick ?? '').trim() || '匿名',
@@ -255,6 +286,7 @@ const normalize = (raw: RawAdminComment): WalineComment => ({
   // 后台只展示原始文本：Waline 的 comment 字段是服务端渲染好的 HTML，直接塞进后台
   // 就等于把访客可控的 HTML 注入管理员页面。orig 是提交时的原文。
   text: raw.orig?.trim() || stripHtml(raw.comment ?? ''),
+  images: extractImages(raw),
   status: raw.status ?? '',
   like: Number(raw.like ?? 0) || 0,
   createdAt: raw.insertedat ?? (raw.time ? new Date(Number(raw.time)).toISOString() : null),

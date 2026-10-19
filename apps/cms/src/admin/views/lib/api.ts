@@ -286,6 +286,8 @@ export interface CommentRow {
   link: string
   url: string
   text: string
+  /** 评论里的配图地址（服务端从 HTML / markdown 提取，只含 http(s) 与站内路径） */
+  images: string[]
   status: string
   like: number
   createdAt: string | null
