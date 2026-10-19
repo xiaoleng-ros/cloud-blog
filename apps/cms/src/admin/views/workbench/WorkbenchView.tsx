@@ -117,6 +117,11 @@ export const WorkbenchView = () => {
           href={`${adminRoute}/drafts`}
           prefetch={false}
         >
+          <span className="workbench__card-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 13l4.5 4.5L19 7" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
           <span className="workbench__card-icon">
             <ShellIcon name="posts" size={22} />
           </span>
@@ -170,25 +175,30 @@ export const WorkbenchView = () => {
       {hasNothing && (
         <div className="workbench__empty">
           <div className="workbench__empty-art" aria-hidden="true">
-            <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 160 150" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* 底部阴影 */}
+              <ellipse cx="80" cy="126" rx="52" ry="9" fill="var(--theme-elevation-100)" />
+              {/* 箱子后盖 */}
+              <path d="M38 62h84v52a6 6 0 0 1-6 6H44a6 6 0 0 1-6-6V62Z" fill="#cfe0f7" />
+              {/* 箱内投下的暗面 */}
+              <path d="M38 62h84v12H38z" fill="#b8d2f2" />
+              {/* 打开的左右翼 */}
+              <path d="M38 62 18 40l-4 44 24-6Z" fill="#e3effd" stroke="#cfe0f7" strokeWidth="2.5" strokeLinejoin="round" />
+              <path d="M122 62l20-22 4 44-24-6Z" fill="#e3effd" stroke="#cfe0f7" strokeWidth="2.5" strokeLinejoin="round" />
+              {/* 箱口前沿 */}
               <path
-                d="M20 45h80v55a5 5 0 0 1-5 5H25a5 5 0 0 1-5-5V45Z"
-                fill="var(--theme-elevation-100)"
+                d="M34 58h92v10a6 6 0 0 1-6 6H40a6 6 0 0 1-6-6V58Z"
+                fill="#fff"
+                stroke="#cfe0f7"
+                strokeWidth="2.5"
               />
-              <path
-                d="M20 45l40-25 40 25"
-                stroke="var(--theme-elevation-250)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="60" cy="70" r="12" fill="var(--accent-soft)" />
-              <path
-                d="M54 70c0 0 4 8 12 8M54 70c0 0 4-8 12-8"
-                stroke="var(--accent)"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
+              {/* 飞出的星星 */}
+              <path d="M70 26l3 8 8 3-8 3-3 8-3-8-8-3 8-3 3-8Z" fill="#3d82e8" />
+              <path d="M104 20l2.2 5.8L112 28l-5.8 2.2L104 36l-2.2-5.8L96 28l5.8-2.2L104 20Z" fill="#7fb0f0" />
+              <path d="M126 40l1.8 4.6 4.6 1.8-4.6 1.8L126 53l-1.8-4.8-4.6-1.8 4.6-1.8L126 40Z" fill="#a8cdf5" />
+              {/* 上升的小点 */}
+              <circle cx="52" cy="34" r="3" fill="#7fb0f0" />
+              <circle cx="118" cy="60" r="2.6" fill="#a8cdf5" />
             </svg>
           </div>
           <p className="workbench__empty-text">空空如也</p>

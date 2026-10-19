@@ -163,6 +163,7 @@ body {
 .compose,
 .drafts,
 .dashboard,
+.workbench,
 .settings {
   display: flex;
   flex-direction: column;
@@ -749,10 +750,10 @@ textarea:focus-visible {
   }
 }
 
-/* ---------- 8.5 自定义工作台 ---------- */
-.workbench {
-  gap: 1.25rem;
-}
+/* ---------- 8.5 自定义工作台 ----------
+   版式：页头卡（右侧副标题）→ 三张指标卡（等高，首卡高亮）→ 一张空态大卡。
+   卡片是「图标块 + 数值列」的横向排布，与仪表盘 .dashboard__stat 同族但更紧凑：
+   数字与单位同一行、子标签在下一行，视觉重心比仪表盘矮一档，适合当概览入口页。 */
 
 /* 页头右侧副标题 */
 .page-header__subtitle {
@@ -764,36 +765,54 @@ textarea:focus-visible {
 .workbench__cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--card-gap);
 }
 
 .workbench__card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 18px 20px;
   border-radius: var(--card-radius);
-  border: 1px solid var(--theme-elevation-200);
+  border: var(--card-line);
   background: var(--theme-elevation-0);
   text-decoration: none;
-  transition: box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease;
+  transition: box-shadow 140ms ease, border-color 140ms ease;
 }
 
 .workbench__card:hover {
   box-shadow: var(--shadow-overlay);
-  border-color: var(--theme-elevation-250);
-  transform: translateY(-1px);
 }
 
-/* 第一张高亮卡：淡蓝渐变，与截图中「工作台」选中卡呼应 */
+/* 首卡高亮：淡蓝底 + 蓝图标块，右上角一枚对勾角标表示「当前关注项」 */
 .workbench__card--primary {
-  background: linear-gradient(135deg, #e3effd 0%, #f8fbff 100%);
-  border: 1px solid #cfe0f7;
+  background: var(--accent-soft);
+  border-color: #cfe0f7;
 }
 
 .workbench__card--primary .workbench__card-icon {
-  background: #3d82e8;
+  background: var(--accent);
   color: #fff;
+}
+
+.workbench__card-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+
+.workbench__card-badge svg {
+  width: 12px;
+  height: 12px;
 }
 
 .workbench__card-icon {
@@ -811,25 +830,28 @@ textarea:focus-visible {
 .workbench__card-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .workbench__card-value {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   font-size: 28px;
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--theme-elevation-900);
   line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
 .workbench__card--primary .workbench__card-value {
-  color: #1c5cbf;
+  color: var(--accent-text);
 }
 
 .workbench__card-unit {
-  margin-left: 4px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--theme-elevation-500);
 }
@@ -847,19 +869,23 @@ textarea:focus-visible {
   color: #5c8fd6;
 }
 
-/* 空态：居中 + 简化版「开箱」插画 */
+/* 空态大卡：与内容卡同宽，内部垂直居中；只在「三项全为 0 且加载成功」时出现 */
 .workbench__empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-top: 4rem;
-  gap: 1rem;
+  gap: 1.25rem;
+  min-height: 300px;
+  padding: 3rem 1.5rem;
+  background: var(--theme-elevation-0);
+  border: var(--card-line);
+  border-radius: var(--card-radius);
 }
 
 .workbench__empty-art {
-  width: 120px;
-  height: 120px;
+  width: 130px;
+  height: 130px;
 }
 
 .workbench__empty-art svg {
@@ -874,10 +900,13 @@ textarea:focus-visible {
 }
 
 .workbench__error {
-  margin: 2rem 0 0;
+  margin: 0;
+  padding: 14px 18px;
   font-size: 14px;
   color: var(--theme-error-500);
-  text-align: center;
+  background: var(--theme-elevation-0);
+  border: var(--card-line);
+  border-radius: var(--card-radius);
 }
 
 @media (max-width: 860px) {
