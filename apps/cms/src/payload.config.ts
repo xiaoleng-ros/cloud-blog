@@ -466,6 +466,12 @@ export default buildConfig({
           Component: '/src/admin/views/comments/CommentsView.tsx#CommentsView',
           path: '/comments',
         },
+        // 工作台：集中处理待审 / 待处理事项（路由 /admin/workbench）
+        workbench: {
+          Component: '/src/admin/views/workbench/WorkbenchView.tsx#WorkbenchView',
+          path: '/workbench',
+          meta: { title: '工作台' },
+        },
         // 更新日志：GitHub 贡献热力图 + 三个仓库的近期提交（路由 /admin/changelog）
         changelog: {
           Component: '/src/admin/views/changelog/ChangelogView.tsx#ChangelogView',

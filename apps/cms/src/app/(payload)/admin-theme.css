@@ -749,6 +749,143 @@ textarea:focus-visible {
   }
 }
 
+/* ---------- 8.5 自定义工作台 ---------- */
+.workbench {
+  gap: 1.25rem;
+}
+
+/* 页头右侧副标题 */
+.page-header__subtitle {
+  font-size: 13.5px;
+  color: var(--theme-elevation-400);
+  font-weight: 400;
+}
+
+.workbench__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.workbench__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--theme-elevation-200);
+  background: var(--theme-elevation-0);
+  text-decoration: none;
+  transition: box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.workbench__card:hover {
+  box-shadow: var(--shadow-overlay);
+  border-color: var(--theme-elevation-250);
+  transform: translateY(-1px);
+}
+
+/* 第一张高亮卡：淡蓝渐变，与截图中「工作台」选中卡呼应 */
+.workbench__card--primary {
+  background: linear-gradient(135deg, #e3effd 0%, #f8fbff 100%);
+  border: 1px solid #cfe0f7;
+}
+
+.workbench__card--primary .workbench__card-icon {
+  background: #3d82e8;
+  color: #fff;
+}
+
+.workbench__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--theme-elevation-100);
+  color: var(--theme-elevation-500);
+}
+
+.workbench__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workbench__card-value {
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--theme-elevation-900);
+  line-height: 1.15;
+}
+
+.workbench__card--primary .workbench__card-value {
+  color: #1c5cbf;
+}
+
+.workbench__card-unit {
+  margin-left: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--theme-elevation-500);
+}
+
+.workbench__card--primary .workbench__card-unit {
+  color: #5c8fd6;
+}
+
+.workbench__card-sublabel {
+  font-size: 13px;
+  color: var(--theme-elevation-400);
+}
+
+.workbench__card--primary .workbench__card-sublabel {
+  color: #5c8fd6;
+}
+
+/* 空态：居中 + 简化版「开箱」插画 */
+.workbench__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4rem;
+  gap: 1rem;
+}
+
+.workbench__empty-art {
+  width: 120px;
+  height: 120px;
+}
+
+.workbench__empty-art svg {
+  width: 100%;
+  height: 100%;
+}
+
+.workbench__empty-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--theme-elevation-400);
+}
+
+.workbench__error {
+  margin: 2rem 0 0;
+  font-size: 14px;
+  color: var(--theme-error-500);
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .workbench__cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- 9. Payload 组件级覆盖 ---------- */
 /* 隐藏顶栏面包屑路径（/ 文章 等）：侧边导航已承担位置标识；整条 app-header 一并移除避免留白带 */
 .app-header,

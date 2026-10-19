@@ -19,6 +19,7 @@ export type ShellIconKey =
   | 'navigation'
   | 'settings'
   | 'changelog'
+  | 'workbench'
   | 'account'
 
 export type NavItem = {
@@ -71,6 +72,8 @@ export const navSections: NavSection[] = [
   {
     label: '系统',
     items: [
+      // 工作台：集中展示待审 / 待处理事项，入口放在「系统」分组最上方
+      { label: '工作台', path: '/workbench', icon: 'workbench', keywords: 'workbench gongzuotai daiban pending' },
       { label: '站点设置', path: '/globals/site-settings', icon: 'settings', keywords: 'settings site shezhi' },
       // 更新日志：GitHub 贡献热力图 + 三个仓库的近期提交（紧挨站点设置，同属「系统」）
       { label: '更新日志', path: '/changelog', icon: 'changelog', keywords: 'changelog update log git commit gengxin rizhi' },

@@ -20,6 +20,7 @@ import { NoteComposeView as NoteComposeView_af4b37b184560c1455536f139ac92696 } f
 import { DraftsView as DraftsView_e8ffb8e11909aedb00bac5188e12dcc7 } from '../../../../src/admin/views/drafts/DraftsView.tsx'
 import { TrashView as TrashView_dfd0e9988da2b44465fe388ce4eeaedf } from '../../../../src/admin/views/trash/TrashView.tsx'
 import { CommentsView as CommentsView_bca6cb4e0718965f747bf2b12956b35b } from '../../../../src/admin/views/comments/CommentsView.tsx'
+import { WorkbenchView as WorkbenchView_3551c91b95953a3f10ebb0cf322e5cb7 } from '../../../../src/admin/views/workbench/WorkbenchView.tsx'
 import { ChangelogView as ChangelogView_6be6ec0f15d7a3a3da7fa078f6170f63 } from '../../../../src/admin/views/changelog/ChangelogView.tsx'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 import { S3ClientUploadHandler as S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24 } from '@payloadcms/storage-s3/client'
@@ -48,6 +49,7 @@ export const importMap = {
   "/src/admin/views/drafts/DraftsView.tsx#DraftsView": DraftsView_e8ffb8e11909aedb00bac5188e12dcc7,
   "/src/admin/views/trash/TrashView.tsx#TrashView": TrashView_dfd0e9988da2b44465fe388ce4eeaedf,
   "/src/admin/views/comments/CommentsView.tsx#CommentsView": CommentsView_bca6cb4e0718965f747bf2b12956b35b,
+  "/src/admin/views/workbench/WorkbenchView.tsx#WorkbenchView": WorkbenchView_3551c91b95953a3f10ebb0cf322e5cb7,
   "/src/admin/views/changelog/ChangelogView.tsx#ChangelogView": ChangelogView_6be6ec0f15d7a3a3da7fa078f6170f63,
   "@payloadcms/next/rsc#CollectionCards": CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
   "@payloadcms/storage-s3/client#S3ClientUploadHandler": S3ClientUploadHandler_f97aa6c64367fa259c5bc0567239ef24

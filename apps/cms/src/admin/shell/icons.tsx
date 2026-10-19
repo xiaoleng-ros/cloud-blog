@@ -143,6 +143,12 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M12 8.2V12l2.6 1.7" />
     </>
   ),
+  // 工作台：一张简洁的桌子（面板 + 双腿），暗示「待办桌面」
+  workbench: (
+    <>
+      <path d="M3 10h18M3 10v8M21 10v8M7 10V6h10v4" />
+    </>
+  ),
 }
 
 export type IconName = ShellIconKey | 'search' | 'sun' | 'moon' | 'close' | 'chevronDown' | 'logout' | 'command' | 'external'
