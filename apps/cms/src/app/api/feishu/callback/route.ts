@@ -2,6 +2,9 @@ import { randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
 import { createLocalReq } from 'payload'
+// Payload 3.91 在 JWT 受保护头里加了 authVersion 校验（见 payload/dist/auth/strategies/jwt.js:89），
+// 缺省或不匹配直接判无效令牌。这里与 Payload 内部 jwtSign 保持一致。
+const PAYLOAD_JWT_AUTH_VERSION = 1
 import { readCookie } from '../../../../lib/feishu-session'
 import { getDb, type PayloadDb } from '../../../../lib/blog-sync'
 
@@ -359,7 +362,7 @@ async function createUserSession(
   const issuedAt = Math.floor(Date.now() / 1000)
   const secretKey = new TextEncoder().encode(payload.secret)
   const token = await new SignJWT(fieldsToSign)
-    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setProtectedHeader({ alg: 'HS256', authVersion: PAYLOAD_JWT_AUTH_VERSION, typ: 'JWT' })
     .setIssuedAt(issuedAt)
     .setExpirationTime(issuedAt + tokenExpirationSec)
     .sign(secretKey)
