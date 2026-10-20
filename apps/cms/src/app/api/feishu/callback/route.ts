@@ -568,7 +568,9 @@ export async function GET(request: Request) {
     return response
   } catch (err) {
     console.error('[feishu/callback] error:', err)
-    // 对外只给错误编号，不回显原始异常信息（可能含连接串 / 堆栈）
-    return clearStateCookie(redirectToLogin(request.url, 'server_error'), secure)
+    // 对外只给错误编号 + 错误类型（不含消息/堆栈，避免泄露连接串等敏感信息）；
+    // 类型仅用于排障定位，例如 "Error" / "TypeError" / "LibsqlError" 等
+    const errType = err instanceof Error ? err.constructor.name : String(err)
+    return clearStateCookie(redirectToLogin(request.url, 'server_error', `type=${errType}`), secure)
   }
 }

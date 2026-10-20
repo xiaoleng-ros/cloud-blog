@@ -28,15 +28,29 @@ const errorJson = (message: string, status: number) =>
   NextResponse.json({ errors: [{ message }] }, { status, headers: { 'Cache-Control': 'no-store' } })
 
 /**
- * 按 Payload 本地策略算法校验密码：crypto.pbkdf2(password, salt, 25000, 512, 'sha256')
- * 与存储 hash 做恒定时间比较。参数与 payload/dist/auth/strategies/local/authenticate.js 对齐。
+ * 按 Payload 本地策略算法校验密码。
+ * Payload 3.91 起密码哈希带前缀区分代数：
+ *   - 'pbkdf2-sha256-v1:' 前缀：iterations=600000, keyLength=32（当前）
+ *   - 无前缀：iterations=25000, keyLength=512（历史遗留，仅做兼容校验）
+ * 与 payload/dist/auth/strategies/local/authenticate.js + generatePasswordSaltHash.js 的
+ * getPasswordHashParameters 完全对齐：先按前缀剥离、再按对应参数算 pbkdf2、最后恒定时间比较。
  */
+const CURRENT_PASSWORD_HASH_PREFIX = 'pbkdf2-sha256-v1:'
+const CURRENT_PASSWORD_HASH_ITERATIONS = 600000
+const CURRENT_PASSWORD_HASH_KEY_LENGTH = 32
+const LEGACY_PASSWORD_HASH_ITERATIONS = 25000
+const LEGACY_PASSWORD_HASH_KEY_LENGTH = 512
+
 function verifyLocalPassword(password: string, salt: string, hash: string): Promise<boolean> {
   return new Promise((resolve) => {
-    crypto.pbkdf2(password, salt, 25000, 512, 'sha256', (err, derived) => {
+    const isCurrent = hash.startsWith(CURRENT_PASSWORD_HASH_PREFIX)
+    const storedHashHex = isCurrent ? hash.slice(CURRENT_PASSWORD_HASH_PREFIX.length) : hash
+    const iterations = isCurrent ? CURRENT_PASSWORD_HASH_ITERATIONS : LEGACY_PASSWORD_HASH_ITERATIONS
+    const keyLength = isCurrent ? CURRENT_PASSWORD_HASH_KEY_LENGTH : LEGACY_PASSWORD_HASH_KEY_LENGTH
+    crypto.pbkdf2(password, salt, iterations, keyLength, 'sha256', (err, derived) => {
       if (err) return resolve(false)
       try {
-        const stored = Buffer.from(hash, 'hex')
+        const stored = Buffer.from(storedHashHex, 'hex')
         resolve(derived.length === stored.length && crypto.timingSafeEqual(derived, stored))
       } catch {
         resolve(false)
