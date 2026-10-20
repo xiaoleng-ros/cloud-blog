@@ -568,9 +568,11 @@ export async function GET(request: Request) {
     return response
   } catch (err) {
     console.error('[feishu/callback] error:', err)
-    // 对外只给错误编号 + 错误类型（不含消息/堆栈，避免泄露连接串等敏感信息）；
-    // 类型仅用于排障定位，例如 "Error" / "TypeError" / "LibsqlError" 等
+    // 对外只给错误编号 + 类型 + 截断消息（前 120 字符，不含堆栈），便于排障又不泄露连接串等敏感信息。
+    // 消息中若含疑似密钥/令牌（>=24 位连续字母数字）会被打码。
     const errType = err instanceof Error ? err.constructor.name : String(err)
-    return clearStateCookie(redirectToLogin(request.url, 'server_error', `type=${errType}`), secure)
+    const rawMsg = err instanceof Error ? err.message : String(err)
+    const safeMsg = rawMsg.replace(/[A-Za-z0-9]{24,}/g, '***').slice(0, 120)
+    return clearStateCookie(redirectToLogin(request.url, 'server_error', `type=${errType}&msg=${encodeURIComponent(safeMsg)}`), secure)
   }
 }
