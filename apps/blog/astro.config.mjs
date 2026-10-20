@@ -90,8 +90,11 @@ function siteUrlGuard() {
  * 那两种场景下「后台没起来」是正常状态（dev 靠轮询自愈、check 不关心数据），
  * 只有 build 才需要拦住空站；astro:build:done 只在构建时触发，天然区分。
  *
- * 严格拦的是两类事故：「后台正常但库里 0 篇已发布文章」和「PUBLIC_PAYLOAD_URL
- * 指错域名 → 静默回退本地 markdown」，两者都会照常打印 Complete!，随后被 build:all 带上线。
+ * 严格拦的是「PUBLIC_PAYLOAD_URL 指错域名 → 静默回退本地 markdown」这类事故，
+ * 它会照常打印 Complete!，随后被 build:all 带上线。
+ *
+ * 「后台正常但库里 0 篇已发布文章」不再中止：空站是合法状态（用户还没发布第一篇
+ * 正式内容时就是这样），中止反而会让上线流程卡死。这里只告警放行。
  *
  * 唯一例外：后台本身不可用（网络错误 / 5xx）时只告警放行。否则会形成死循环——
  * 环境变量只对「新部署」生效，而新部署的构建期要拉「旧部署」的 API；旧部署一旦 500
@@ -103,7 +106,7 @@ function emptySiteGuard() {
   const strictError = () =>
     new Error(
       '[astro.config] 构建产物里没有任何文章详情页（/posts/*），已中止。' +
-        '通常是后台拉取失败后静默回退了本地 markdown（src/content/posts 为空）：' +
+        '通常是 PUBLIC_PAYLOAD_URL 指错了域名导致静默回退本地 markdown（src/content/posts 为空）：' +
         '确认 PUBLIC_PAYLOAD_URL 指向的后台有已发布文章；本地刷新前台外壳请用 npm run sync:blog。',
     );
   return {
@@ -133,7 +136,11 @@ function emptySiteGuard() {
           );
           return;
         }
-        throw strictError();
+        // 后台可达但 0 篇已发布文章：空站是合法状态（尚未发布正式内容），只告警不中止。
+        logger?.warn?.(
+          '[empty-site-guard] ⚠️ 后台可达但没有已发布文章：本次放行空站部署。' +
+            '若这不是预期状态，请检查后台文章是否已发布（status=published）。',
+        );
       },
     },
   };
