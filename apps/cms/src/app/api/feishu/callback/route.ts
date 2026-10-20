@@ -72,6 +72,16 @@ const FEISHU_ERROR = {
   INVALID_REDIRECT_URI: 10016,
 } as const
 
+/**
+ * 飞书 v3 token 端点（accounts.feishu.cn/oauth/v3/token）的错误码。
+ * 与 v2（open.feishu.cn/open-apis/authen/v1/access_token）错误码体系不同。
+ * v3 走 OAuth 2.0 标准错误：error + error_description，同时附带 code 字段。
+ */
+const FEISHU_ERROR_V3 = {
+  /** 授权码不存在 / 已被消耗 —— 重放或回退重发同一 code */
+  CODE_NOT_FOUND: 20003,
+} as const
+
 // 已成功兑换过 token 的 code 集合（防重放用）
 // 重放原因：浏览器/代理可能自动重发 307 响应所携带的原始 URL，
 //           飞书端 code 是一次性的，第二次会被判"已使用"而报 10004
@@ -442,10 +452,18 @@ export async function GET(request: Request) {
       const result = await exchangeCodeForToken(code, appId, appSecret, redirectUri)
       accessToken = result.accessToken
     } catch (err) {
-      // 若飞书返回 10004（code 已被消耗），说明此前已成功登录过，视为成功跳转
+      // 若飞书返回「code 已被消耗 / 不存在」，说明此前已成功兑换过（重放或浏览器回退重发），
+      // 视为已登录直接跳 /admin。
+      // v2 端点错误码 10004，消息含 "has been used"；
+      // v3 端点错误码 20003，消息含 "can only be used once" / "not found"。
       const msg = (err as Error).message
-      if (msg.includes('has been used') || msg.includes(String(FEISHU_ERROR.CODE_USED))) {
-        console.log('[feishu/callback] 飞书返回 10004，判定为重放，跳 /admin')
+      const codeUsed =
+        msg.includes('has been used') ||
+        msg.includes('can only be used once') ||
+        msg.includes(String(FEISHU_ERROR.CODE_USED)) ||
+        msg.includes(String(FEISHU_ERROR_V3.CODE_NOT_FOUND))
+      if (codeUsed) {
+        console.log('[feishu/callback] 飞书返回 code 已消耗，判定为重放，跳 /admin')
         return clearStateCookie(redirectToAdmin(request.url), secure)
       }
       throw err
