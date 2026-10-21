@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolvePgTls } from '../../../lib/pg-tls'
+import { resolveStorageConfig, refFromUrl } from '../../../lib/supabase-storage'
 
 // 临时诊断端点（问题定位后可删除）：
 // EdgeOne 函数容器里拿不到交互式日志，这个端点把三类定位信息直接吐进 HTTP 响应：
@@ -116,6 +117,21 @@ export async function GET(request: NextRequest) {
     localSsl: process.env.PG_LOCAL_SSL === '1',
   })
 
+  // 2.7 存储配置（2026-10-21 图片全挂的关键诊断项）
+  //
+  // 症状是「图片管理页面全是破图、只显示 alt 文字」，但数据库 media.url 完全正确。
+  // 根因：afterRead 钩子用 generateFileURL **在读取时按环境变量重算** url，
+  // 覆盖掉库里那份，所以库对 ≠ 接口对。当时控制台的 SUPABASE_PROJECT_REF 抄错两位，
+  // 拼出的域名 DNS 都不存在（<错ref>.supabase.co → NXDOMAIN），表现为
+  // `<ref>.storage.supabase.co` 网关回 400 "Project not specified."。
+  //
+  // 这里把「实际生效的 ref / 端点」直接吐出来，与控制台项目地址一对比即现形。
+  // 只回显公开读地址（本来就是浏览器直连的公开 URL），不回显任何密钥。
+  const storage = resolveStorageConfig()
+  // 与 alignRef 共用同一条正则（含 .storage. 形状），否则诊断端点会把事故藏起来
+  const storageRef = refFromUrl(storage.publicBase) ?? null
+  const dbRef = /postgres\.([a-z0-9]{20})@/i.exec(process.env.POSTGRES_URL ?? '')?.[1] ?? null
+
   // 3. Payload 初始化真实报错
   // 生产缺配时 payload.config 的 fail-fast 会排程 setTimeout(exit(1))。
   // 诊断方置全局抑制开关，让 throw 仍发生（本端点捕获展示根因）但不再杀进程。
@@ -170,6 +186,21 @@ export async function GET(request: NextRequest) {
               : null,
         ca: pgTls.ca,
         trustStoreCerts: pgTls.trustStoreCerts,
+      },
+      /**
+       * 存储实际生效值。refMismatch=true 表示公开读域名用的 ref 与数据库连接串里的
+       * 不一致 —— 这就是「图片全挂但数据库一切正常」的那条路径，必须立刻修。
+       */
+      storage: {
+        ready: storage.ready,
+        bucket: storage.bucket ?? null,
+        publicBase: storage.publicBase ?? null,
+        endpoint: storage.endpoint ?? null,
+        configRef: storageRef,
+        dbRef,
+        refMismatch: Boolean(storageRef && dbRef && storageRef !== dbRef),
+        // 控制台手填的原始值（可能抄错），与上面实际生效值对照
+        envProjectRef: process.env.SUPABASE_PROJECT_REF ?? null,
       },
       payload,
     },
