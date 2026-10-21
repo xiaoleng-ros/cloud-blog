@@ -343,7 +343,17 @@ export const CommentsViewInner = () => {
   }
 
   const pageCount = Math.max(1, totalPages)
-  const article = (url: string) => titles[url] || postPath(url)
+  /**
+   * 所属文章：优先用后端映射的标题；查不到映射（文章已删、或旧格式
+   * slug 路径的评论挂不到现行 /posts/{分类}/{id}/ 体系）就截短路径兜底，
+   * 路径太长挤爆表格列。
+   */
+  const article = (url: string) => {
+    const title = titles[url]
+    if (title) return title
+    const path = postPath(url)
+    return path.length > 28 ? `${path.slice(0, 27)}…` : path
+  }
   const filtered = Boolean(keyword || from || to)
 
   const renderRow = (row: CommentRow, depth: number, expandable: boolean, open: boolean) => {

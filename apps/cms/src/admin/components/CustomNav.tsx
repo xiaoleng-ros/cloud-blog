@@ -91,18 +91,22 @@ export const CustomNav = () => {
   // 兜底：RouteTransition provider 缺席时 isTransitioning 恒为 false，靠路径变化收起指示
   useEffect(() => setPendingHref(null), [pathname])
 
-  // 重挂载后把滚动位置写回去；此时目录项已同步渲染，可直接赋值
-  useEffect(() => {
-    const saved = window.sessionStorage.getItem(NAV_SCROLL_KEY)
-    if (saved !== null) persistedScrollTop = Number(saved) || 0
-    if (wrapRef.current) wrapRef.current.scrollTop = persistedScrollTop
-  }, [])
-
-  // 恢复用户上次的分组开合状态（放 effect 里：hydration 完成前不碰 DOM 结构，避免水合不一致）
+  // 重挂载后恢复用户上次的分组开合（放 effect 里：hydration 完成前不碰 DOM 结构，避免水合不一致）
   useEffect(() => {
     const saved = readCollapsed()
     setCollapsed((prev) => (JSON.stringify(prev) === JSON.stringify(saved) ? prev : saved))
+
+    const savedScroll = window.sessionStorage.getItem(NAV_SCROLL_KEY)
+    if (savedScroll !== null) persistedScrollTop = Number(savedScroll) || 0
   }, [])
+
+  // 滚动恢复必须等开合状态落到 DOM 之后：目录初始按默认值渲染（「管理」「系统」折叠，
+  // 内容短、没有滚动条），过早赋 scrollTop 会被浏览器钳到 0，展开后位置就丢了。
+  // 依赖 collapsed：setCollapsed 触发重渲染、目录长出滚动条后再写回，位置才保得住。
+  // 平时手动开合分组时这里赋的是 persistedScrollTop 本身（onScroll 一直在同步它），等于空操作。
+  useEffect(() => {
+    if (wrapRef.current) wrapRef.current.scrollTop = persistedScrollTop
+  }, [collapsed])
 
   // 当前应高亮的菜单项（与标签页共用同一套匹配规则）
   const activeItem = resolveNavEntry(pathname, adminRoute)
