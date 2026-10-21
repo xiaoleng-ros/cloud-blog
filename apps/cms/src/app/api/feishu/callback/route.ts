@@ -37,11 +37,21 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
- * 飞书 OAuth Token 端点（2025 年后官方迁移）
- * 旧 v2 端点已不推荐，v3 修正了 PKCE 校验语义并统一到 accounts.feishu.cn 域名
- * 请求体字段（client_id / client_secret / code / redirect_uri）与 v2 一致
+ * 飞书 OAuth Token 端点
+ *
+ * ⚠️ 必须使用 v2 端点（open.feishu.cn/open-apis/authen/v1/access_token），不能用 v3
+ *    （accounts.feishu.cn/oauth/v3/token）。
+ * 原因：前端二维码 SDK 用的是旧版 passport 授权端点（passport.feishu.cn/suite/passport/oauth/authorize），
+ *      官方二维码 SDK 文档明确说明「暂不支持新版登录流程」，其产生的 code 只能用 v2 token 端点兑换。
+ *      v3 token 端点只接受新版 accounts.feishu.cn 授权端点产生的 code，混用会返回
+ *      20024 "The provided authorization code or refresh token does not match the provided client ID"。
+ *
+ * v2 流程分两步：
+ *   1. POST /auth/v3/app_access_token/internal  用 app_id + app_secret 换 app_access_token
+ *   2. POST /authen/v1/access_token             用 app_access_token(Bearer) + code 换 user_access_token
  */
-const FEISHU_TOKEN_URL = 'https://accounts.feishu.cn/oauth/v3/token'
+const FEISHU_APP_TOKEN_URL = 'https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal'
+const FEISHU_TOKEN_URL = 'https://open.feishu.cn/open-apis/authen/v1/access_token'
 const FEISHU_USER_INFO_URL = 'https://open.feishu.cn/open-apis/authen/v1/user_info'
 
 // JWT 默认过期时长：24h（原为 7 天；配合可吊销会话进一步压缩存活期）
@@ -51,14 +61,13 @@ const DEFAULT_TOKEN_EXPIRATION_SEC = 60 * 60 * 24
 const FEISHU_STATE_COOKIE = 'feishu-oauth-state'
 
 /**
- * 飞书 OAuth 授权状态码（v1 端点，accounts.feishu.cn）
- * 参考飞书官方文档 https://open.feishu.cn/document/server-docs/authentication-management/authen-overview
- * 注意：v1 端点错误码体系与 open.feishu.cn/v2 端点不同，不要混用
+ * 飞书 v2 token 端点（open.feishu.cn/open-apis/authen/v1/access_token）错误码
+ * 参考：https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/reference/authen-v1/authen/access_token
  */
 const FEISHU_ERROR = {
-  /** 授权码有效 —— 第一次回调成功 */
+  /** 成功 */
   OK: 0,
-  /** 授权码格式非法 —— 请求参数写错 */
+  /** 授权码格式非法 */
   INVALID_CODE: 10003,
   /** 授权码已被消耗 —— 同一 code 第二次请求，说明第一次已经成功处理过 */
   CODE_USED: 10004,
@@ -70,16 +79,6 @@ const FEISHU_ERROR = {
   USER_DENIED: 10009,
   /** 应用没有授权该 redirect_uri */
   INVALID_REDIRECT_URI: 10016,
-} as const
-
-/**
- * 飞书 v3 token 端点（accounts.feishu.cn/oauth/v3/token）的错误码。
- * 与 v2（open.feishu.cn/open-apis/authen/v1/access_token）错误码体系不同。
- * v3 走 OAuth 2.0 标准错误：error + error_description，同时附带 code 字段。
- */
-const FEISHU_ERROR_V3 = {
-  /** 授权码不存在 / 已被消耗 —— 重放或回退重发同一 code */
-  CODE_NOT_FOUND: 20003,
 } as const
 
 // 已成功兑换过 token 的 code 集合（防重放用）
@@ -183,25 +182,36 @@ function redirectToLogin(requestUrl: string, error: string, hint?: string) {
 }
 
 /**
- * 飞书 v3 token 响应结构（扁平化，无 data 包裹）
- * 与 v2 的区别：
- *   v2: { code, msg, data: { access_token, token_type, ... } }
- *   v3: { code, access_token, token_type, expires_in, ... }
- * 失败时字段为 error / error_description（而非 msg）
+ * 飞书 v2 token 响应结构（data 包裹）
+ * 成功：{ code: 0, msg: "success", data: { access_token, token_type, expires_in, ... } }
+ * 失败：{ code: 非0, msg: "错误描述" }
  */
 type FeishuTokenResponse = {
   code: number
-  // 成功字段
-  access_token?: string
-  expires_in?: number
-  refresh_token?: string
-  refresh_token_expires_in?: number
-  token_type?: string
-  scope?: string
-  // 失败字段
   msg?: string
-  error?: string
-  error_description?: string
+  data?: {
+    access_token?: string
+    token_type?: string
+    expires_in?: number
+    refresh_token?: string
+    name?: string
+    open_id?: string
+    union_id?: string
+    email?: string
+    mobile?: string
+    avatar_url?: string
+  }
+}
+
+/**
+ * 飞书 app_access_token 响应结构
+ * POST /auth/v3/app_access_token/internal
+ */
+type FeishuAppTokenResponse = {
+  code: number
+  msg?: string
+  app_access_token?: string
+  expire?: number
 }
 
 type FeishuUserInfoResponse = {
@@ -224,34 +234,55 @@ type FeishuUserInfoResponse = {
   }
 }
 
+/**
+ * 用 app_id + app_secret 换取 app_access_token（v2 流程第一步）
+ */
+async function getAppAccessToken(appId: string, appSecret: string): Promise<string> {
+  const resp = await fetch(FEISHU_APP_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+  })
+  const body = (await resp.json()) as FeishuAppTokenResponse
+  if (body.code !== 0 || !body.app_access_token) {
+    throw new Error(
+      `[feishu] get app_access_token failed: code=${body.code} msg=${body.msg ?? 'unknown'}`,
+    )
+  }
+  return body.app_access_token
+}
 
-
-/** 用 authorization code 换 access_token；失败抛错 */
+/**
+ * 用 authorization code 换 user_access_token；失败抛错（v2 流程第二步）
+ *
+ * v2 端点要求：
+ *   - Header: Authorization: Bearer <app_access_token>
+ *   - Content-Type: application/json; charset=utf-8
+ *   - Body: { grant_type: "authorization_code", code }
+ *     （注意：v2 不需要 client_id/client_secret/redirect_uri）
+ */
 async function exchangeCodeForToken(
   code: string,
-  appId: string,
-  appSecret: string,
-  redirectUri: string,
+  appAccessToken: string,
 ): Promise<{ accessToken: string; tokenType: string }> {
   const resp = await fetch(FEISHU_TOKEN_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      Authorization: `Bearer ${appAccessToken}`,
+    },
     body: JSON.stringify({
       grant_type: 'authorization_code',
-      client_id: appId,
-      client_secret: appSecret,
       code,
-      redirect_uri: redirectUri,
     }),
   })
   const body = (await resp.json()) as FeishuTokenResponse
-  // v3 响应是扁平结构：access_token 直接在顶层
-  if (body.code !== 0 || !body.access_token) {
-    // 失败时优先读 error_description，兜底 msg（兼容极个别返回）
-    const reason = body.error_description ?? body.msg ?? body.error ?? `code=${body.code}`
+  // v2 响应：access_token 在 data 里
+  if (body.code !== 0 || !body.data?.access_token) {
+    const reason = body.msg ?? `code=${body.code}`
     throw new Error(`[feishu] token exchange failed: ${reason}`)
   }
-  return { accessToken: body.access_token, tokenType: body.token_type ?? 'Bearer' }
+  return { accessToken: body.data.access_token, tokenType: body.data.token_type ?? 'Bearer' }
 }
 
 /**
@@ -433,9 +464,12 @@ export async function GET(request: Request) {
     }
 
     // 3. 校验必需环境变量
-    const appId = process.env.FEISHU_APP_ID
-    const appSecret = process.env.FEISHU_APP_SECRET
-    const redirectUri = process.env.FEISHU_REDIRECT_URI
+    //    ⚠️ 必须 trim + 去包裹引号：云平台控制台粘贴凭证时极易带上首尾空格 / 换行 / 引号，
+    //    值肉眼看起来一模一样，飞书却判定 secret 无效，返回 "The client secret is invalid."
+    //    （本地实测：错 secret 打 app_access_token 返回 10014 app secret invalid）
+    const appId = process.env.FEISHU_APP_ID?.trim().replace(/^["']|["']$/g, '')
+    const appSecret = process.env.FEISHU_APP_SECRET?.trim().replace(/^["']|["']$/g, '')
+    const redirectUri = process.env.FEISHU_REDIRECT_URI?.trim().replace(/^["']|["']$/g, '')
     if (!appId || !appSecret || !redirectUri) {
       return clearStateCookie(
         NextResponse.json(
@@ -446,22 +480,21 @@ export async function GET(request: Request) {
       )
     }
 
-    // 4. 用 code 换 access_token
+    // 4. 用 code 换 access_token（v2 两步流程：先 app_access_token，再 user_access_token）
     let accessToken: string
     try {
-      const result = await exchangeCodeForToken(code, appId, appSecret, redirectUri)
+      const appAccessToken = await getAppAccessToken(appId, appSecret)
+      const result = await exchangeCodeForToken(code, appAccessToken)
       accessToken = result.accessToken
     } catch (err) {
       // 若飞书返回「code 已被消耗 / 不存在」，说明此前已成功兑换过（重放或浏览器回退重发），
       // 视为已登录直接跳 /admin。
-      // v2 端点错误码 10004，消息含 "has been used"；
-      // v3 端点错误码 20003，消息含 "can only be used once" / "not found"。
+      // v2 端点错误码 10004，消息含 "has been used"。
       const msg = (err as Error).message
       const codeUsed =
         msg.includes('has been used') ||
         msg.includes('can only be used once') ||
-        msg.includes(String(FEISHU_ERROR.CODE_USED)) ||
-        msg.includes(String(FEISHU_ERROR_V3.CODE_NOT_FOUND))
+        msg.includes(String(FEISHU_ERROR.CODE_USED))
       if (codeUsed) {
         console.log('[feishu/callback] 飞书返回 code 已消耗，判定为重放，跳 /admin')
         return clearStateCookie(redirectToAdmin(request.url), secure)
