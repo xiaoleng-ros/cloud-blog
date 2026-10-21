@@ -18,7 +18,11 @@ import { NextResponse } from 'next/server'
  *
  * 数据源：
  *   - 提交列表：`/repos/{owner}/{repo}/commits?path=<dir>&per_page=100&page=N`（无需 token）
- *   - 贡献热力图：GitHub 没有公开的 REST 接口，用社区维护的 jogruber contributions API
+ *   - 贡献热力图：首选 GitHub 官方贡献日历页 `github.com/users/{user}/contributions`（HTML），
+ *     解析其中的 data-date / data-level / tool-tip。它与 api.github.com 同属 github.com 域名，
+ *     在 EdgeOne 函数节点上出网稳定；备用源才是社区维护的 jogruber API。
+ *     ⚠️ 曾经只用 jogruber，线上一直返回 contributions:null —— 该第三方域名在
+ *     云函数出口不可达（本地直连正常，极易误判成"接口挂了"），故降级为兜底。
  *
  * 缓存：进程内 5 分钟（同一个函数实例内复用），避免反复打 GitHub 的 60 次/小时限流。
  * 容错：任一上游失败都只降级对应区块（groups[].error / contributions:null），不整体 500。
@@ -92,20 +96,98 @@ function toLevel(count: number): 0 | 1 | 2 | 3 | 4 {
   return 4
 }
 
+async function fetchText(url: string, headers: Record<string, string> = {}, timeoutMs = 12000) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, {
+      headers: { 'user-agent': 'cloud-blog-cms', ...headers },
+      signal: ctrl.signal,
+      cache: 'no-store',
+    })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return await res.text()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * 主数据源：GitHub 官方贡献日历页（HTML）。
+ *
+ * 为什么用它：GitHub 没有提供公开的 contributions REST 接口（GraphQL 需要 token），
+ * 但个人页上的贡献日历 HTML 是公开可抓的。它与 api.github.com 同域，
+ * 在云函数出口的可达性远好于第三方镜像站点。
+ *
+ * 结构（每个格子一个 <td>）：
+ *   <td data-date="2026-01-04" data-level="0" ...>
+ *     <tool-tip ...>2 contributions on May 3rd.</tool-tip>
+ * 计数只能从 tool-tip 文本里取（"No contributions on ..." 表示 0）。
+ * 按 <td 切块解析比全局正则配对更稳，能保证 date/level/count 属于同一格子。
+ */
+async function loadContributionsFromGitHub(year: number): Promise<Payload['contributions']> {
+  const url =
+    `https://github.com/users/${GITHUB_USER}/contributions` +
+    `?from=${year}-01-01&to=${year}-12-31`
+  const html = await fetchText(url, { accept: 'text/html' }, 20000)
+  const chunks = html.split(/<td\b/).slice(1)
+  const days: ContributionDay[] = []
+  for (const chunk of chunks) {
+    const dateMatch = chunk.match(/data-date="(\d{4}-\d{2}-\d{2})"/)
+    if (!dateMatch) continue
+    const date = dateMatch[1]
+    if (!date.startsWith(String(year))) continue
+    const levelMatch = chunk.match(/data-level="([0-4])"/)
+    let count = 0
+    const tipMatch = chunk.match(/<tool-tip[^>]*>([^<]*)<\/tool-tip>/)
+    if (tipMatch) {
+      const tip = tipMatch[1].trim()
+      if (!/^No contributions/i.test(tip)) {
+        const num = tip.match(/^(\d+)\s+contribution/i)
+        if (num) count = Number(num[1])
+      }
+    }
+    days.push({
+      date,
+      count,
+      level: (levelMatch ? Number(levelMatch[1]) : toLevel(count)) as ContributionDay['level'],
+    })
+  }
+  if (!days.length) return null
+  days.sort((a, b) => a.date.localeCompare(b.date))
+  return { total: days.reduce((sum, d) => sum + d.count, 0), days }
+}
+
+/** 备用源：社区镜像 jogruber（部分云函数出口访问不到，仅作兜底） */
+async function loadContributionsFromMirror(year: number): Promise<Payload['contributions']> {
+  const raw = (await fetchJson(
+    `https://github-contributions-api.jogruber.de/v4/${GITHUB_USER}?y=${year}`,
+  )) as { contributions?: Array<{ date: string; count: number }> }
+  const list = Array.isArray(raw.contributions) ? raw.contributions : []
+  if (!list.length) return null
+  const days: ContributionDay[] = list
+    .filter((d) => typeof d.date === 'string' && d.date.startsWith(String(year)))
+    .map((d) => ({ date: d.date, count: Number(d.count) || 0, level: toLevel(Number(d.count) || 0) }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+  if (!days.length) return null
+  return { total: days.reduce((sum, d) => sum + d.count, 0), days }
+}
+
+/**
+ * 贡献热力图：先试官方页，失败再试镜像。
+ * 两个源都失败才返回 null（前端显示"接口未返回"占位）。
+ */
 async function loadContributions(year: number): Promise<Payload['contributions']> {
   try {
-    const raw = (await fetchJson(
-      `https://github-contributions-api.jogruber.de/v4/${GITHUB_USER}?y=${year}`,
-    )) as { contributions?: Array<{ date: string; count: number }> }
-    const list = Array.isArray(raw.contributions) ? raw.contributions : []
-    if (!list.length) return null
-    const days: ContributionDay[] = list
-      .filter((d) => typeof d.date === 'string' && d.date.startsWith(String(year)))
-      .map((d) => ({ date: d.date, count: Number(d.count) || 0, level: toLevel(Number(d.count) || 0) }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-    if (!days.length) return null
-    return { total: days.reduce((sum, d) => sum + d.count, 0), days }
-  } catch {
+    const primary = await loadContributionsFromGitHub(year)
+    if (primary) return primary
+  } catch (err) {
+    console.warn('[changelog] GitHub 贡献日历抓取失败，转备用源：', (err as Error).message)
+  }
+  try {
+    return await loadContributionsFromMirror(year)
+  } catch (err) {
+    console.warn('[changelog] 备用贡献源也失败：', (err as Error).message)
     return null
   }
 }
