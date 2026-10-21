@@ -14,9 +14,9 @@ import { withPayload } from '@payloadcms/next/withPayload'
  */
 const nextConfig = {
   reactStrictMode: false,
-  // Waline 服务端（ThinkJS）在运行时用动态 require 加载其 src/*，被打包器静态分析会碎，
-  // 必须保持为 server external，交给 createRequire 在 node_modules 里原样解析。
-  serverExternalPackages: ['@waline/vercel', 'thinkjs', 'think-model-postgresql', 'ip2region'],
+  // 评论服务已切换为自写 waline-server.ts（pg 直连 wl_* 表），不再依赖 @waline/vercel。
+  // 保留 ip2region 为 external：它有原生 .xdb 二进制数据文件，打包器静态分析会碎。
+  serverExternalPackages: ['ip2region'],
   experimental: {
     // EdgeOne 云函数包有 128MiB 硬限额；turbopack 默认会往 .next/server 写 ~78MB
     // 服务端 source map（本地实测 675 个 .map），运行时与排障都用不到，关掉。
