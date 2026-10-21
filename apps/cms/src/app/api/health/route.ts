@@ -4,6 +4,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolvePgTls } from '../../../lib/pg-tls'
 import { resolveStorageConfig, refFromUrl } from '../../../lib/supabase-storage'
+import { describeWalineEnv, configuredEnv } from '../../../lib/waline-env'
 
 // 临时诊断端点（问题定位后可删除）：
 // EdgeOne 函数容器里拿不到交互式日志，这个端点把三类定位信息直接吐进 HTTP 响应：
@@ -77,6 +78,16 @@ export async function GET(request: NextRequest) {
     // PG_SSL_INSECURE：若线上为 true，说明走了降级分支、报的是别的问题
     PG_SSL_INSECURE: process.env.PG_SSL_INSECURE ?? null,
     SUPABASE_CA_FILE: process.env.SUPABASE_CA_FILE ?? null,
+    // Waline 的存储拆分变量：曾经一个都没有探针，线上缺配时这里看不出来。
+    // 用 configuredEnv 而不是直接读 process.env —— 后者已被 waline-env 推导过，
+    // 会把「我们补的」误报成「运维配的」。
+    POSTGRES_DATABASE: configuredEnv.POSTGRES_DATABASE,
+    POSTGRES_HOST: configuredEnv.POSTGRES_HOST,
+    POSTGRES_USER: configuredEnv.POSTGRES_USER,
+    POSTGRES_PASSWORD: configuredEnv.POSTGRES_PASSWORD,
+    POSTGRES_PREFIX: configuredEnv.POSTGRES_PREFIX,
+    POSTGRES_SSL: configuredEnv.POSTGRES_SSL,
+    JWT_TOKEN: configuredEnv.JWT_TOKEN,
   }
 
   // 2.5 Supabase CA 证书探测（2026-10-12 线上 Payload 全站 500 的关键诊断项）
@@ -131,6 +142,19 @@ export async function GET(request: NextRequest) {
   // 与 alignRef 共用同一条正则（含 .storage. 形状），否则诊断端点会把事故藏起来
   const storageRef = refFromUrl(storage.publicBase) ?? null
   const dbRef = /postgres\.([a-z0-9]{20})@/i.exec(process.env.POSTGRES_URL ?? '')?.[1] ?? null
+
+  // 2.8 Waline 评论存储（2026-10-21 评论页「操作失败」的关键诊断项）
+  //
+  // 症状是后台评论管理一律「操作失败，请稍后重试」，而库里 wl_comment 完全正常。
+  // 根因：@waline/vercel/src/config/config.js 在模块加载期靠 **拆分变量**
+  // （PG_DB / POSTGRES_DATABASE）选存储，POSTGRES_URL 根本不参与判定；线上只配了
+  // POSTGRES_URL，于是 require 阶段就抛 'No valid storage found'，被 index.js 吞进
+  // 日志、Next 回 0 字节空 500。
+  //
+  // 现在由 src/lib/waline-env.ts 从 POSTGRES_URL 推导，这里回显**实际生效值**：
+  // source=derived 说明靠推导、split 说明控制台配了拆分变量、error 非空说明彻底没配置。
+  // 同时回显 host/user，Supabase pooler 的 user=postgres.<ref>，ref typo 一眼现形。
+  const waline = describeWalineEnv()
 
   // 3. Payload 初始化真实报错
   // 生产缺配时 payload.config 的 fail-fast 会排程 setTimeout(exit(1))。
@@ -202,6 +226,12 @@ export async function GET(request: NextRequest) {
         // 控制台手填的原始值（可能抄错），与上面实际生效值对照
         envProjectRef: process.env.SUPABASE_PROJECT_REF ?? null,
       },
+      /**
+       * Waline 评论存储实际生效值。注意上面的 env 段是**推导之前**拍的快照，
+       * 所以「env.POSTGRES_DATABASE=false 但 waline.source=derived」是正常组合，
+       * 含义是「控制台没配拆分变量，由 POSTGRES_URL 推导补齐」。
+       */
+      waline,
       payload,
     },
     { status: payload.ok ? 200 : 503 },

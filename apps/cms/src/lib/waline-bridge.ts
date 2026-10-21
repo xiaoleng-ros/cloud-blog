@@ -1,5 +1,6 @@
 import http from 'node:http'
 import { createRequire } from 'node:module'
+import { ensureWalineEnv, WalineConfigError } from './waline-env'
 
 /**
  * 把 Waline 服务端（ThinkJS/Koa）以「进程内 HTTP 服务」的形态挂进 Next。
@@ -38,6 +39,14 @@ async function startBridge(): Promise<Bridge> {
   if (starting) return starting
 
   starting = (async () => {
+    /*
+     * 必须在 require('@waline/vercel') 之前把存储变量补齐：
+     * 它的 src/config/config.js 在**模块加载期**读 process.env 选后端，缺
+     * POSTGRES_DATABASE 就直接抛 'No valid storage found'（POSTGRES_URL 不参与判定）。
+     * 详见 src/lib/waline-env.ts 顶部注释。
+     */
+    ensureWalineEnv()
+
     // @waline/vercel 是 CJS，且 ThinkJS 用运行时动态 require 加载其 src/*，
     // 必须保持 external（见 next.config.mjs 的 serverExternalPackages），
     // 因此这里用 createRequire 在运行时解析，绕开打包器的静态分析。
@@ -55,7 +64,20 @@ async function startBridge(): Promise<Bridge> {
      * 不受影响的情况：管理员自己发的评论走 `isAdmin(ctx)` 分支被强制置 approved
      * （后台回复读者、站长留言都直接上线），审核队列只拦访客。
      */
-    const handler = createApp({ audit: true })
+    const handler = (() => {
+      try {
+        return createApp({ audit: true })
+      } catch (err) {
+        /*
+         * 把启动失败转成带 status 的 WalineConfigError，而不是让原始异常裸奔：
+         * Next 对未捕获的 route 异常只会回一个**0 字节的空 500**，前端
+         * describeApiError 再把它显示成「操作失败，请稍后重试」—— 排查时既看不到
+         * 原因也看不到是配置问题（2026-10-21 评论页事故就这么被藏了两周）。
+         */
+        const detail = err instanceof Error ? err.message : String(err)
+        throw new WalineConfigError(`评论服务启动失败：${detail}`)
+      }
+    })()
 
     const server = http.createServer((req, res) => {
       handler(req, res).catch((err) => {

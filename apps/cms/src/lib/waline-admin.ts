@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import { Client } from 'pg'
 import { forwardToWaline } from './waline-bridge'
 import { resolvePgTls } from './pg-tls'
+import { ensureWalineEnv, WalineConfigError } from './waline-env'
 
 /**
  * 后台评论管理的服务端入口：以「管理员身份」调用进程内 Waline。
@@ -163,8 +164,15 @@ async function ensureAdminAccountId(): Promise<number> {
 }
 
 function mintAdminToken(): string {
+  /*
+   * 先 ensureWalineEnv()：它负责在缺 JWT_TOKEN 时由数据库口令派生一枚。
+   * 直接读 process.env 会在「控制台只配了 POSTGRES_URL」的线上环境里抛
+   * 「未配置 JWT_TOKEN」，把真正要走的推导路径挡在门外。
+   * 万一推导也做不了（连 POSTGRES_URL 都没有），它抛的是可读的 WalineConfigError。
+   */
+  ensureWalineEnv()
   const key = process.env.JWT_TOKEN
-  if (!key) throw new WalineAdminError('未配置 JWT_TOKEN，后台无法访问评论服务', 500)
+  if (!key) throw new WalineConfigError('未配置 JWT_TOKEN，后台无法访问评论服务')
   /*
    * payload 必须**就是 id 本身**，不能包成对象：
    * Waline 的 resolveSession（@waline/core dist/index.js）拿到 verify 的结果后直接当 objectId 用 ——

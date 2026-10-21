@@ -3,6 +3,7 @@ import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
 import { verifyRequestUser } from './feishu-session'
 import { WalineAdminError } from './waline-admin'
+import { WalineConfigError } from './waline-env'
 
 /**
  * 评论管理路由的共用闸门：登录态 + 同源 + 错误序列化。
@@ -52,6 +53,11 @@ export async function requireAdmin(request: Request, write = false): Promise<Gua
 /** 把 Waline 侧的失败转成前端可读的 errors[].message */
 export const toErrorResponse = (error: unknown) => {
   // 面向用户的文案由前端 describeApiError 统一收敛成通用提示，真实原因只留服务端日志
+  if (error instanceof WalineConfigError) {
+    // 配置缺失是可自愈的运维问题，503 比 500 更准确（前端会提示稍后重试）
+    console.error('[comments] 配置错误:', error.message)
+    return errorJson(error.message, error.status)
+  }
   if (error instanceof WalineAdminError) {
     if (error.status >= 500) console.error('[comments]', error.message)
     return errorJson(error.message, error.status)

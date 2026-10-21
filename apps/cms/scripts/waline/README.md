@@ -18,14 +18,29 @@ GRANT ALL ON SCHEMA waline TO waline_user;
 ## 生产（Supabase + EdgeOne）
 
 1. Supabase **SQL Editor** 整段执行 `schema.sql`（生产 Payload 从不 push，直接建在 `public` 即可）。
-2. EdgeOne 环境变量新增下面这组。**只加拆分变量，不要动 Payload 用的 `POSTGRES_URL`**——两套连接各读各的：
+2. EdgeOne 环境变量：**`POSTGRES_URL` 配好就够了**，评论服务会自己从中推导存储变量。
 
    ```
-   POSTGRES_DATABASE / POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_HOST / POSTGRES_PORT
-   POSTGRES_PREFIX=wl_
-   POSTGRES_SSL=true          # Supabase 直连 5432 需要；pooler 6543 亦可用
-   JWT_TOKEN=<openssl rand -hex 32 的结果，勿与本地相同>
-   COMMENT_AUDIT=true         # 先审后发
+   POSTGRES_URL=postgresql://...      # 与 Payload 共用的那一条，唯一必填项
+   ```
+
+   `src/lib/waline-env.ts` 会在 `require('@waline/vercel')` 之前把它拆成
+   `POSTGRES_HOST / PORT / USER / PASSWORD / DATABASE`，并补 `POSTGRES_PREFIX=wl_`
+   与远程库的 `POSTGRES_SSL=true`；缺 `JWT_TOKEN` 时由数据库口令派生 sha256。
+
+   为什么必须这么做：`@waline/vercel/src/config/config.js` 在**模块加载期**靠
+   `PG_DB || POSTGRES_DATABASE` 选存储后端，`POSTGRES_URL` 完全不参与判定。
+   少配一个变量就在 require 阶段抛 `No valid storage found`，被 `index.js` 吞进日志、
+   Next 回 0 字节空 500，前端显示成「操作失败，请稍后重试」——2026-10-21 就是这么
+   排查了两周。现在改用推导，`/api/health` 的 `waline` 段能看到实际生效值。
+
+   想覆盖推导值照旧配拆分变量，程序只在**变量为空时**才补：
+
+   ```
+   POSTGRES_PREFIX=wl_        # 可选，默认 wl_
+   POSTGRES_SSL=true          # 可选，远程库默认就是 true
+   JWT_TOKEN=<openssl rand -hex 32 的结果，勿与本地相同>   # 可选，缺省由 DB 口令派生
+   COMMENT_AUDIT=true         # 可选，代码里已强制 audit: true，配了也不会变成自动通过
    IPQPS=60                   # 同一 IP 两次提交最小间隔（秒）
    FORBIDDEN_WORDS=词1,词2     # 命中即标 spam，不进公开列表
    ```
@@ -58,6 +73,12 @@ curl -s -X DELETE $S/api/comment/ID -H "Authorization: Bearer $TOKEN"
 
 ## 已知坑
 
+- **存储变量只能靠 `POSTGRES_URL` 推导**：`@waline/vercel` 的 config.js 不认 POSTGRES_URL，
+  只认 `PG_DB` / `POSTGRES_DATABASE` 等拆分变量，且判定发生在模块加载期。推导逻辑在
+  `src/lib/waline-env.ts`，改这里之前先读它的顶部注释。
+- **启动错误会被吞**：`@waline/vercel/index.js` 的 `beforeStartServer().catch(err => logger.error(err))`
+  让配置/连接失败只留一行日志；桥接层现在把 `createApp()` 的异常转成 `WalineConfigError`（503），
+  路由回 `{errno,errmsg}` 信封，别再让它变成空 500。
 - **提交必须带 `mail` 字符串**：服务端头像模板对缺失/NULL 的 `mail` 直接抛 500；匿名评论发 `mail: ''` 走 `md5('')` 默认头像。已落库的 NULL-mail 行会让该路径的列表接口一起崩。
 - **`ua` 走请求体**，不是请求头；浏览器/系统徽章由服务端解析 `ua` 得出。
 - **IP 不外泄**：格式化时删掉 `ip`/`mail`，前端只拿 `addr`（ip2region 属地）+ `browser` + `os`。
