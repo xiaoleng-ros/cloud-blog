@@ -22,9 +22,24 @@ function diagnose(result: StorageSelfTestResult): string {
   if (bucketErr.ok) return '四段链路全部通过，图片上传应当正常。'
   const text = `${bucketErr.error ?? ''} ${bucketErr.code ?? ''}`
   if (/SignatureDoesNotMatch/i.test(text)) {
+    // 长度判据比「签名不匹配」有用得多：Supabase 的 key 长度是固定的
+    // （accessKeyId 32 位、secretAccessKey 64 位）。长度对不上 ⇒ 值在复制环节被
+    // 截断/多粘了字符，重新复制一次即可；长度正常却还签名失败 ⇒ 是真·旧密钥。
+    // 两者处置不同（改粘贴 vs 重置），所以这里必须先分开。
+    const c = result.config
+    const wrongLength =
+      c.accessKeyIdLength !== 32 || c.secretAccessKeyLength !== 64
+    if (wrongLength) {
+      return (
+        `凭据长度不对（accessKeyId ${c.accessKeyIdLength} 位、secretAccessKey ${c.secretAccessKeyLength} 位；` +
+        `Supabase 固定为 32 / 64 位）—— 值在复制粘贴时被截断或多带了字符。` +
+        `请回 Supabase 控制台 Storage → S3 access keys 重新完整复制一次。`
+      )
+    }
     return (
-      '凭据签名不匹配，且环境变量本身是干净的 —— 说明 EdgeOne 里的 SUPABASE_S3_SECRET_ACCESS_KEY ' +
-      '与 Supabase 控制台当前那份不一致（多半是轮换过或复制的是旧的）。请重新复制一次密钥并保存。'
+      '凭据签名不匹配，且环境变量本身干净、长度也正确 —— 说明 EdgeOne 里的 ' +
+      'SUPABASE_S3_SECRET_ACCESS_KEY 与 Supabase 控制台当前那份不一致（多半是轮换过或复制的是旧的）。' +
+      '请重新复制一次密钥并保存。'
     )
   }
   if (/InvalidAccessKeyId/i.test(text)) {
