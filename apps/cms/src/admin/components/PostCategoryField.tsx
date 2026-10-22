@@ -17,6 +17,8 @@ import { REQUEST_TIMEOUT_MS } from '../views/lib/api'
 interface CategoryDoc {
   id: number
   name: string
+  /** 分类标识：文章 URL 的分类段优先用它（/posts/{slug}/{id}），留空回退分类名 */
+  slug?: string | null
   sort?: number | null
 }
 
@@ -74,8 +76,9 @@ export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
     setValue(nextId || null, true)
   }
 
-  // 计算选中分类名（用于 URL 预览）
+  // 计算选中分类（用于 URL 预览）：文章链接的分类段是「分类标识」，留空回退分类名
   const selected = categories.find((c) => String(c.id) === currentId)
+  const segment = (selected?.slug || selected?.name || '').trim()
 
   return (
     <div className="post-category-field">
@@ -96,7 +99,7 @@ export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
       </select>
       <p className="post-category-field__preview">
         {selected
-          ? `文章将归入「${selected.name}」分类`
+          ? `文章将归入「${selected.name}」分类，链接形如 /posts/${segment || '…'}/${'{文章ID}'}`
           : '必须先选择分类，才能确定文章链接'}
       </p>
       <FieldError message={errorMessage} showError={showError} />

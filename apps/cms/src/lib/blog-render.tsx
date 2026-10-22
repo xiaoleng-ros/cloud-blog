@@ -87,6 +87,7 @@ import {
   getTags,
   getCategoryPath,
   getTagPath,
+  getPostCategorySegment,
   getPostsByCategory,
   getPostsByTag,
   ARCHIVE_PAGE_SIZE,
@@ -108,15 +109,14 @@ const SITE_DEFAULTS = {
 
 const site = { ...SITE_DEFAULTS }
 
-/** 从 post 上取分类名（data.categories 已归一为字符串数组，取第一个） */
-const postCategoryName = (post: MdEntry): string => {
-  const cats = post.data?.categories
-  if (Array.isArray(cats) && cats.length > 0) return String(cats[0])
-  return 'uncategorized'
-}
+/**
+ * 从 post 上取文章 URL 里的分类段（取第一个分类）。
+ * 优先「分类标识」(slug) → `/posts/daily/46`；slug 为空时回退分类名。
+ */
+const postCategoryName = (post: MdEntry): string => getPostCategorySegment(post)
 
 /**
- * 文章详情页路径：/posts/{分类名}/{数字ID}
+ * 文章详情页路径：/posts/{分类标识}/{数字ID}
  *
  * 末尾**不带**尾斜杠。EdgeOne CDN 会在函数之前把所有带尾斜杠的 URL 308 去斜杠，
  * 而它的 Location 头把 UTF-8 字节按 latin1 输出 —— `/posts/日常生活/46/` 会被跳到
@@ -1273,10 +1273,10 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
   }
 }
 
-/** 文章详情页：URL 形如 /posts/{分类名}/{数字ID}/，按数字 ID 精确匹配 */
+/** 文章详情页：URL 形如 /posts/{分类标识}/{数字ID}，按数字 ID 精确匹配（分类段不参与匹配） */
 async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<string, string | null>> {
   const segs = pathname.split('/')
-  // 例：/posts/技术/42/ → ['','posts','技术','42','']
+  // 例：/posts/tech/42 → ['','posts','tech','42']
   const postId = decodeURIComponent(segs[3] ?? '')
   const posts = sortPosts(ctx.posts)
   const post = posts.find((p) => String(p.id) === postId)
@@ -1642,29 +1642,44 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
 }
 
 /**
- * 根据页面路径组装动态区块（/api/blog-sync 的主入口）。
- * pathname 形如 '/'、'/posts/xxx'、'/archive'、'/notes'、'/about'、'/categories/xxx'、'/tags/xxx'。
+ * 历史链接 → 现行规范路径的 301 映射。
  *
- * 性能：先取 sync-cache 的数据快照（命中则零查库）；若该 pathname 的区块缓存版本号
- * 与当前一致，直接返回缓存（零渲染）。否则渲染一次并写回区块缓存。afterChange 钩子
- * 会清除缓存，使下一次请求重新渲染最新数据。
- */
-/**
- * 历史链接 /posts/{id}/ → 现行规范路径 /posts/{分类名}/{id}/。
+ * 两种历史形态：
+ * 1. `/posts/{id}` —— 最早的纯 ID 链接；
+ * 2. `/posts/{分类名}/{id}` —— 改用「分类标识」前的中文分类名链接
+ *    （同一篇文章现在的规范路径是 `/posts/{slug}/{id}`）。
  *
  * Astro 静态输出（无 adapter）不会执行 getStaticPaths 里的 redirect，所以旧链接在
  * 构建产物中是一份完整页面；真正的 301 只能由「实际负责返回 HTML 的这一层」来做。
- * @returns 命中旧链接形态时返回规范路径，其余情况返回 null
+ * @returns 命中旧链接形态且需要跳转时返回规范路径，其余情况返回 null
  */
 export async function resolveLegacyPostPath(pathname: string): Promise<string | null> {
-  const matched = /^\/posts\/([^/]+)\/?$/.exec(pathname)
-  if (!matched) return null
-  const id = decodeURIComponent(matched[1])
-  // 现行形态是两段（分类名 + ID），单段且全是数字的才可能是旧链接
+  const legacy = /^\/posts\/([^/]+)\/?$/.exec(pathname)
+  const current = /^\/posts\/([^/]+)\/([^/]+)\/?$/.exec(pathname)
+  if (!legacy && !current) return null
+
+  // 段是 URL 编码的；decodeURIComponent 对畸形输入会抛，交给调用方的 try/catch 兜底
+  const decode = (value: string | undefined) => decodeURIComponent(value ?? '')
+  const id = legacy ? decode(legacy[1]) : decode(current?.[2])
+  // 文章 ID 必为数字；分类段是文本，所以两种形态都能靠 ID 段识别
   if (!/^\d+$/.test(id)) return null
+
   const snapshot = await getSyncData()
   const post = snapshot.posts.find((entry) => String(entry.id) === id)
-  return post ? getPostPath(post) : null
+  if (!post) return null
+
+  const canonical = getPostPath(post)
+  // 已经是规范形态就返回 null，避免自我 301 死循环
+  if (current) {
+    const segment = parsePostSegment(canonical)
+    if (decode(current[1]) === segment) return null
+  }
+  return canonical
+}
+
+/** 从规范文章路径 /posts/{segment}/{id} 里取出分类段 */
+function parsePostSegment(canonical: string): string {
+  return decodeURIComponent(canonical.split('/')[2] ?? '')
 }
 
 // ---------------------------------------------------------------------------
@@ -1818,6 +1833,14 @@ export function buildSiteIndex(ctx: {
   return [...pageEntries, ...postEntries, ...noteEntries, ...projectEntries, ...termEntries]
 }
 
+/**
+ * 根据页面路径组装动态区块（/api/blog-sync 的主入口）。
+ * pathname 形如 '/'、'/posts/xxx'、'/archive'、'/notes'、'/about'、'/categories/xxx'、'/tags/xxx'。
+ *
+ * 性能：先取 sync-cache 的数据快照（命中则零查库）；若该 pathname 的区块缓存版本号
+ * 与当前一致，直接返回缓存（零渲染）。否则渲染一次并写回区块缓存。afterChange 钩子
+ * 会清除缓存，使下一次请求重新渲染最新数据。
+ */
 export async function renderBlocksForPathname(pathname: string): Promise<{
   version: string
   title: string | null

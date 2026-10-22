@@ -344,8 +344,8 @@ export const CommentsViewInner = () => {
 
   const pageCount = Math.max(1, totalPages)
   /**
-   * 所属文章：优先用后端映射的标题；查不到映射（文章已删、或旧格式
-   * slug 路径的评论挂不到现行 /posts/{分类}/{id}/ 体系）就截短路径兜底，
+   * 所属文章：优先用后端映射的标题；查不到映射（文章已删、或评论挂在别的
+   * URL 形态上，与现行 /posts/{分类标识}/{id} 对不上）就截短路径兜底，
    * 路径太长挤爆表格列。
    */
   const article = (url: string) => {

@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { sanitizeSlug, sanitizeTerm } from 'cloud-blog/shared/post-utils'
 import { publishedOnlyForAnonymous } from '../lib/access'
 import { syncInvalidateHook } from '../lib/sync-cache'
 
@@ -10,12 +11,18 @@ export const Posts: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'status', 'updatedAt'],
-    // URL 由「分类 / 文章 ID」拼接：/posts/{categoryName}/{postId}/
-    // categoryName 来自 categories 关系（单选必填，见下方字段）
+    // URL 由「分类标识 / 文章 ID」拼接：/posts/{categorySlug}/{postId}
+    // categorySlug 来自 categories 关系的 slug 字段；未填 slug 时回退分类名
+    // （与前台 getPostCategorySegment 同一口径，见 shared/post-utils）
     preview: (doc) => {
-      const cat = (doc as unknown as { categories?: { name?: string } | { name?: string }[] }).categories
-      const name = Array.isArray(cat) ? cat[0]?.name : cat?.name
-      return `/posts/${encodeURIComponent(name || '')}/${doc.id}/`
+      const cat = (doc as unknown as {
+        categories?: { name?: string; slug?: string } | { name?: string; slug?: string }[]
+      }).categories
+      const ref = Array.isArray(cat) ? cat[0] : cat
+      // 与前台 getPostCategorySegment 同口径：slug 优先（做 URL 段清洗），空则回退分类名
+      const segment =
+        sanitizeSlug(ref?.slug ?? '') || sanitizeTerm(ref?.name ?? '') || 'uncategorized'
+      return `/posts/${encodeURIComponent(segment)}/${doc.id}`
     },
     components: {
       // 定制管理列表：搜索/分类/标签/日期筛选 + 导出/导入 + 批量移入回收站
@@ -52,7 +59,7 @@ export const Posts: CollectionConfig = {
         },
       },
     },
-    // 文章分类：单选必填。URL 由「分类名 / 文章 ID」拼接，不再手填 slug
+    // 文章分类：单选必填。URL 由「分类标识 / 文章 ID」拼接（分类未填标识时回退分类名），不手填 slug
     {
       name: 'categories',
       type: 'relationship',
@@ -61,7 +68,8 @@ export const Posts: CollectionConfig = {
       label: '文章分类',
       admin: {
         position: 'sidebar',
-        description: '仅能选择系统里已有的分类，URL 由「分类名 + 文章 ID」自动拼接',
+        description:
+          '仅能选择系统里已有的分类。URL 由「分类标识 + 文章 ID」自动拼接（分类未填标识时回退分类名）',
         components: {
           Field: '/src/admin/components/PostCategoryField.tsx#PostCategoryField',
         },

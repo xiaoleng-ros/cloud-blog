@@ -27,6 +27,9 @@ const posts = defineCollection({
       cover: z.string().optional(),
       coverAlt: z.string().optional(),
       categories: stringList,
+      // 与 categories 下标对齐的「分类标识」(slug)；文章 URL 分类段优先用它。
+      // 后台 slug 为可选，缺失的位置会是空串，getPostCategorySegment 会回退分类名。
+      categorySlugs: stringList,
       tags: stringList,
       keywords: stringList,
       ai: stringList,

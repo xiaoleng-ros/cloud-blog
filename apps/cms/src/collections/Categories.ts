@@ -31,8 +31,8 @@ export const Categories: CollectionConfig = {
     read: () => true, // 公开可读
   },
   hooks: {
-    // 分类名直接决定文章 URL（/posts/{分类名}/{id}/），改名/删除都要让前台缓存与 SSE 失效，
-    // 否则旧链接映射残留 → 死链（此前只有 Posts/Notes/Projects 挂了同步钩子）。
+    // 分类名与「分类标识」(slug) 都参与文章 URL（/posts/{slug}/{id}），改名/删除都要让
+    // 前台缓存与 SSE 失效，否则旧链接映射残留 → 死链（此前只有 Posts/Notes/Projects 挂了同步钩子）。
     afterChange: [syncInvalidateHook],
     afterDelete: [syncInvalidateHook],
     beforeChange: [
@@ -123,7 +123,8 @@ export const Categories: CollectionConfig = {
       label: '分类标识',
       admin: {
         position: 'sidebar',
-        description: '仅用于导入脚本等内部标识；前台文章 URL 用的是「分类名称」，不是这一项。',
+        description:
+          '用于前台文章 URL 的分类段，例如填 daily → /posts/daily/46。留空则回退使用「分类名称」。',
       },
     },
     {

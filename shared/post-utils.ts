@@ -309,7 +309,7 @@ const mapToSortedTerms = (counts: Map<string, number>) =>
 /**
  * 标签/分类名做 URL 段安全清洗：带 `/`、`#`、`%` 的后台脏值会让前台路由
  * （/categories/{名}/、/tags/{名}/）404。统一清洗为连字符。
- * 前台（payload-api 映射）与后台（blog-sync 区块渲染 + postPathOf）共用同一份实现。
+ * 前台（payload-api 映射）与后台（blog-sync 区块渲染）共用同一份实现。
  */
 export const sanitizeTerm = (name: string): string =>
   name
@@ -354,6 +354,40 @@ export const getCategoryPath = (category: string) =>
 /** 标签归档路径（不带尾斜杠，理由同 getCategoryPath） */
 export const getTagPath = (tag: string) =>
   `/tags/${encodeURIComponent(tag)}`;
+
+/**
+ * 「分类标识」(slug) 的 URL 段安全清洗：转小写、空白转连字符、去掉 `/ # %`。
+ * 与 sanitizeTerm 同口径 —— 两者都会成为路径段，后台脏值会让前台路由 404。
+ * 前台（payload-api 映射 / content schema）与后台（blog-sync）共用这一份实现。
+ */
+export const sanitizeSlug = (slug: string): string =>
+  slug
+    .trim()
+    .toLowerCase()
+    .replace(/[/#%]/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+/**
+ * 文章 URL 里的分类段：优先用「分类标识」(slug)，未填时回退到清洗后的分类名。
+ *
+ * 后台 Categories 的 slug 是可选字段（历史数据 / 本地 markdown 回退都没有），
+ * 这类情况必须继续用分类名，否则老文章会集体变成 /posts/uncategorized/{id}。
+ * @param post 文章条目；categorySlugs 与 categories 下标对齐（见 payload-api / blog-sync）
+ */
+export const getPostCategorySegment = (post: PostEntry): string => {
+  const slugs = getVal<string[]>(post, 'categorySlugs');
+  const slug =
+    Array.isArray(slugs) && slugs.length > 0
+      ? sanitizeSlug(String(slugs[0] ?? ''))
+      : '';
+  if (slug) return slug;
+  const cats = getVal<string[]>(post, 'categories');
+  const name =
+    Array.isArray(cats) && cats.length > 0 ? sanitizeTerm(String(cats[0])) : '';
+  return name || 'uncategorized';
+};
 
 /** 按分类筛选文章（已排序） */
 export const getPostsByCategory = <T extends PostEntry>(

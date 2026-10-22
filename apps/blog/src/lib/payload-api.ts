@@ -171,6 +171,22 @@ function namesOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] 
   return names.length > 0 ? names : undefined;
 }
 
+/**
+ * 把浅关系字段（单选或多选）归一为「分类标识」(slug) 列表，下标与 namesOf 对齐。
+ * 文章 URL 里的分类段优先用 slug。slug 缺失的位置放空串（不是跳过），
+ * 保证 categorySlugs[i] 永远对应 categories[i]；全空时返回 undefined。
+ */
+function slugsOf(
+  refs?: (RefDoc | number)[] | RefDoc | number | null,
+): string[] | undefined {
+  if (!refs) return undefined;
+  const arr = Array.isArray(refs) ? refs : [refs];
+  const slugs = arr
+    .filter((r): r is RefDoc => typeof r === 'object' && r !== null && !Number.isNaN(r.id))
+    .map((r) => (typeof r.slug === 'string' ? r.slug : ''));
+  return slugs.some((s) => s.trim() !== '') ? slugs : undefined;
+}
+
 /** 把「每行一个」的文本拆为数组 */
 function linesOf(text?: string | null): string[] | undefined {
   if (!text) return undefined;
@@ -276,7 +292,7 @@ export async function fetchMediaAltMap(): Promise<Map<string, string>> {
   return map;
 }
 
-/** 拉取文章列表并转为 markdown 条目（按数字主键作为 id，与前台路径 /posts/{分类}/{数字ID}/ 一致）
+/** 拉取文章列表并转为 markdown 条目（按数字主键作为 id，与前台路径 /posts/{分类标识}/{数字ID} 一致）
  * @param altMap Media 集合 url → alt 映射；若文章封面在 Media 表里配了 alt，一并写入 data.coverAlt
  */
 export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[]> {
@@ -293,7 +309,7 @@ export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[
       const cover = rawCover ? safeHref(rawCover, '/covers/default-cover.svg') : undefined;
       const coverAlt = cover && altMap ? (rawCover ? altMap.get(rawCover) : undefined) ?? altMap.get(cover) ?? undefined : undefined;
       return {
-        // id 使用数字主键：前台路径 /posts/{分类}/{数字ID}/
+        // id 使用数字主键：前台路径 /posts/{分类标识}/{数字ID}
         id: String(doc.id),
         data: {
           // 数字 ID 挂在 data.id 上，前台解析路径时用
@@ -308,6 +324,8 @@ export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[
           coverAlt,
           // 分类/标签名做 URL 段安全清洗：带 / # % 的后台脏值会让路由 404
           categories: namesOf(doc.categories)?.map(sanitizeTerm).filter(Boolean) || undefined,
+          // 与 categories 下标对齐的分类标识：文章 URL 分类段优先用它（/posts/daily/46）
+          categorySlugs: slugsOf(doc.categories),
           tags: namesOf(doc.tags)?.map(sanitizeTerm).filter(Boolean) || undefined,
           keywords: linesOf(doc.keywords),
           ai: linesOf(doc.ai),

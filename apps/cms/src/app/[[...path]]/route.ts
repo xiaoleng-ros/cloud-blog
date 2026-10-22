@@ -404,7 +404,9 @@ export async function GET(
     return new NextResponse('Bad Request', { status: 400 })
   }
 
-  // 历史链接 /posts/{id}/ → 301 到现行的 /posts/{分类名}/{id}/。
+  // 历史链接 → 301 到现行的 /posts/{分类标识}/{id}：
+  //   · /posts/{id}/               最早的纯 ID 链接
+  //   · /posts/{中文分类名}/{id}/   改用「分类标识」之前的链接（老书签、搜索引擎收录）
   // 旧链接在静态产物里也是一份完整页面（Astro 静态输出不执行 getStaticPaths 的 redirect），
   // 所以真 301 只能在「实际返回 HTML 的这一层」做；解析失败就照常返回静态外壳，不影响可访问性。
   try {

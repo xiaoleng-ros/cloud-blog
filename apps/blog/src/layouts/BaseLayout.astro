@@ -30,7 +30,7 @@ interface Props {
   type?: 'website' | 'article';
   jsonLd?: unknown;
   articleMeta?: ArticleMeta;
-  /** 规范链接路径（如 /posts/{分类名}/{id}/）。同一篇文章存在旧地址时由页面传入，
+  /** 规范链接路径（如 /posts/{分类标识}/{id}）。同一篇文章存在旧地址时由页面传入，
    *  让旧地址那份产物把 canonical / og:url 指向新形态，避免搜索结果里两份重复内容 */
   canonicalPath?: string;
   /** 指示搜索引擎不要收录本页（旧 URL 形态的整页副本用 true，配合 canonical 去重） */

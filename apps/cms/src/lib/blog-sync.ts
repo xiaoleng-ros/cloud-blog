@@ -84,23 +84,21 @@ function namesOfSanitized(
   return cleaned.length > 0 ? cleaned : undefined
 }
 
-/** 取单选/多选关系的首个名称（已做 URL 段安全清洗），用于拼接前台路径 */
-function nameOfFirst(
-  ref?: Array<{ name?: string }> | { name?: string } | null,
-): string {
-  if (!ref) return ''
-  const raw = Array.isArray(ref) ? ref[0]?.name ?? '' : ref.name ?? ''
-  return sanitizeTerm(raw)
-}
-
-/** 生成文章前台路径：/posts/{分类名}/{文章ID}/ */
-function postPathOf(doc: { id: number | string; categories?: Array<{ name?: string }> | { name?: string } | null }): string {
-  return `/posts/${encodeURIComponent(nameOfFirst(doc.categories) || 'uncategorized')}/${String(doc.id)}/`
-}
-
-/** 生成随笔前台路径：/notes/{分类名}/{随笔ID}/ */
-function notePathOf(doc: { id: number | string; categories?: Array<{ name?: string }> | { name?: string } | null }): string {
-  return `/notes/${encodeURIComponent(nameOfFirst(doc.categories) || 'uncategorized')}/${String(doc.id)}/`
+/**
+ * 「分类标识」(slug) 列表，下标与 categories 严格对齐（后台 Categories 的 slug 是可选字段）。
+ * slug 缺失的位置放空串而不是跳过，否则 slug 会错配到别的分类上；
+ * 全空时返回 undefined，前台 getPostCategorySegment 会回退到分类名。
+ */
+function slugsOf(
+  refs?: Array<{ slug?: string; id?: unknown } | number> | { slug?: string; id?: unknown } | number | null | undefined,
+): string[] | undefined {
+  if (!refs) return undefined
+  const arr = Array.isArray(refs) ? refs : [refs]
+  if (arr.length === 0) return undefined
+  const slugs = arr
+    .filter((r) => typeof r === 'object' && r !== null && !Number.isNaN((r as { id?: unknown }).id))
+    .map((r) => String((r as { slug?: string }).slug ?? '').trim())
+  return slugs.some(Boolean) ? slugs : undefined
 }
 
 /** 把「每行一个」的文本拆为数组（keywords/ai/tags 字段） */
@@ -245,6 +243,8 @@ export async function fetchPosts(): Promise<MdEntry[]> {
       id: String(doc.id),
       // 分类/标签名做 URL 段安全清洗（带 / # % 的后台脏值会让路由 404）
       categories: namesOfSanitized(doc.categories),
+      // 与 categories 下标对齐的分类标识：文章 URL 分类段优先用它（/posts/daily/46）
+      categorySlugs: slugsOf(doc.categories),
       tags: namesOfSanitized(doc.tags),
       keywords: linesOf(doc.keywords),
       ai: linesOf(doc.ai),

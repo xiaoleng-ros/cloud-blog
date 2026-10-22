@@ -81,7 +81,7 @@ const targets = [
 ];
 
 /**
- * 文章详情页 URL 是动态的（/posts/{分类}/{ID}），从 API 里挑一篇已发布的补进预热清单。
+ * 文章详情页 URL 是动态的（/posts/{分类标识}/{ID}），从 API 里挑一篇已发布的补进预热清单。
  * 失败不致命：详情页首次访问时现编译即可。
  */
 async function addArticleTarget() {
@@ -91,9 +91,11 @@ async function addArticleTarget() {
     const data = await res.json();
     const doc = data?.docs?.[0];
     if (!doc || doc.status !== 'published') return;
-    const cat = doc.categories && typeof doc.categories === 'object' ? doc.categories.name : '';
-    const path = cat
-      ? `/posts/${encodeURIComponent(cat)}/${doc.id}`
+    // 分类段优先用「分类标识」(slug)，与文章 URL 生成口径一致（slug 空则回退分类名）
+    const catRef = doc.categories && typeof doc.categories === 'object' ? doc.categories : null;
+    const segment = String(catRef?.slug || catRef?.name || '').trim();
+    const path = segment
+      ? `/posts/${encodeURIComponent(segment)}/${doc.id}`
       : `/posts/${doc.id}`;
     targets.splice(targets.length - BLOG_PATHS.length, 0, [path, 60]);
   } catch {

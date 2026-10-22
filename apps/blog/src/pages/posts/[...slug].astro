@@ -23,7 +23,8 @@ import {
 export async function getStaticPaths() {
   const posts = sortPosts(await getCollection('posts'));
 
-  // 规范 URL 是 getPostPath() 产出的 /posts/{分类名}/{id}/ —— sitemap、RSS、canonical、
+  // 规范 URL 是 getPostPath() 产出的 /posts/{分类标识}/{id} —— sitemap、RSS、canonical、
+  // 注：改用「分类标识」之前的历史链接 /posts/{中文分类名}/{id} 由 CMS catch-all 做 301。
   // CMS 侧渲染全部按这个形态引用；这里额外保留历史 /posts/{id}/ 入口并 301 过去，
   // 否则旧链接（以及已被搜索引擎收录的地址）会全部 404。
   return [

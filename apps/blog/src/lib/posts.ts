@@ -1,4 +1,5 @@
 import type { CollectionEntry } from 'astro:content';
+import { getPostCategorySegment } from 'cloud-blog/shared/post-utils';
 import { SITE_DEFAULTS } from './site-defaults';
 
 // 通用文章工具函数从共享包重导出，保证前台各页面调用不变
@@ -18,6 +19,8 @@ export {
   getTags,
   getCategoryPath,
   getTagPath,
+  getPostCategorySegment,
+  sanitizeSlug,
   getPostsByCategory,
   getPostsByTag,
   groupPostsByYear,
@@ -39,15 +42,19 @@ export function absoluteUrl(path: string): string {
   return new URL(path, site.url).toString();
 }
 
-/** 从 post 上取分类名（data.categories 已归一为字符串数组，取第一个） */
+/**
+ * 从 post 上取文章 URL 里的分类段（取第一个分类）。
+ *
+ * 优先「分类标识」(slug)：`/posts/daily/46`。slug 为空时回退分类名，
+ * 保证历史数据与本地 markdown 回退（没有 slug）仍可访问。
+ */
 function postCategoryName(post: BlogPost): string {
-  const cats = post.data?.categories;
-  if (Array.isArray(cats) && cats.length > 0) return String(cats[0]);
-  return 'uncategorized';
+  // getPostCategorySegment 同时兼容 .data 与顶层、并做 URL 段清洗
+  return getPostCategorySegment(post);
 }
 
 /**
- * 文章链接：/posts/{分类名}/{数字ID}
+ * 文章链接：/posts/{分类标识}/{数字ID}
  *
  * 末尾**不要**补斜杠（2026-10-22 线上实测）：EdgeOne CDN 在函数之前对所有带尾斜杠的
  * URL 做「去尾斜杠 308」，且它的 Location 头把路径里的 UTF-8 字节按 latin1 输出，
@@ -65,7 +72,7 @@ export function getPostPath(post: BlogPost) {
 /**
  * getStaticPaths 用的路由参数值（**不做 URL 编码**）。
  * Astro 会按参数原值生成目录，编码后的值会落成 `%xx` 目录名，
- * 而 CMS 的路由拿到的是解码后的分类名，两边对不上就会 404。
+ * 而 CMS 的路由拿到的是解码后的分类段，两边对不上就会 404。
  */
 export function getPostPathParams(post: BlogPost) {
   return `${postCategoryName(post)}/${String(post.id)}`;

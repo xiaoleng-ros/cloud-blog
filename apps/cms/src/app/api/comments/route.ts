@@ -18,7 +18,8 @@ const STATUSES: WalineStatus[] = ['waiting', 'approved', 'spam', 'all']
 
 const asDateText = (value: string | null) => (/^\d{4}-\d{2}-\d{2}$/.test(value ?? '') ? (value as string) : '')
 
-/** 文章 URL 形如 /posts/{分类名}/{文章 id}/；只取末段数字 id，省掉分类名那段的编解码差异 */
+/** 文章 URL 形如 /posts/{分类段}/{文章 id}；只取末段数字 id，省掉分类段的编解码差异
+ *  （分类段从 2026-10-22 起是「分类标识」slug，此前是分类名，两种形态都靠 ID 段识别） */
 function postIdFromUrl(url: string): string | null {
   let pathname = url
   try {
