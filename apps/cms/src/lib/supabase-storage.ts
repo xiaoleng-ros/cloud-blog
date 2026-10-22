@@ -91,6 +91,33 @@ function normalizeRef(value: string | undefined): string | undefined {
 }
 
 /**
+ * 把 S3 端点纠正成 Supabase 唯一可用的形状：`…/storage/v1/s3`。
+ *
+ * 这是控制台里最容易抄错的一项，而且抄错后报错极具误导性：
+ *   - 少写 `/s3`（写成 `…/storage/v1`）→ 命中 Kong 的 404 Route not found，
+ *     AWS SDK 在 XML 解析阶段抛 "unexpected content"，看起来像「凭据无效」
+ *   - 写成公开读地址 `…/storage/v1/object/public` → 同样 404
+ *   - 写成裸域 `https://<ref>.supabase.co` → 404
+ *
+ * 三种都只是「前缀对了、尾巴不对」，可以无歧义地补全，不需要报错让人重配。
+ * 真正无法推断的自定义域名/代理则原样返回，绝不猜测。
+ */
+function normalizeS3Endpoint(value: string | undefined): string | undefined {
+  const v = value?.trim()
+  if (!v) return undefined
+  const trimmed = v.replace(/\/+$/, '')
+  if (/\/storage\/v1\/s3$/.test(trimmed)) return trimmed
+  // 公开读前缀 / 裸 storage 前缀 → 换成 S3 端点
+  const m = /^(.*?)\/storage\/v1(?:\/object\/public|\/s3)?$/.exec(trimmed)
+  if (m?.[1] !== undefined) {
+    const fixed = `${m[1]}/storage/v1/s3`
+    console.warn(`[storage] SUPABASE_S3_ENDPOINT=${v} 不是合法的 S3 端点，已按 ${fixed} 校正`)
+    return fixed
+  }
+  return trimmed
+}
+
+/**
  * 把显式配置的端点里写死的 `<ref>` 校正成权威 ref。
  *
  * 只认 `*.supabase.co` 与 `*.storage.supabase.co` 这两种首段；自定义域名 / CDN 前进
@@ -133,7 +160,9 @@ export function resolveStorageConfig(): StorageConfig {
   const host = ref ? `${ref}.supabase.co` : undefined
 
   const endpoint = alignRef(
-    process.env.SUPABASE_S3_ENDPOINT || (host ? `https://${host}/storage/v1/s3` : undefined),
+    normalizeS3Endpoint(
+      process.env.SUPABASE_S3_ENDPOINT || (host ? `https://${host}/storage/v1/s3` : undefined),
+    ),
     ref,
   )
   const publicBase = alignRef(

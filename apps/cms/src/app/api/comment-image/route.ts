@@ -75,6 +75,36 @@ function rateLimited(ip: string): boolean {
 const errorJson = (message: string, status: number) =>
   NextResponse.json({ errors: [{ message }] }, { status, headers: { 'Cache-Control': 'no-store' } })
 
+/**
+ * 把上传异常压成一段**不含任何敏感信息**的短码，拼进 502 文案。
+ *
+ * 线上（EdgeOne 云函数）没有交互式日志，`console.error` 也捞不出来，只剩一句
+ * 「图片上传失败，请稍后重试」——凭据错、端点写错、出口被拦、SDK 没进函数包
+ * 这四种原因在现场完全无法区分，每次都要重新部署一轮做二分。
+ *
+ * 这里只回显「异常类名 + HTTP 状态 + SDK 错误码」，三者都是公开语义、不含密钥，
+ * 但足以一眼分辨：
+ *   - `NotFound 404`        → 端点路径不对（少了 /storage/v1/s3）
+ *   - `SignatureDoesNotMatch 403` → 密钥/ref 对不上
+ *   - `ENOTFOUND` / `EAI_AGAIN` / `fetch failed` → 函数出口到不了该域名
+ *   - `ERR_MODULE_NOT_FOUND` → SDK 没进函数包
+ */
+function uploadErrorCode(error: unknown): string {
+  const e = error as {
+    name?: string
+    code?: string
+    $metadata?: { httpStatusCode?: number }
+    cause?: { name?: string; code?: string }
+  }
+  const parts: string[] = []
+  if (e?.name) parts.push(e.name)
+  const status = e?.$metadata?.httpStatusCode
+  if (status) parts.push(String(status))
+  const code = e?.code ?? e?.cause?.code
+  if (code && code !== e?.name) parts.push(String(code))
+  return parts.filter(Boolean).join(' ') || 'unknown'
+}
+
 export async function POST(request: Request) {
   const { endpoint, bucket, publicBase, accessKeyId, secretAccessKey, ready } = resolveStorageConfig()
 
@@ -139,7 +169,9 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error('[comment-image] 上传失败:', error)
-    return errorJson('图片上传失败，请稍后重试', 502)
+    // 文案带上短码：线上没有日志可看，这是唯一能在浏览器里直接读到失败原因的通道。
+    // 只含类名 / HTTP 状态 / SDK 错误码，不含端点、桶名与任何密钥。
+    return errorJson(`图片上传失败（${uploadErrorCode(error)}），请稍后重试`, 502)
   }
 
   const encoded = key

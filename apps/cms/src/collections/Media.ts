@@ -55,6 +55,32 @@ export const Media: CollectionConfig = {
   ],
   // alt 修改会直接影响前台图片渲染，需清除同步快照 + 广播 SSE
   hooks: {
+    /**
+     * 把上传失败的**真实原因**回给登录管理员。
+     *
+     * 为什么必须这么做：Payload 认为 500 级内部错误的细节「可能含敏感信息」，
+     * routeError 会把它们统一换成 `Something went wrong.`，于是线上只看得到
+     * `POST /api/media 500`，分不清是凭据错、端点错、sharp 没进包还是写库失败
+     * —— EdgeOne 云函数又不给交互式日志，等于完全瞎掉。
+     *
+     * 这里只对**已登录**的请求放开：未登录访客（攻击者拿不到会话）仍然只看到
+     * 原样的笼统文案，信息面没有扩大；管理员则能直接在后台的报错提示里看到根因。
+     */
+    afterError: [
+      ({ error, req, result }) => {
+        // 先无条件打日志：EdgeOne 的日志面板能捞到，是排查的主渠道
+        const e = error as { name?: string; message?: string; status?: number; code?: string; cause?: unknown }
+        console.error('[media] 上传/写入失败:', e?.name, '|', e?.message, '| status=', e?.status, '| code=', e?.code, '| cause=', String((e?.cause as { message?: string })?.message ?? e?.cause ?? ''))
+        if (!req.user) return
+        // APIError（4xx）本来就有可读 message，只有被改写成通用文案的才需要还原
+        const message = error?.message || String(error)
+        if (!message || message === 'Something went wrong.') return
+        return {
+          ...(result ? { response: { ...result, message } } : {}),
+          status: (error as { status?: number })?.status ?? 500,
+        }
+      },
+    ],
     beforeValidate: [
       ({ data, req }) => {
         // Payload 的顺序是 generateFileData → 字段 beforeValidate → 集合 beforeValidate，
