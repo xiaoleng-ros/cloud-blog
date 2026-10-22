@@ -25,6 +25,7 @@
     "typecheck": "cross-env NODE_OPTIONS=--no-deprecation tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1139.0",
     "@payloadcms/db-postgres": "3.91.0",
     "@payloadcms/db-sqlite": "3.91.0",
     "@payloadcms/next": "3.91.0",

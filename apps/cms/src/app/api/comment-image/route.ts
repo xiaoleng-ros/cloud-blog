@@ -105,6 +105,52 @@ function uploadErrorCode(error: unknown): string {
   return parts.filter(Boolean).join(' ') || 'unknown'
 }
 
+/**
+ * 上传失败的现场取证：回答「是包没打进去」还是「函数出不去网」。
+ *
+ * 这两件事在代码层面完全同构（都是 catch 里一个异常），但处置方式相反：
+ * 缺包要改 next.config 的 outputFileTracingIncludes，出不去网只能换域名或改用
+ * 平台自带的对象存储。既然线上没有日志、只能靠响应体，就把两个判据一次性带出来。
+ *
+ * 注意：只回显「阶段名 + 可达性结论」，绝不回显端点主机名与密钥。
+ */
+async function probeUploadFailure(error: unknown, endpoint: string): Promise<string> {
+  const parts = [uploadErrorCode(error)]
+
+  // 判据一：SDK 能不能被解析。ERR_MODULE_NOT_FOUND / Cannot find module 表示没进函数包。
+  const errName = (error as { name?: string })?.name ?? ''
+  const errMsg = String((error as { message?: string })?.message ?? '')
+  if (/MODULE_NOT_FOUND|Cannot find (module|package)/i.test(`${errName} ${errMsg}`)) {
+    parts.push('sdk-missing')
+    return parts.join(' ')
+  }
+
+  // 判据二：从函数运行环境打一次裸 HTTP 到端点所在主机的根路径。
+  // 只关心「能不能建连」，所以任意状态码（连 403/404）都算通，抛异常才算不通。
+  const origin = (() => {
+    try {
+      return new URL(endpoint).origin
+    } catch {
+      return null
+    }
+  })()
+  if (origin) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 4000)
+    try {
+      const res = await fetch(origin, { method: 'HEAD', signal: ctrl.signal })
+      parts.push(`net-ok-${res.status}`)
+    } catch (netErr) {
+      const n = netErr as { name?: string; cause?: { code?: string } }
+      parts.push(`net-fail-${n?.cause?.code ?? n?.name ?? 'unknown'}`)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  return parts.join(' ')
+}
+
 export async function POST(request: Request) {
   const { endpoint, bucket, publicBase, accessKeyId, secretAccessKey, ready } = resolveStorageConfig()
 
@@ -170,8 +216,8 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('[comment-image] 上传失败:', error)
     // 文案带上短码：线上没有日志可看，这是唯一能在浏览器里直接读到失败原因的通道。
-    // 只含类名 / HTTP 状态 / SDK 错误码，不含端点、桶名与任何密钥。
-    return errorJson(`图片上传失败（${uploadErrorCode(error)}），请稍后重试`, 502)
+    // 只含类名 / HTTP 状态 / SDK 错误码 / 可达性结论，不含端点主机名与任何密钥。
+    return errorJson(`图片上传失败（${await probeUploadFailure(error, endpoint)}），请稍后重试`, 502)
   }
 
   const encoded = key

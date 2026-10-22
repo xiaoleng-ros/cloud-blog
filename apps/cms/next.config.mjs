@@ -16,6 +16,10 @@ const nextConfig = {
   reactStrictMode: false,
   // 评论服务已切换为自写 waline-server.ts（pg 直连 wl_* 表），不再依赖 @waline/vercel。
   // 保留 ip2region 为 external：它有原生 .xdb 二进制数据文件，打包器静态分析会碎。
+  //
+  // 注：AWS SDK 不列在这里。它已由 @payloadcms/storage-s3 静态 import 进入主包
+  // （CMS 能启动就证明它进了包），再改成 external 只会把解析时机挪到运行时、
+  // 多一个失败点，没有收益。
   serverExternalPackages: ['ip2region'],
   experimental: {
     // EdgeOne 云函数包有 128MiB 硬限额；turbopack 默认会往 .next/server 写 ~78MB
@@ -54,8 +58,15 @@ const nextConfig = {
   // Next 的文件追踪静态分析看不到它 → 证书不会进 .next/standalone →
   // 容器里读不到 → 又回到 "self-signed certificate in certificate chain"，
   // Payload 初始化失败、全站 500。outputFileTracingIncludes 是唯一可靠解法。
+  //
+  // 同时兜住 AWS SDK：`/api/comment-image` 用运行时 `await import('@aws-sdk/client-s3')`
+  // 直传对象存储（不经过 Payload）。这个包只是 `@payloadcms/storage-s3` 的传递依赖，
+  // 本项目 dependencies 里没有直接声明，nft 对「动态 import + 传递依赖」的追踪不稳定。
+  // 一旦没进函数包，运行时报 ERR_MODULE_NOT_FOUND，被 catch 成 502「图片上传失败」，
+  // 而 EdgeOne 没有交互式日志——这种失败在现场和「凭据错」完全无法区分。
+  // 显式列入追踪，代价约 8MB（函数包 108MB，限额 128MiB，仍有余量）。
   outputFileTracingIncludes: {
-    '/**': ['./certs/**/*.pem'],
+    '/**': ['./certs/**/*.pem', './node_modules/@aws-sdk/**', './node_modules/@smithy/**'],
   },
   // EdgeOne 云函数 128MiB 限额：把仅构建期/CLI 使用的工具链挡在文件追踪之外
   // （不进追踪 = 不进 standalone，比构建后删文件安全）。
