@@ -27,7 +27,7 @@ import {
   updateMedia,
   type MediaDoc,
 } from '../lib/api'
-import { MAX_IMAGE_SIZE_BYTES, uploadMedia } from '../../../lib/media-upload'
+import { MAX_SOURCE_IMAGE_BYTES, uploadMedia } from '../../../lib/media-upload'
 
 const PAGE_SIZE = 20
 
@@ -145,11 +145,14 @@ export const MediaViewInner = () => {
   const handleUploadFiles = async (files: File[]) => {
     if (files.length === 0) return
 
-    // 前端预检大小
-    const valid = files.filter((f) => f.size <= MAX_IMAGE_SIZE_BYTES)
+    // 前端预检：只拦原图就大到不合理的（40MB+），10MB 的相机原图由 uploadMedia 压完再传
+    const valid = files.filter((f) => f.size <= MAX_SOURCE_IMAGE_BYTES)
     const rejected = files.length - valid.length
     if (rejected > 0) {
-      show('error', `${rejected} 个文件超过 ${(MAX_IMAGE_SIZE_BYTES / 1024 / 1024).toFixed(0)}MB 上限，已跳过`)
+      show(
+        'error',
+        `${rejected} 个文件超过 ${(MAX_SOURCE_IMAGE_BYTES / 1024 / 1024).toFixed(0)}MB 上限，已跳过`,
+      )
     }
     if (valid.length === 0) return
 

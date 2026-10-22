@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { MAX_IMAGE_SIZE_BYTES, uploadMedia } from '../../lib/media-upload'
+import { MAX_SOURCE_IMAGE_BYTES, uploadMedia } from '../../lib/media-upload'
 
 /**
  * 封面图上传器（纯展示组件，不绑 Payload 表单）
@@ -76,9 +76,11 @@ export const CoverUploader: React.FC<CoverUploaderProps> = ({ value, onChange, d
       setTimeout(() => setUploadError(''), 3000)
       return
     }
-    // 大小校验：MAX_IMAGE_SIZE_BYTES 在 media-upload.ts 统一定义，避免两处漂移
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      setUploadError(`图片过大（${(file.size / 1024 / 1024).toFixed(1)}MB），请压缩后重试（≤10MB）`)
+    // 只拦原图就大到不合理的（40MB+）；10MB 左右的相机原图交给 uploadMedia 压缩后再传
+    if (file.size > MAX_SOURCE_IMAGE_BYTES) {
+      setUploadError(
+        `图片过大（${(file.size / 1024 / 1024).toFixed(1)}MB），请压缩后重试（≤${MAX_SOURCE_IMAGE_BYTES / 1024 / 1024}MB）`,
+      )
       setTimeout(() => setUploadError(''), 3000)
       return
     }

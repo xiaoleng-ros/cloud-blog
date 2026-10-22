@@ -4,7 +4,7 @@ import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { FieldError, FieldLabel, useField, useFieldPath, useTheme } from '@payloadcms/ui'
 import type { FieldClientComponent, TextFieldClient } from 'payload'
-import { MAX_IMAGE_SIZE_BYTES, uploadMedia } from '../lib/media-upload'
+import { MAX_SOURCE_IMAGE_BYTES, uploadMedia } from '../lib/media-upload'
 
 type Mode = 'sv' | 'wysiwyg'
 
@@ -43,10 +43,11 @@ async function handleVditorUpload(files: File[], instance: Vditor | null): Promi
   // 前端二次拦截非图片（保险起见，虽然 Vditor 的 accept 已经过滤）
   const nonImage = files.find((f) => !f.type.startsWith('image/'))
   if (nonImage) return `仅支持图片文件，收到的类型：${nonImage.type}`
-  // 前端大小上限 10MB，防止误传大文件导致后台 413
-  const tooLarge = files.find((f) => f.size > MAX_IMAGE_SIZE_BYTES)
+  // 只拦「原图就大到不合理」的（40MB+）；体积正常的原图交给 uploadMedia 压缩后再传，
+  // 不能在这里按 10MB 拦——一张 12MB 的 48MP 照片压完只有 0.3MB，拦掉纯属误伤
+  const tooLarge = files.find((f) => f.size > MAX_SOURCE_IMAGE_BYTES)
   if (tooLarge)
-    return `图片过大（${(tooLarge.size / 1024 / 1024).toFixed(1)}MB），请压缩后重试（≤10MB）`
+    return `图片过大（${(tooLarge.size / 1024 / 1024).toFixed(1)}MB），请压缩后重试（≤${MAX_SOURCE_IMAGE_BYTES / 1024 / 1024}MB）`
   try {
     const urls = await Promise.all(files.map((f) => uploadMedia(f)))
     // 手动插入到光标位置：Vditor 自定义 handler 不会自动插入
@@ -177,7 +178,10 @@ export const MarkdownEditor: React.FC<{
       // 自定义上传：工具栏「上传图片」+ 拖拽 + 剪贴板粘贴 三个入口统一走这里
       upload: {
         fieldName: 'file',
-        max: 10 * 1024 * 1024, // 前端限制 10MB
+        // ⚠ 这个值是 Vditor 自己的**前置**校验（源码 index.js 里 handler 之前就 return），
+        //   必须放到原图上限，否则大照片在进入我们的压缩逻辑之前就被它挡掉了。
+        //   真正的提交体积由 uploadMedia 压缩后保证。
+        max: MAX_SOURCE_IMAGE_BYTES,
         accept: 'image/*',
         multiple: true,
         // 类型断言：Vditor 声明的 handler 返回类型是联合 (string | Promise<string> | Promise<null> | null)
