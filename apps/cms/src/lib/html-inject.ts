@@ -100,8 +100,12 @@ function withVersionAttr(openTag: string, version: string): string {
   if (/data-sync-version="[^"]*"/i.test(openTag)) {
     return openTag.replace(/data-sync-version="[^"]*"/i, attr)
   }
-  if (/\/>$/.test(openTag)) return openTag.replace(/\/>$/, `${attr} />`)
-  return openTag.replace(/>$/, `${attr}>`)
+  // 追加前必须显式补空格：开标签最后一个属性若不带值（如 Astro 的
+  // `data-astro-cid-xxxx`），HTML tokenizer 会把「属性名 + data-sync-version」
+  // 一路读到 `=` 才停，粘成一个属性 —— 原属性就此消失，该元素的 scoped 样式
+  // 全部失效（2026-10-22 线上标签墙 / 统计页就是这样整块变裸文本的）。
+  if (/\s\/>$/.test(openTag)) return openTag.replace(/\s*\/>$/, ` ${attr} />`)
+  return openTag.replace(/\s*>$/, ` ${attr}>`)
 }
 
 /**

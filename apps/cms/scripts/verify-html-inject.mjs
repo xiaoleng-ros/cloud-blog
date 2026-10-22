@@ -204,6 +204,26 @@ console.log('\n[用例 15] 已有 data-sync-version 应被覆盖')
   check('只出现一次 data-sync-version', (r.html.match(/data-sync-version/g) || []).length === 1)
 }
 
+// ========== 用例 16（回归）：开标签最后一个属性不带值 ==========
+// Astro 的 scoped 样式会给元素加一个无值的 `data-astro-cid-xxxx`。
+// 若追加 data-sync-version 时不补空格，tokenizer 会把两者粘成一个属性
+// （`data-astro-cid-xxxxdata-sync-version="..."`），cid 属性消失 → 该元素的
+// scoped 样式全部失效。2026-10-22 线上标签墙/统计页整块变裸文本就是这个原因。
+console.log('\n[用例 16] 末尾是无值属性（data-astro-cid）时必须补空格，不能粘连')
+{
+  const html = '<html><body><div class="tagwall" data-sync-block="tagWall" data-astro-cid-abc123>X</div></body></html>'
+  const r = injectSyncBlocks(html, { tagWall: 'Y' }, 'v')
+  check('cid 属性仍独立存在', r.html.includes('data-astro-cid-abc123 '))
+  check('没有粘连成 cid+data-sync-version', !/data-astro-cid-abc123data-sync-version/.test(r.html))
+  check('version 已写入', r.html.includes('data-sync-version="v"'))
+  check('有值属性后也必须留空格', !/data-sync-block="tagWall"data-sync-version/.test(r.html))
+
+  // 自己闭合的写法（/<div ... />）同样要留空格
+  const selfClosed = '<html><body><div data-sync-block="sd" data-astro-cid-z9 />X</body></html>'
+  const r2 = injectSyncBlocks(selfClosed, { sd: 'Y' }, 'v')
+  check('自闭合分支不粘连', !/data-astro-cid-z9data-sync-version/.test(r2.html) && r2.html.includes('data-sync-version="v"'))
+}
+
 // ========== 汇总 ==========
 console.log('\n=========================================')
 console.log(`通过: ${passed}  失败: ${failed}`)

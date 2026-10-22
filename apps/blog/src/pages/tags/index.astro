@@ -98,10 +98,14 @@ for (const tag of tags) {
   </section>
 </BaseLayout>
 
-<style>
-  /* main 在 BaseLayout 里，作用域样式够不着它，用 :global() 单独放宽这一页的正文宽度。
+<style is:global>
+  /* 全局样式（不是 scoped）：标签胶囊由后台注入，注入的内容没有
+     data-astro-cid-* 属性，scoped 选择器匹配不上，整面墙会退化成裸文本。
+     本页类名（.tags-* / .tagwall*）都是页内独有前缀，全局化不会串味。
+
+     main 在 BaseLayout 里，顺带在这里放宽这一页的正文宽度：
      标签墙是「铺满」的布局，63rem 的通用限宽会让两侧空出一大片。 */
-  :global(body.tagwall-page main) {
+  body.tagwall-page main {
     width: min(100% - 2.5rem, 74rem);
   }
 
@@ -281,7 +285,7 @@ for (const tag of tags) {
      页头会被压在导航底下（实测导航底 105px > main 上边距 87.5px）。
      统计页等既有页面也有这问题，这里先给自己这页补足，不动全局规则。 */
   @media (max-width: 760px) {
-    :global(body.tagwall-page main) {
+    body.tagwall-page main {
       padding-top: 9.5rem;
     }
   }

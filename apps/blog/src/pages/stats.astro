@@ -257,7 +257,10 @@ const formatWords = (words: number) => {
   </section>
 </BaseLayout>
 
-<style>
+<style is:global>
+  /* 全局样式（不是 scoped）：统计页的数字卡、分类环、标签墙、年份表全部由后台
+     注入，注入内容没有 data-astro-cid-* 属性，scoped 选择器匹配不上就会整页裸文本。
+     本页类名（.stats-*）都是页内独有前缀，全局化不会串味。 */
   .stats-page {
     max-width: 62rem;
   }
