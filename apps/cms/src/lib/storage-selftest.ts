@@ -50,9 +50,32 @@ export interface StorageSelfTestResult {
     accessKeyIdFingerprint: string
     secretAccessKeyLength: number
     secretAccessKeyFingerprint: string
+    /**
+     * secret 与 accessKeyId 是不是同一个值。
+     *
+     * 这一个布尔值比长度/指纹两个字段更直接：Supabase 的 accessKeyId 是 32 位、
+     * secret 是 64 位，两者永远不可能相同，一旦相同就必然是「复制到了同一栏」，
+     * 不需要再让人去比对指纹。放在 JSON 里是为了让线上排障一眼看到结论。
+     */
+    secretsMatch: boolean
     /** 端点上是否带 /storage/v1/s3（少了这段必然 404） */
     endpointHasS3Path: boolean
   }
+  /**
+   * 运行时能看到的、名字里带 SUPABASE 的环境变量（只列变量名与值长度）。
+   *
+   * 为什么需要它：最常见的「我明明改了却没生效」不是没保存，而是**改出了第二个
+   * 名字**——变量名末尾多一个空格、或者大小写不同（`supabase_s3_secret_access_key`）。
+   * Linux 上环境变量名区分大小写且允许空格，平台会照单全收，于是变成两个变量，
+   * 代码读的仍是旧那个，值看起来毫无变化。只看 config.secretAccessKeyLength 是
+   * 发现不了这种事的，必须把名字本身列出来。
+   */
+  envNames: Array<{
+    name: string
+    valueLength: number
+    /** 名字带首尾空格、或不是全大写 —— 几乎必然是新旧两条重复变量中的一条 */
+    suspicious: boolean
+  }>
   headBucket: StepResult
   putObject: StepResult
   payloadCreate: StepResult
@@ -147,8 +170,23 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
     accessKeyIdFingerprint: fingerprint(cfg.accessKeyId),
     secretAccessKeyLength: cfg.secretAccessKey?.length ?? 0,
     secretAccessKeyFingerprint: fingerprint(cfg.secretAccessKey),
+    secretsMatch: Boolean(cfg.accessKeyId) && cfg.accessKeyId === cfg.secretAccessKey,
     endpointHasS3Path: Boolean(cfg.endpoint && /\/storage\/v1\/s3\/?$/.test(cfg.endpoint)),
   }
+
+  // 只列变量名与长度：值本身绝不进响应体，但这足以暴露「多了一条同名/近名变量」
+  const envNames = Object.keys(process.env)
+    .filter((k) => /supabase|s3|bucket/i.test(k))
+    .sort()
+    .map((k) => {
+      const value = process.env[k] ?? ''
+      return {
+        name: k,
+        valueLength: value.trim().length,
+        // 合法的名字是 [A-Z0-9_]，出现空白或小写都说明是手滑（或被平台加壳）
+        suspicious: k !== k.trim() || !/^[A-Z0-9_]+$/.test(k),
+      }
+    })
 
   // 配置不全时后面的三步必然失败，提前短路，避免用无意义的三连错掩盖根因
   if (!cfg.ready || !cfg.endpoint || !cfg.bucket || !cfg.accessKeyId || !cfg.secretAccessKey) {
@@ -159,6 +197,7 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
     }
     return {
       config,
+      envNames,
       headBucket: missing,
       putObject: missing,
       payloadCreate: missing,
@@ -257,6 +296,7 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
 
   return {
     config,
+    envNames,
     headBucket,
     putObject,
     payloadCreate,
