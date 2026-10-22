@@ -17,7 +17,7 @@
  *    只应该被带令牌的诊断请求触发，不要挂到正常路径上。
  */
 import { createHash } from 'node:crypto'
-import { resolveStorageConfig, refFromUrl } from './supabase-storage'
+import { describeCredentialHygiene, resolveStorageConfig, refFromUrl } from './supabase-storage'
 
 /**
  * 值指纹：只回显 sha256 前 10 位。
@@ -58,6 +58,17 @@ export interface StorageSelfTestResult {
   payloadCreate: StepResult
   /** 各种端点形状的连通性矩阵：全部失败=出口被拦，某一形状通=配置形状问题 */
   endpointMatrix: Array<{ endpoint: string; ok: boolean; ms: number; error?: string }>
+  /**
+   * 环境变量卫生检查：归一化有没有改动过凭据（引号/空格污染）。
+   * 只看这里就能判断「该修控制台」还是「该重置密钥」。
+   */
+  credentialHygiene: Array<{
+    name: string
+    present: boolean
+    rawLength: number
+    normalizedLength: number
+    changed: boolean
+  }>
 }
 
 type StepResult = { ok: boolean; ms: number; error?: string; code?: string; detail?: string }
@@ -146,7 +157,14 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
       ms: 0,
       error: '对象存储配置不全（resolveStorageConfig().ready=false），上传必然失败',
     }
-    return { config, headBucket: missing, putObject: missing, payloadCreate: missing, endpointMatrix: [] }
+    return {
+      config,
+      headBucket: missing,
+      putObject: missing,
+      payloadCreate: missing,
+      endpointMatrix: [],
+      credentialHygiene: describeCredentialHygiene(),
+    }
   }
 
   const { S3Client, HeadBucketCommand, PutObjectCommand, DeleteObjectCommand } = await import(
@@ -237,5 +255,12 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
 
   g.__cloudSuppressPayloadFailFast = prevSuppress
 
-  return { config, headBucket, putObject, payloadCreate, endpointMatrix }
+  return {
+    config,
+    headBucket,
+    putObject,
+    payloadCreate,
+    endpointMatrix,
+    credentialHygiene: describeCredentialHygiene(),
+  }
 }

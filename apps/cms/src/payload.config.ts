@@ -51,14 +51,18 @@ const dirname = path.dirname(filename)
  *   SUPABASE_PUBLIC_BASE        —— 可选，公开读地址前缀，默认
  *                                   https://<ref>.supabase.co/storage/v1/object/public
  */
-const SUPABASE_S3_ACCESS_KEY_ID = process.env.SUPABASE_S3_ACCESS_KEY_ID
-const SUPABASE_S3_SECRET_ACCESS_KEY = process.env.SUPABASE_S3_SECRET_ACCESS_KEY
-const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET
 /**
- * endpoint / publicBase / 缺省的 project ref 推导统一交给 lib/supabase-storage.ts ——
+ * endpoint / publicBase / 缺省的 project ref 推导 / 凭据清洗，统一交给 lib/supabase-storage.ts ——
  * /api/comment-image 用的是同一份，避免「插件能用、上传端点说没配置」的漂移。
+ *
+ * **不要再直接读 process.env**：resolveStorageConfig 会剥掉控制台粘贴时带上的包裹引号
+ * 与首尾空白。这里直读会原样送给 SDK 参与 HMAC 计算，结果是插件侧
+ * SignatureDoesNotMatch 403（2026-10-22 线上图片全部上传失败就是这条）。
  */
 const STORAGE = resolveStorageConfig()
+const SUPABASE_S3_ACCESS_KEY_ID = STORAGE.accessKeyId
+const SUPABASE_S3_SECRET_ACCESS_KEY = STORAGE.secretAccessKey
+const SUPABASE_BUCKET = STORAGE.bucket
 const SUPABASE_S3_ENDPOINT = STORAGE.endpoint
 const SUPABASE_PUBLIC_BASE = STORAGE.publicBase
 

@@ -91,6 +91,70 @@ function normalizeRef(value: string | undefined): string | undefined {
 }
 
 /**
+ * 清洗密钥类环境变量：去掉首尾空白，**并剥掉成对包裹的引号**。
+ *
+ * 这是 2026-10-22 线上上传全挂的直接原因，必须单独说明，否则trim()看起来很够用。
+ * 现象：`/api/media` 与 `/api/comment-image` 都返回 502，回显 `SignatureDoesNotMatch 403`。
+ *
+ * 为什么不是「密钥失效」：Supabase 对 accessKeyId 不存在和签名算错返回的是**两个不同错误**
+ *   - accessKeyId 不存在 → `InvalidAccessKeyId 403`
+ *   - 密钥对不上       → `SignatureDoesNotMatch 403`  ← 线上是这一条
+ * 说明 accessKeyId 与 project ref 都是对的，只有 secret 的内容与服务器上登记的签名源不一致。
+ *
+ * 而 SignatureDoesNotMatch 最典型的两个来源（都在本机实测复现过，指纹完全一致）：
+ *   - secret 尾部多了一个空格/换行 —— `.trim()` 能救
+ *   - secret 被引号包裹（控制台粘贴时带上了 `"..."` 或 `'...'`）—— **`.trim()` 救不了**
+ * 后者尤其隐蔽：引号不是"格式"，它就是密钥内容的一部分，会被原样参与 HMAC 计算。
+ * 控制台里看不出差别，而报错又只会说"签名不匹配"，于是很容易误判成"密钥过期"去重置密钥——
+ * 重置后如果又是粘贴带引号，就陷入死循环。
+ *
+ * 只剥**成对**的引号：`"abc"` → `abc`，但 `abc"` 保持原样（那种值几乎必是别的问题，
+ * 静默改写反而会掩盖），长度不足 2 也原样返回。
+ */
+function normalizeSecret(value: string | undefined): string | undefined {
+  const v = value?.trim()
+  if (!v) return undefined
+  if (v.length >= 2) {
+    const first = v[0]
+    const last = v[v.length - 1]
+    if ((first === '"' || first === "'") && first === last) {
+      const inner = v.slice(1, -1).trim()
+      if (inner) return inner
+    }
+  }
+  return v
+}
+
+/**
+ * 报告「环境变量的原始值有没有被清洗改动过」。
+ *
+ * 排障用：上传报 SignatureDoesNotMatch 时，第一个要问的问题就是
+ * 「控制台里的值是不是被引号/空格污染了」。这里只回显布尔与长度差，不回显内容。
+ * 归一化把值改掉了 → 说明控制台里存的就是带引号的值，应优先修控制台；
+ * 没改掉却仍签名失败 → 说明是密钥本身过期或不属于该 ref，该去重置密钥。
+ */
+export function describeCredentialHygiene() {
+  const pairs = [
+    ['accessKeyId', process.env.SUPABASE_S3_ACCESS_KEY_ID],
+    ['secretAccessKey', process.env.SUPABASE_S3_SECRET_ACCESS_KEY],
+    ['bucket', process.env.SUPABASE_BUCKET],
+  ] as const
+  return pairs.map(([name, raw]) => {
+    const trimmed = raw?.trim()
+    const normalized = normalizeSecret(raw)
+    return {
+      name,
+      /** 原始环境变量是否为空 */
+      present: Boolean(trimmed),
+      rawLength: trimmed?.length ?? 0,
+      normalizedLength: normalized?.length ?? 0,
+      /** 归一化是否改动过该值 —— 为 true 基本等于「控制台里填了带引号的值」 */
+      changed: Boolean(trimmed) && trimmed !== normalized,
+    }
+  })
+}
+
+/**
  * 把 S3 端点纠正成 Supabase 唯一可用的形状：`…/storage/v1/s3`。
  *
  * 这是控制台里最容易抄错的一项，而且抄错后报错极具误导性：
@@ -133,9 +197,9 @@ function alignRef(value: string | undefined, ref: string | undefined): string | 
 }
 
 export function resolveStorageConfig(): StorageConfig {
-  const accessKeyId = process.env.SUPABASE_S3_ACCESS_KEY_ID?.trim()
-  const secretAccessKey = process.env.SUPABASE_S3_SECRET_ACCESS_KEY?.trim()
-  const bucket = process.env.SUPABASE_BUCKET?.trim()
+  const accessKeyId = normalizeSecret(process.env.SUPABASE_S3_ACCESS_KEY_ID)
+  const secretAccessKey = normalizeSecret(process.env.SUPABASE_S3_SECRET_ACCESS_KEY)
+  const bucket = normalizeSecret(process.env.SUPABASE_BUCKET)
 
   /**
    * ref 的权威来源：**先看 POSTGRES_URL，再看 SUPABASE_PROJECT_REF**。
