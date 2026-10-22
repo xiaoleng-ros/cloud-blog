@@ -457,6 +457,13 @@ export default buildConfig({
     // 明暗双主题：交给 Payload 内置 ThemeProvider（cookie + html[data-theme]）
     // 'all' = 允许切换；服务端读 cookie，首屏即为正确主题，不会闪白
     theme: 'all',
+    // 账号头像：不设这项时 Payload 默认 'gravatar'，会在导航栏渲染
+    // <img src="https://www.gravatar.com/avatar/<md5(email)>">。
+    // 国内直连 gravatar 会被重置（控制台满屏 net::ERR_CONNECTION_CLOSED），
+    // 而 admin-theme.css 只是把 .gravatar-account 隐藏掉 —— 元素还在，请求照发。
+    // 顶栏头像实际由自定义 AdminShell（UserCard，读飞书头像）负责，这里用内置
+    // 占位图标即可，既没有外网请求也不影响观感。
+    avatar: 'default',
     importMap: {
       // 以项目根为基准计算 importMap 相对路径（组件路径为 /src/... 的形式）
       baseDir: path.resolve(dirname, '..'),
