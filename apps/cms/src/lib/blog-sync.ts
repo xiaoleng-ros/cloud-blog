@@ -176,8 +176,14 @@ export async function fetchMediaAltMap(): Promise<MediaAltStats> {
     const payload = await getDb()
     const { docs } = await payload.find({
       collection: 'media',
-      // 只需 url + alt 两列，减小网络与内存开销；updatedAt 用于计算版本号
-      select: { url: true, alt: true, updatedAt: true },
+      // 只需这几列，减小网络与内存开销；updatedAt 用于计算版本号。
+      //
+      // ⚠ filename 不能省：@payloadcms/plugin-cloud-storage 的 url 字段是
+      // afterRead 钩子按 `data.filename` 现算出来的，不是库里的列。select 里不带
+      // filename，钩子拿到 undefined 就跳过生成，url 一律变成 undefined ——
+      // 表现是 alt 映射静默为空、正文 ![](url) 永远补不上 alt，而且不报错。
+      // （库里 media.url 列存的是建库时的旧值，与这里的结果无关。）
+      select: { url: true, alt: true, filename: true, updatedAt: true },
       limit: 0,
     })
     for (const doc of docs as any[]) {
