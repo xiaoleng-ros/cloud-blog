@@ -11,6 +11,24 @@ type Mode = 'sv' | 'wysiwyg'
 // 编辑器默认高度，和原 Monaco 版本保持一致
 const EDITOR_HEIGHT = 520
 
+/**
+ * Vditor 运行时资源的根路径（自托管，不走外网 CDN）
+ *
+ * 为什么要改：vditor/dist/index.js 里写死
+ *   `Constants.CDN = 'https://unpkg.com/vditor@4.0.1'`
+ * 初始化时要用 addScript 拉 lute（Markdown 引擎）、i18n、图标三组脚本，
+ * 分屏预览里的代码高亮 / 数学公式 / 图表也是运行期按需从同一个前缀拉。
+ * 而 addScript 的 .then() 全都没接 .catch()：脚本拉不到时不抛错、只是永远不初始化，
+ * 表现为「编辑器空白 / 预览不动 / 插入图片没反应」，控制台连一行报错都没有。
+ * 境内访问 unpkg 经常被重置，必须自托管才能稳定。
+ *
+ * 路径为什么带 /dist：Vditor 内部所有引用都是 `${cdn}/dist/...` 的形式，
+ * 所以 cdn 设成 '/vditor' 后请求落在 /vditor/dist/...。
+ * 资源由 scripts/copy-vditor-assets.mjs 在 dev / build 前从 node_modules 复制到
+ * apps/cms/public/vditor/dist（见 package.json 的 predev / prebuild）。
+ */
+const VEDITOR_CDN = '/vditor'
+
 // Vditor 分屏预览延迟的分级配置
 // - 短文（≤ 5000 字）：300ms，兼顾响应速度
 // - 长文（> 5000 字）：500ms，减少每次按键触发的全量 markdown 渲染抖动
@@ -123,11 +141,14 @@ export const MarkdownEditor: React.FC<{
     readyRef.current = false
     const instance = new Vditor(mount, {
       value: initialValue,
+      // 自托管运行时资源（lute / i18n / 图标 / 高亮 / KaTeX 都从这里拉）
+      cdn: VEDITOR_CDN,
       mode,
       height: EDITOR_HEIGHT,
       theme: theme === 'dark' ? 'dark' : 'classic',
       placeholder: '开始写你的文章... 支持拖拽 / 粘贴图片',
       lang: 'zh_CN',
+      icon: 'ant',
       cache: { enable: false }, // ComposeView 自己管 localStorage，这里关闭
       /**
        * Vditor 初始化完成回调（官方 after 选项，见 vditor/dist/index.js:16296）
