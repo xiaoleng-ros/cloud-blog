@@ -38,7 +38,7 @@ import {
   type SkillItem,
 } from 'cloud-blog/shared/about-format'
 // 正文净化白名单：与 Astro 构建链共用同一份 schema（默认值来自本 app 依赖，shared 层不带裸包 import）
-import { buildMdSanitizeSchema } from 'cloud-blog/shared/md-sanitize-schema.mjs'
+import { buildMdSanitizeSchema, mdIframeHostGuard } from 'cloud-blog/shared/md-sanitize-schema.mjs'
 // 站点内容的离线兜底：与前台 Astro 层同一份，只有后台整体不可用（settings 为 null）才取用
 import {
   footerIconFor,
@@ -352,7 +352,16 @@ async function renderMarkdown(md: string, altMap: Map<string, string>): Promise<
     .use(rehypeLegacyShortcodes)
     .use(rehypeRaw)
     .use(rehypeSanitize, mdSanitizeSchema)
-    .use(createRehypeImgAttrs(altMap))
+    // 与 Astro 构建链对齐：schema 只剥掉非白名单 iframe 的 src，节点本身会留下一个
+    // 空的 <iframe sandbox ...>；mdIframeHostGuard 负责把整个节点删掉。
+    // shared/md-sanitize-schema.mjs 的注释明确要求两侧行为一致，此前这边漏挂。
+    .use(mdIframeHostGuard)
+    // createRehypeImgAttrs(map) 返回的是 **transformer**（tree => void），不是 plugin。
+    // unified 的 .use() 会把参数当 plugin 调用一次（此时没有 tree 参数），
+    // 直接把 transformer 传进去等于什么都没挂 —— 表现为正文图片既没有
+    // loading/decoding/referrerpolicy，也没有用 Media.alt 回填空 alt。
+    // 必须包一层惰性工厂，让 unified 在正确的时机拿到 transformer。
+    .use(() => createRehypeImgAttrs(altMap))
     .use(() => collectHeadings)
     .use(rehypeStringify)
     .process(md)
