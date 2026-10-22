@@ -115,9 +115,15 @@ const postCategoryName = (post: MdEntry): string => {
   return 'uncategorized'
 }
 
-/** 文章详情页路径：/posts/{分类名}/{数字ID}/ */
+/**
+ * 文章详情页路径：/posts/{分类名}/{数字ID}
+ *
+ * 末尾**不带**尾斜杠。EdgeOne CDN 会在函数之前把所有带尾斜杠的 URL 308 去斜杠，
+ * 而它的 Location 头把 UTF-8 字节按 latin1 输出 —— `/posts/日常生活/46/` 会被跳到
+ * `/posts/æ¥å¸¸çæ´»/46`（乱码）→ 404。不带斜杠的请求不触发这条 308。
+ */
 const getPostPath = (post: MdEntry) =>
-  `/posts/${encodeURIComponent(postCategoryName(post))}/${String(post.id)}/`
+  `/posts/${encodeURIComponent(postCategoryName(post))}/${String(post.id)}`
 
 // ---------------------------------------------------------------------------
 // 基础工具
@@ -234,6 +240,68 @@ function iconSvg(name: string, size = 20, className?: string, strokeWidth = 1.75
   }
   const cls = className ? ` class="${escapeAttr(className)}"` : ''
   return `<svg${cls} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`
+}
+
+// ---------------------------------------------------------------------------
+// 标签墙 / 统计页配色（必须与 Astro 侧逐字一致，否则同一标签两页不同色）
+// ---------------------------------------------------------------------------
+
+/** 环形图 7 色：与 apps/blog/src/pages/stats.astro 的 CATEGORY_COLORS 同序。 */
+const CATEGORY_COLORS = [
+  'var(--brand)',
+  'var(--sticky-cyan)',
+  'var(--sticky-purple)',
+  'var(--sticky-green)',
+  'var(--sticky-pink)',
+  'var(--sticky-yellow)',
+  'var(--border-strong)',
+]
+
+/** 标签 6 色：与 stats.astro、tags/index.astro 的 TAG_COLORS 同序。 */
+const TAG_COLORS = [
+  'var(--sticky-yellow)',
+  'var(--sticky-green)',
+  'var(--sticky-cyan)',
+  'var(--sticky-pink)',
+  'var(--sticky-purple)',
+  'var(--brand)',
+]
+
+/**
+ * 按标签名散列出起始色下标。不用 index % 长度：标签一多会连着好几颗同色。
+ * 散列还保证同一标签每次刷新颜色稳定，不然墙面会「抖动」。
+ */
+function hashOf(name: string): number {
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.codePointAt(0)!) % 100_000
+  return hash
+}
+
+/**
+ * 逐个分配颜色，并躲开前一颗的颜色。
+ * 只靠散列不够：6 种颜色铺 11 个标签，相邻同色的概率不低，看着像渲染坏了。
+ * 代价是颜色分布略微不均，换来整片没有相邻重复。
+ */
+function tagColorSlots(names: string[]): number[] {
+  const slots: number[] = []
+  let prev = -1
+  for (const name of names) {
+    const base = hashOf(name) % TAG_COLORS.length
+    const slot = base === prev ? (base + 1) % TAG_COLORS.length : base
+    slots.push(slot)
+    prev = slot
+  }
+  return slots
+}
+
+/**
+ * /tags/ 页胶囊字号档位。三档够用——连续公式在 count=1 与 2 时几乎一样大看不出差别。
+ * 1.34 是实测上限，再大就撑破药丸圆角比例。
+ */
+function tagChipScale(count: number): number {
+  if (count >= 3) return 1.34
+  if (count === 2) return 1.16
+  return 1
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +505,7 @@ function renderHeroCard(
         )}</span>！</h1>`
       : ''
   const actionsHtml = `<div class="hero__actions">
-    <a class="hero__tag" href="/archive/">浏览文章${iconSvg('arrow-right', 16)}</a>
+    <a class="hero__tag" href="/archive">浏览文章${iconSvg('arrow-right', 16)}</a>
     ${socials.length > 0 ? `<span class="hero__social" aria-label="社交链接">${socialHtml}</span>` : ''}
   </div>`
 
@@ -1304,7 +1372,7 @@ async function notesBlocks(ctx: SyncData): Promise<Record<string, string | null>
 
   return {
     brandName: siteName,
-    navLinks: renderNavLinks(ctx.nav, '/notes/'),
+    navLinks: renderNavLinks(ctx.nav, '/notes'),
     ...footerBlocks(settings),
     notesFeed: feed,
     notesAside: aside,
@@ -1341,7 +1409,7 @@ async function termBlocks(
 }
 
 /**
- * 标签墙页（/tags/）：页头（计数为动态数字，仍走同步；静态文案写死）。
+ * 标签墙页（/tags/）：页头 + 标签胶囊区。
  * 注意：/tags/ 必须排在 termBlocks 的 `startsWith('/tags/')` 之前，
  * 否则计数会按「空标签」的 termBlocks 分支渲染出错误内容。
  */
@@ -1349,10 +1417,24 @@ async function tagsIndexBlocks(ctx: SyncData): Promise<Record<string, string | n
   const settings = ctx.settings
   const siteName = settings?.siteName ?? site.name
   const tags = buildSiteStats(sortPosts(ctx.posts)).tags
+  const colorSlots = tagColorSlots(tags.map((t) => t.name))
+
+  const tagWall =
+    tags.length === 0
+      ? '<p class="tags-empty">还没有标签。</p>'
+      : tags
+          .map(
+            (tag, index) => `<a href="${escapeAttr(getTagPath(tag.name))}" class="tagwall__chip" style="--chip-scale: ${tagChipScale(tag.count)}; --chip-bg: ${TAG_COLORS[colorSlots[index]]}" title="${escapeAttr(`${tag.count} 篇文章`)}">
+        <span class="tagwall__icon" aria-hidden="true">${iconSvg('tag', 13)}</span>
+        <span class="tagwall__name">${escapeHtml(tag.name)}</span>
+        <b class="tagwall__count">${tag.count}</b>
+      </a>`,
+          )
+          .join('\n      ')
 
   return {
     brandName: siteName,
-    navLinks: renderNavLinks(ctx.nav, '/tags/'),
+    navLinks: renderNavLinks(ctx.nav, '/tags'),
     ...footerBlocks(settings),
     tagsHeader: `<div class="tags-hero__top">
     <p class="eyebrow">Tags</p>
@@ -1361,10 +1443,103 @@ async function tagsIndexBlocks(ctx: SyncData): Promise<Record<string, string | n
   <p class="tags-hero__sub">拾取标签，发现更多感兴趣的内容</p>
   <div class="tags-hero__rule" aria-hidden="true"><i></i></div>
   <p class="tags-hero__count">共 <b>${tags.length}</b> 个标签</p>`,
+    tagWall,
   }
 }
 
-/** 统计页（/stats/）：概览卡 + 逐年归档 + 底部更新行（静态文案写死，数字与日期仍走同步） */
+/**
+ * 统计页「分类一瞥」面板（环形图 + 图例）。
+ * 返回的是 <section class="stats-panel"> 的 innerHTML，所以连 <h2> 标题一起渲染
+ * （标题里的分类总数与数据相关，本就该跟数据走）。
+ */
+function renderStatsCategories(stats: ReturnType<typeof buildSiteStats>): string {
+  const heading = `<h2 id="stats-cat-title" class="stats-panel__title">
+          ${iconSvg('spark', 16)}分类一瞥
+          <small>共 ${stats.categoryCount} 个分类</small>
+        </h2>`
+
+  if (stats.categories.length === 0) {
+    return `${heading}
+        <p class="stats-empty">还没有文章。</p>`
+  }
+
+  // 环形图：每段占比切一个 conic-gradient 色块，段间留缝（段宽的 22%，上限 1.5%）。
+  // 缝隙不能写死：占比只有 1.5% 的分类会被整段吃掉反而消失。
+  const GAP_MAX = 1.5
+  const stops = stats.categories
+    .map((cat, index) => {
+      const from = stats.categories.slice(0, index).reduce((sum, c) => sum + c.ratio, 0)
+      const start = from * 100
+      const span = cat.ratio * 100
+      const end = start + span
+      const gap = Math.min(GAP_MAX, span * 0.22)
+      const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length]
+      // 单分类时首尾相接会留下一道缝，这里让最后一段补回来
+      const isLast = index === stats.categories.length - 1
+      return `${color} ${start.toFixed(2)}% ${(isLast ? end : end - gap).toFixed(2)}%`
+    })
+    .join(', ')
+
+  const legend = stats.categories
+    .map(
+      (cat, index) => `<li class="stats-legend__row">
+                  <span class="stats-legend__dot" style="background: ${CATEGORY_COLORS[index % CATEGORY_COLORS.length]}" aria-hidden="true"></span>
+                  <a href="${escapeAttr(getCategoryPath(cat.name))}" class="stats-legend__name">
+                    ${escapeHtml(cat.name)}
+                  </a>
+                  <span class="stats-legend__pct">${(cat.ratio * 100).toFixed(1)}%</span>
+                  <small>${cat.count} 篇</small>
+                </li>`,
+    )
+    .join('\n              ')
+
+  const ariaLabel = `分类占比：${stats.categories.map((c) => `${c.name} ${c.count} 篇`).join('，')}`
+
+  return `${heading}
+        <div class="stats-donut">
+            <div
+              class="stats-donut__ring"
+              style="background: conic-gradient(${stops})"
+              role="img"
+              aria-label="${escapeAttr(ariaLabel)}"
+            >
+              <div class="stats-donut__hole">
+                <b>${stats.postCount}</b>
+                <span>篇</span>
+              </div>
+            </div>
+            <ul class="stats-legend">
+              ${legend}
+            </ul>
+          </div>`
+}
+
+/** 统计页「标签墙」面板。同样返回 <section> 的 innerHTML。 */
+function renderStatsTagwall(stats: ReturnType<typeof buildSiteStats>): string {
+  const heading = `<h2 id="stats-tag-title" class="stats-panel__title">
+          ${iconSvg('hash', 16)}标签墙
+          <small>共 ${stats.tagCount} 个标签</small>
+        </h2>`
+
+  if (stats.tags.length === 0) {
+    return `${heading}
+        <p class="stats-empty">还没有标签。</p>`
+  }
+
+  const colorSlots = tagColorSlots(stats.tags.map((t) => t.name))
+  const chips = stats.tags
+    .map(
+      (tag, index) => `<a href="${escapeAttr(getTagPath(tag.name))}" class="stats-tag" style="--tag-scale: ${Math.min(1, 0.78 + tag.count * 0.06).toFixed(2)}; --tag-bg: ${TAG_COLORS[colorSlots[index]]}" title="${escapeAttr(`${tag.count} 篇`)}">${escapeHtml(tag.name)}<b>${tag.count}</b></a>`,
+    )
+    .join('\n              ')
+
+  return `${heading}
+        <div class="stats-tagwall">
+              ${chips}
+            </div>`
+}
+
+/** 统计页（/stats/）：概览卡 + 分类一瞥 + 标签墙 + 逐年归档 + 底部更新行 */
 async function statsBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
   const posts = sortPosts(ctx.posts)
   const stats = buildSiteStats(posts)
@@ -1398,7 +1573,7 @@ async function statsBlocks(ctx: SyncData): Promise<Record<string, string | null>
     <span class="stats-years__cell">${iconSvg('archive', 13)}${row.posts} 篇</span>
     <span class="stats-years__cell stats-years__cell--tags">${iconSvg('hash', 13)}${row.tags} 标签</span>
     <span class="stats-years__cell stats-years__cell--words">${iconSvg('download', 13)}${escapeHtml(formatWords(row.words))}</span>
-    <a href="/archive/" class="stats-years__more" aria-label="查看 ${escapeHtml(row.year)} 年归档">${iconSvg('arrow-right', 14)}</a>
+    <a href="/archive" class="stats-years__more" aria-label="查看 ${escapeHtml(row.year)} 年归档">${iconSvg('arrow-right', 14)}</a>
   </li>`,
           )
           .join('')}</ol>`
@@ -1429,7 +1604,7 @@ async function statsBlocks(ctx: SyncData): Promise<Record<string, string | null>
 
   return {
     brandName: siteName,
-    navLinks: renderNavLinks(ctx.nav, '/stats/'),
+    navLinks: renderNavLinks(ctx.nav, '/stats'),
     ...footerBlocks(settings),
     statsCards: [
       card('blue', 'archive', String(stats.postCount), '文章统计'),
@@ -1439,6 +1614,8 @@ async function statsBlocks(ctx: SyncData): Promise<Record<string, string | null>
     ].join('\n    '),
     statsYears: yearsHtml,
     statsSince,
+    statsCategories: renderStatsCategories(stats),
+    statsTagwall: renderStatsTagwall(stats),
   }
 }
 
@@ -1456,7 +1633,7 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
 
   return {
     brandName: siteName,
-    navLinks: renderNavLinks(ctx.nav, '/about/'),
+    navLinks: renderNavLinks(ctx.nav, '/about'),
     ...footerBlocks(settings),
     aboutProfile: renderAboutProfile(about, postCount, firstYear),
     aboutSkills: renderAboutSkills(about.skills),
@@ -1534,8 +1711,8 @@ function noteFirstLine(body: string): string {
 
 /** 导航之外的常驻页面（与前台 site-index.ts 的 EXTRA_PAGES 一致） */
 const EXTRA_INDEX_PAGES: Array<{ href: string; label: string; keywords: string }> = [
-  { href: '/stats/', label: '统计', keywords: '数据 statistics 归档 标签墙' },
-  { href: '/tags/', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
+  { href: '/stats', label: '统计', keywords: '数据 statistics 归档 标签墙' },
+  { href: '/tags', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
 ]
 
 export function buildSiteIndex(ctx: {
@@ -1598,7 +1775,7 @@ export function buildSiteIndex(ctx: {
       title: title || excerpt || `${formatDate(note.data.date)} 的随笔`,
       subtitle: title ? excerpt : '',
       meta: formatDate(note.data.date),
-      url: anchor ? `/notes/#${anchor}` : '/notes/',
+      url: anchor ? `/notes#${anchor}` : '/notes',
       tags: (note.data.tags as string[] | undefined) ?? [],
       text: matchField(note.data.title, excerpt, note.data.mood, note.data.tags),
     }
@@ -1612,7 +1789,7 @@ export function buildSiteIndex(ctx: {
     subtitle: project.description ?? '',
     meta: project.group,
     // 项目没有详情页：能跳文章就跳文章，否则落到关于页分组锚点（与前台同规则）
-    url: project.articleHref ?? `/about/#${groupIds.get(project.group)}`,
+    url: project.articleHref ?? `/about#${groupIds.get(project.group)}`,
     tags: project.tags ?? [],
     text: matchField(project.title, project.description, project.group, project.owner, project.tags),
   }))

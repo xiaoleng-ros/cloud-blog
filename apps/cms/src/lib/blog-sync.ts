@@ -354,6 +354,8 @@ export async function getSiteSettingsData(): Promise<Record<string, any> | null>
  */
 function parseNavLines(text?: string | null): Array<{ href: string; label: string }> {
   if (!text) return []
+  // parseFreeTextLines 内部已用 normalizeSiteHref 去掉站内路径的尾斜杠
+  // （EdgeOne CDN 会把带尾斜杠的 URL 308 跳走，跳转头的 UTF-8 乱码会让中文路径 404）。
   return parseFreeTextLines(String(text), '#', false)
     .filter((i) => i.href !== '#')
     .map((i) => ({ href: i.href, label: i.name }))
@@ -372,9 +374,9 @@ export async function getNavGlobal(): Promise<{ navItems?: string | null; update
 
 const DEFAULT_NAV = [
   { href: '/', label: '首页' },
-  { href: '/notes/', label: '随笔' },
-  { href: '/archive/', label: '归档' },
-  { href: '/about/', label: '关于' },
+  { href: '/notes', label: '随笔' },
+  { href: '/archive', label: '归档' },
+  { href: '/about', label: '关于' },
 ]
 
 /** 导航项（Navigation Global 单例）；后台不可用或为空时回退默认四项 */

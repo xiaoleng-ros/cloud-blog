@@ -97,14 +97,14 @@ export async function GET() {
       urlEntry(getArchivePagePath(index + 1), { changefreq: 'yearly', priority: 0.3 }),
     ),
     // 笔记 / 关于
-    urlEntry('/notes/', { changefreq: 'yearly', priority: 0.3 }),
-    urlEntry('/about/', { changefreq: 'yearly', priority: 0.3 }),
+    urlEntry('/notes', { changefreq: 'yearly', priority: 0.3 }),
+    urlEntry('/about', { changefreq: 'yearly', priority: 0.3 }),
     // 统计页：内容随文章增减而变，权重介于集合页与归档之间
-    urlEntry('/stats/', { changefreq: 'weekly', priority: 0.5 }),
+    urlEntry('/stats', { changefreq: 'weekly', priority: 0.5 }),
     // 标签墙：所有标签的入口页，本身不带正文，权重略低于单个标签页
-    urlEntry('/tags/', { changefreq: 'weekly', priority: 0.5 }),
+    urlEntry('/tags', { changefreq: 'weekly', priority: 0.5 }),
     // 搜索页：对搜索引擎价值低
-    urlEntry('/search/', { changefreq: 'never', priority: 0.2 }),
+    urlEntry('/search', { changefreq: 'never', priority: 0.2 }),
   ];
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>

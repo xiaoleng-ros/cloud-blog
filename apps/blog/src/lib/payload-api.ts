@@ -358,7 +358,9 @@ export async function fetchSiteSettings(): Promise<Record<string, any> | null> {
 export async function fetchNavItems(): Promise<Array<{ href: string; label: string }> | null> {
   try {
     const data = await fetchJson<{ navItems?: string | null }>('/api/globals/navigation');
-    // 导航条目必须有链接：allowEmptyHref=false，惰性 '#' 不出现
+    // 导航条目必须有链接：allowEmptyHref=false，惰性 '#' 不出现。
+    // parseFreeTextLines 内部已用 normalizeSiteHref 去掉站内路径的尾斜杠
+    // （EdgeOne CDN 会把带尾斜杠的 URL 308 跳走，跳转头的 UTF-8 乱码会让中文路径 404）。
     return parseFreeTextLines(data?.navItems, '#', false).map((i) => ({
       href: i.href,
       label: i.name,

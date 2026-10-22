@@ -50,7 +50,24 @@ export function parseFreeTextLines(
       continue;
     }
     // 协议白名单：javascript:/data: 等一律按 fallback 处理，不进 href
-    out.push({ name, href: safeHref(href, hrefFallback) });
+    out.push({ name, href: normalizeSiteHref(safeHref(href, hrefFallback)) });
   }
   return out;
+}
+
+/**
+ * 站内路径统一去掉尾斜杠（根路径 '/' 保留，外部链接原样）。
+ *
+ * 为什么必须去：EdgeOne CDN 在函数之前就把所有带尾斜杠的 URL 308 跳到不带斜杠的版本，
+ * 而它的 Location 响应头会把 UTF-8 字节按 latin1 输出 —— 中文路径跳一次就变乱码、必然 404。
+ * 所以站内链接一律直接写成最终形态，别让用户先吃到一次跳转。
+ */
+export function normalizeSiteHref(href: string): string {
+  if (!href.startsWith('/')) return href;
+  if (href === '/') return '/';
+  // 保留 hash / query：/notes/#2024 只该清理路径那一段
+  const match = /^([^?#]*)([?#].*)?$/.exec(href);
+  if (!match) return href;
+  const path = match[1].replace(/\/+$/, '');
+  return `${path || '/'}${match[2] ?? ''}`;
 }

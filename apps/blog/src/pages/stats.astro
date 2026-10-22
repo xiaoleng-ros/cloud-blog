@@ -132,9 +132,11 @@ const formatWords = (words: number) => {
       </div>
     </div>
 
-    <!-- 分类一瞥 + 标签墙 -->
+    <!-- 分类一瞥 + 标签墙。两块都挂 data-sync-block：
+         空站时构建产物里只有空态文案，后台补文章后靠同步把真实甜甜圈/标签胶囊填进来
+         （区块 HTML = 锚点元素的 innerHTML，所以整段含 <h2> 标题一起由后台渲染）。 -->
     <div class="stats-split">
-      <section class="stats-panel" aria-labelledby="stats-cat-title">
+      <section class="stats-panel" aria-labelledby="stats-cat-title" data-sync-block="statsCategories">
         <h2 id="stats-cat-title" class="stats-panel__title">
           <Icon name="spark" size={16} />分类一瞥
           <small>共 {stats.categoryCount} 个分类</small>
@@ -176,7 +178,7 @@ const formatWords = (words: number) => {
         )}
       </section>
 
-      <section class="stats-panel" aria-labelledby="stats-tag-title">
+      <section class="stats-panel" aria-labelledby="stats-tag-title" data-sync-block="statsTagwall">
         <h2 id="stats-tag-title" class="stats-panel__title">
           <Icon name="hash" size={16} />标签墙
           <small>共 {stats.tagCount} 个标签</small>
@@ -228,7 +230,7 @@ const formatWords = (words: number) => {
                 <Icon name="download" size={13} />
                 {formatWords(row.words)}
               </span>
-              <a href="/archive/" class="stats-years__more" aria-label={`查看 ${row.year} 年归档`}>
+              <a href="/archive" class="stats-years__more" aria-label={`查看 ${row.year} 年归档`}>
                 <Icon name="arrow-right" size={14} />
               </a>
             </li>

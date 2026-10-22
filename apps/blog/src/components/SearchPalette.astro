@@ -134,7 +134,7 @@ import { KIND_ICON, KIND_ORDER } from '../lib/search-match';
 
     if (state.entries === null) {
       results.innerHTML = state.failed
-        ? `${escapeHtml('索引没加载出来，')}<a class="palette__link" href="/search/">试试搜索页</a>`
+        ? `${escapeHtml('索引没加载出来，')}<a class="palette__link" href="/search">试试搜索页</a>`
         : escapeHtml('正在加载索引…');
       collapse();
       return;
@@ -196,7 +196,7 @@ import { KIND_ICON, KIND_ORDER } from '../lib/search-match';
     const dialog = dialogOf();
     if (!dialog) {
       // 浮层没挂上（异常构建）：退回兜底搜索页
-      window.location.href = '/search/';
+      window.location.href = '/search';
       return;
     }
 

@@ -76,24 +76,25 @@ for (const tag of tags) {
       </p>
     </header>
 
-    {tags.length === 0 ? (
-      <p class="tags-empty">还没有标签。</p>
-    ) : (
-      <div class="tagwall" data-sync-block="tagWall">
-        {tags.map((tag, index) => (
-          <a
-            href={getTagPath(tag.name)}
-            class="tagwall__chip"
-            style={`--chip-scale: ${scaleOf(tag.count)}; --chip-bg: ${TAG_COLORS[colorSlots[index]]}`}
-            title={`${tag.count} 篇文章`}
-          >
-            <span class="tagwall__icon" aria-hidden="true"><Icon name="tag" size={13} /></span>
-            <span class="tagwall__name">{tag.name}</span>
-            <b class="tagwall__count">{tag.count}</b>
-          </a>
-        ))}
-      </div>
-    )}
+    <!-- 标签胶囊：锚点必须**无条件**渲染。
+         空站时构建产物里没有这个 div，后台补标签后同步找不到锚点，
+         页面就永远停在「还没有标签。」（2026-10-22 线上就是这个现象）。
+         空态由后台注入 '空字符串'（清空锚点内容）或空态文案来切换。 -->
+    <div class="tagwall" data-sync-block="tagWall">
+      {tags.length === 0 ? null : tags.map((tag, index) => (
+        <a
+          href={getTagPath(tag.name)}
+          class="tagwall__chip"
+          style={`--chip-scale: ${scaleOf(tag.count)}; --chip-bg: ${TAG_COLORS[colorSlots[index]]}`}
+          title={`${tag.count} 篇文章`}
+        >
+          <span class="tagwall__icon" aria-hidden="true"><Icon name="tag" size={13} /></span>
+          <span class="tagwall__name">{tag.name}</span>
+          <b class="tagwall__count">{tag.count}</b>
+        </a>
+      ))}
+      {tags.length === 0 && <p class="tags-empty">还没有标签。</p>}
+    </div>
   </section>
 </BaseLayout>
 

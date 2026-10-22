@@ -27,8 +27,8 @@ const githubHref = (await getSocials()).find((s) => s.icon === 'github')?.href ?
 
 // 站内页面：交给 ClientRouter 走单页切换（data-more-link 让点击处理器放行默认行为）
 const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?: boolean }> = [
-  { label: '统计', emoji: '📊', href: '/stats/' },
-  { label: '标签墙', emoji: '🏷️', href: '/tags/' },
+  { label: '统计', emoji: '📊', href: '/stats' },
+  { label: '标签墙', emoji: '🏷️', href: '/tags' },
   { label: 'GitHub', emoji: '🔥', href: githubHref, external: true },
 ];
 ---

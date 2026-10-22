@@ -210,9 +210,17 @@ export const groupPostsByYear = <T extends PostEntry>(
 /** 归档页每页文章数。前台分页与后台同步共用，改这里即可。 */
 export const ARCHIVE_PAGE_SIZE = 5;
 
-/** 归档分页路径：第 1 页是 /archive/，之后 /archive/2/、/archive/3/… */
+/**
+ * 归档分页路径：第 1 页是 /archive，之后 /archive/2、/archive/3…
+ *
+ * 站内链接一律**不带尾斜杠**。原因（2026-10-22 线上实测，别再改回去）：
+ * EdgeOne CDN 会在函数之前对**所有**带尾斜杠的 URL 做「去尾斜杠 308」，
+ * 且它把路径里的 UTF-8 字节按 latin1 逐字节塞进 Location 头 ——
+ * `/posts/日常生活/46/` 会被跳到 `/posts/æ¥å¸¸çæ´»/46`（乱码），中文路径 100% 打不开。
+ * 不带尾斜杠的请求不触发这条 308，直接进函数，由 catch-all 自己找外壳。
+ */
 export const getArchivePagePath = (page: number): string =>
-  page <= 1 ? '/archive/' : `/archive/${page}/`;
+  page <= 1 ? '/archive' : `/archive/${page}`;
 
 /**
  * 从路径解析归档页码：`/archive/` → 1，`/archive/3/` → 3，非归档路径 → 1。
@@ -336,13 +344,16 @@ export const getTags = <T extends PostEntry>(
     ),
   );
 
-/** 分类归档路径 */
+/**
+ * 分类归档路径（不带宽尾斜杠，理由见 getArchivePagePath 的说明）。
+ * 路由侧 /^\/categories\/[^/]+\/?$/ 两种形态都认，去掉斜杠只是为了让 CDN 不发 308。
+ */
 export const getCategoryPath = (category: string) =>
-  `/categories/${encodeURIComponent(category)}/`;
+  `/categories/${encodeURIComponent(category)}`;
 
-/** 标签归档路径 */
+/** 标签归档路径（不带尾斜杠，理由同 getCategoryPath） */
 export const getTagPath = (tag: string) =>
-  `/tags/${encodeURIComponent(tag)}/`;
+  `/tags/${encodeURIComponent(tag)}`;
 
 /** 按分类筛选文章（已排序） */
 export const getPostsByCategory = <T extends PostEntry>(

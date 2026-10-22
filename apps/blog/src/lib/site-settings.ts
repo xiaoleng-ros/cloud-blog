@@ -96,9 +96,9 @@ export async function getNavItems(): Promise<Array<{ href: string; label: string
   if (items === null) {
     return [
       { href: '/', label: '首页' },
-      { href: '/notes/', label: '随笔' },
-      { href: '/archive/', label: '归档' },
-      { href: '/about/', label: '关于' },
+      { href: '/notes', label: '随笔' },
+      { href: '/archive', label: '归档' },
+      { href: '/about', label: '关于' },
     ];
   }
   return items.length > 0

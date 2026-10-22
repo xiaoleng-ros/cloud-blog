@@ -61,7 +61,20 @@ const {
 } = Astro.props;
 
 const pageTitle = title === defaultInfo.name ? title : `${title} - ${defaultInfo.name}`;
-const canonicalUrl = absoluteUrl(canonicalPath ?? Astro.url.pathname);
+/**
+ * 站内路径统一去掉尾斜杠（根路径 `/` 除外）。
+ *
+ * EdgeOne CDN 在函数之前就把所有带尾斜杠的 URL 308 跳成不带斜杠的，
+ * 且它的 Location 会把 UTF-8 字节按 latin1 输出成乱码 —— 中文路径必然 404。
+ * 所以 canonical / og:url 一律给出**不带尾斜杠**的那个地址，
+ * 免得搜索引擎收录的是一条会跳转的 URL。
+ */
+const normalizeCanonicalPath = (value: string): string => {
+  if (value === '/') return '/';
+  return value.endsWith('/') ? value.replace(/\/+$/, '') : value;
+};
+
+const canonicalUrl = absoluteUrl(normalizeCanonicalPath(canonicalPath ?? Astro.url.pathname));
 const imageUrl = image ? absoluteUrl(image) : undefined;
 
 // 评论服务地址：构建期 env 注入（PUBLIC_WALINE_URL），默认同域 /api/waline；经 meta 标签传给客户端脚本
@@ -1349,7 +1362,7 @@ const routeMotion = {
             // 交给浮层自己的委托监听：开面板、记触发元素、关闭后把焦点还回来
             trigger.click();
           } else {
-            window.location.href = '/search/';
+            window.location.href = '/search';
           }
         });
       })();

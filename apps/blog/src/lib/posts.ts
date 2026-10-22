@@ -46,13 +46,20 @@ function postCategoryName(post: BlogPost): string {
   return 'uncategorized';
 }
 
-/** 文章链接：/posts/{分类名}/{数字ID}/ */
+/**
+ * 文章链接：/posts/{分类名}/{数字ID}
+ *
+ * 末尾**不要**补斜杠（2026-10-22 线上实测）：EdgeOne CDN 在函数之前对所有带尾斜杠的
+ * URL 做「去尾斜杠 308」，且它的 Location 头把路径里的 UTF-8 字节按 latin1 输出，
+ * `/posts/日常生活/46/` 会被跳到 `/posts/æ¥å¸¸çæ´»/46`（乱码）→ 404，中文分类名
+ * 的文章 100% 打不开。不带斜杠的请求不触发这条 308，由 CMS catch-all 直接命中同一份外壳。
+ */
 export function getPostPath(post: BlogPost) {
   // 直接复用 getPostPathParams 再编码，保证「路由参数」与「链接」两条路永远一致
   return `/posts/${getPostPathParams(post)
     .split('/')
     .map(encodeURIComponent)
-    .join('/')}/`;
+    .join('/')}`;
 }
 
 /**

@@ -28,20 +28,34 @@ export const dynamic = 'force-dynamic'
  * 规则按博客真实路由形态推导（与 blog-render 的区块组装分支一一对应）：
  * 静态页是固定集合；文章/分类/标签末段是动态的（数字 ID / 编码词条），逐文件枚举不现实，用模式匹配。
  */
+/**
+ * 路径归一化：去掉尾斜杠（根路径除外）。
+ *
+ * 站内链接现在统一**不带**尾斜杠 —— EdgeOne CDN 在函数之前就把带尾斜杠的 URL 308 跳走，
+ * 而它的 Location 会把 UTF-8 字节按 latin1 输出成乱码，中文路径必然 404。
+ * 客户端上报的 path 可能是任一种形态，这里收敛到同一把缓存键，
+ * 否则两种写法会各自渲染一遍（白烧一次全量渲染）。
+ */
+function normalizeSyncPath(rawPath: string): string {
+  if (rawPath.length <= 1) return '/'
+  return rawPath.endsWith('/') ? rawPath.replace(/\/+$/, '') || '/' : rawPath
+}
+
+/** 静态页集合（均**不带**尾斜杠，与 normalizeSyncPath 的输出同形态） */
 const STATIC_SYNC_PATHS = new Set([
   '/',
-  '/notes/',
-  '/archive/',
-  '/about/',
+  '/notes',
+  '/archive',
+  '/about',
   // 标签墙 / 统计页有同步区块（标签计数、概览卡、逐年列表）
-  '/tags/',
-  '/stats/',
+  '/tags',
+  '/stats',
 ])
 const DYNAMIC_SYNC_PATH_PATTERNS = [
-  /^\/posts\/[^/]+\/[^/]+\/$/, // 文章详情：/posts/{分类名}/{数字ID}/
-  /^\/categories\/[^/]+\/$/,
-  /^\/tags\/[^/]+\/$/,
-  /^\/archive\/\d+\/$/, // 归档分页：/archive/2/ …
+  /^\/posts\/[^/]+\/[^/]+$/, // 文章详情：/posts/{分类名}/{数字ID}
+  /^\/categories\/[^/]+$/,
+  /^\/tags\/[^/]+$/,
+  /^\/archive\/\d+$/, // 归档分页：/archive/2 …
 ]
 
 function isSyncablePath(rawPath: string): boolean {
@@ -62,8 +76,8 @@ function isSyncablePath(rawPath: string): boolean {
     // 解码抛错（畸形 % 序列）说明不是合法路径，直接拒收
     return false
   }
-  // 与 renderBlocksForPathname 的缓存键归一化一致：补尾斜杠再比对
-  const path = rawPath.endsWith('/') ? rawPath : `${rawPath}/`
+  // 与 renderBlocksForPathname 的缓存键归一化一致：统一去掉尾斜杠再比对
+  const path = normalizeSyncPath(rawPath)
   if (STATIC_SYNC_PATHS.has(path)) return true
   return DYNAMIC_SYNC_PATH_PATTERNS.some((re) => re.test(path))
 }

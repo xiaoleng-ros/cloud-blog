@@ -57,8 +57,8 @@ function firstLine(body: string): string {
  * 统计页只挂在「更多」面板里，不占顶栏位置，但要在站内搜索里能被搜到。
  */
 const EXTRA_PAGES: Array<{ href: string; label: string; keywords: string }> = [
-  { href: '/stats/', label: '统计', keywords: '数据 statistics 归档 标签墙' },
-  { href: '/tags/', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
+  { href: '/stats', label: '统计', keywords: '数据 statistics 归档 标签墙' },
+  { href: '/tags', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
 ];
 
 function pageEntries(
@@ -119,7 +119,7 @@ function noteEntries(notes: Note[]): IndexEntry[] {
       title: title || excerpt || `${formatDate(note.data.date)} 的随笔`,
       subtitle: title ? excerpt : '',
       meta: formatDate(note.data.date),
-      url: anchor ? `/notes/#${anchor}` : '/notes/',
+      url: anchor ? `/notes#${anchor}` : '/notes',
       tags: note.data.tags ?? [],
       text: matchField(note.data.title, excerpt, note.data.mood, note.data.tags),
     };
@@ -136,7 +136,7 @@ function projectEntries(projects: Project[]): IndexEntry[] {
       subtitle: data.description ?? '',
       meta: data.group,
       // 项目本身没有详情页：能跳到写它的那篇文章就跳文章，否则落到关于页的分组锚点
-      url: data.articleHref ?? `/about/#${groupIds.get(data.group)}`,
+      url: data.articleHref ?? `/about#${groupIds.get(data.group)}`,
       tags: data.tags ?? [],
       text: matchField(data.title, data.description, data.group, data.owner, data.tags),
     };

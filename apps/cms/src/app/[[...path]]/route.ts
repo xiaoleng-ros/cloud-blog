@@ -358,10 +358,22 @@ function rewriteTemplateHead(
 ): string {
   let out = html
   const from = encodePathname(templatePathname)
-  // 路由的 pathname 没有尾斜杠，模板路径与构建产物都带——补上再编码，避免改写后的
-  // canonical/og:url 丢掉尾斜杠（与站内链接形态不一致）
-  const to = encodePathname(pathname.endsWith('/') ? pathname : `${pathname}/`)
-  const swapPath = (url: string) => (from && url.endsWith(from) ? url.slice(0, -from.length) + to : url)
+  // 模板路径按构建产物形态带尾斜杠，而模板 head 里的 canonical 已经由 BaseLayout 归一成
+  // **不带**尾斜杠 —— 两种形态都得能命中，否则 archive 兜底模板的 canonical 会留在 /archive。
+  const fromPlain = from.length > 1 && from.endsWith('/') ? from.slice(0, -1) : from
+  const fromCandidates = fromPlain === '/' ? ['/'] : [fromPlain, `${fromPlain}/`]
+  // 改写目标一律**不带尾斜杠**（根路径除外）：与 BaseLayout 的 canonical 规范化同口径。
+  // EdgeOne CDN 在函数之前就把带尾斜杠的 URL 308 跳走，canonical 若指向那条地址，
+  // 搜索引擎收录到的是一条会跳转的 URL。
+  const toPath = pathname.length > 1 && pathname.endsWith('/') ? pathname.replace(/\/+$/, '') : pathname
+  const to = encodePathname(toPath)
+  const swapPath = (url: string) => {
+    if (!from) return url
+    for (const candidate of fromCandidates) {
+      if (url.endsWith(candidate)) return url.slice(0, -candidate.length) + to
+    }
+    return url
+  }
   out = out.replace(
     /(<link rel="canonical" href=")([^"]*)(")/,
     (_match, head: string, url: string, tail: string) => `${head}${swapPath(url)}${tail}`,
