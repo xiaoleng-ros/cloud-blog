@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { formatDate } from 'cloud-blog/shared/post-utils'
 import { CoverUploader } from '../../components/CoverUploader'
 import { DateField } from '../../components/DateField'
+import { TagPicker } from '../../components/TagPicker'
 import { fetchSelectableCategories, fetchTerms, type TermOption } from '../lib/api'
 
 /** 发布前的元信息（文章与随笔共用结构，字段按集合取用） */
@@ -93,32 +94,11 @@ export const PublishModal: React.FC<Props> = ({
     })
   }
 
-  /** 多选下拉组件（仅用于标签） */
-  const multiSelect = (
-    options: TermOption[],
-    selected: number[],
-    onChange: (ids: number[]) => void,
-    placeholder: string,
-  ) => (
-    <select
-      className="publish-modal__select publish-modal__select--multi"
-      multiple
-      size={5}
-      value={selected.map(String)}
-      onChange={(e) => onChange([...e.target.selectedOptions].map((o) => Number(o.value)))}
-    >
-      {options.length === 0 && <option value="" disabled>{placeholder}</option>}
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>{o.name}</option>
-      ))}
-    </select>
-  )
-
   /**
    * 单选下拉组件（用于分类：文章与随笔都只能选一个分类，因为分类决定 URL）
    *
-   * 与 multiSelect 的差异：单选后把 ids 数组只保留一个元素，保持 PublishMeta.categoryIds
-   * 结构不变，避免影响 buildPayload 的下游取值逻辑。
+   * 单选后把 ids 数组只保留一个元素，保持 PublishMeta.categoryIds 结构不变，
+   * 避免影响 buildPayload 的下游取值逻辑。
    */
   const singleSelect = (
     options: TermOption[],
@@ -204,7 +184,14 @@ export const PublishModal: React.FC<Props> = ({
           )}
 
           <label className="publish-modal__label">标签（可多选）</label>
-          {multiSelect(tags, tagIds, setTagIds, '暂无标签')}
+          {/* TagPicker：细长框显示已选（顿号分隔）+ 右侧「选择」弹出卡片勾选，替代原生的 5 行多选列表 */}
+          <TagPicker
+            options={tags}
+            selected={tagIds}
+            onChange={setTagIds}
+            disabled={saving}
+            placeholder="请选择标签"
+          />
 
           {error && <p className="publish-modal__error">{error}</p>}
         </div>

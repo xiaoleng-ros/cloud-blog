@@ -26,6 +26,7 @@ export const TagsViewInner = () => {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [createProgress, setCreateProgress] = useState<{ current: number; total: number } | null>(null)
   const [confirmDel, setConfirmDel] = useState<TermOption | null>(null)
 
   // ---- 多选 ----
@@ -66,27 +67,90 @@ export const TagsViewInner = () => {
     setError('')
   }
 
+  /**
+   * 拆分一次输入的多个标签名。
+   * 以顿号（、）为主，兼容全角/半角逗号与换行（粘贴列表时常见）；空项与重复项去掉，保留输入顺序。
+   */
+  const splitNames = (raw: string) => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const piece of raw.split(/[、，,\n\r]/)) {
+      const v = piece.trim()
+      if (!v || seen.has(v)) continue
+      seen.add(v)
+      out.push(v)
+    }
+    return out
+  }
+
   const submit = async () => {
-    const v = name.trim()
-    if (!v) {
+    const raw = name.trim()
+    if (!raw) {
       setError('请填写标签名称')
       return
     }
-    if (docs.some((d) => d.id !== editingId && String(d.name) === v)) {
-      setError(`已存在同名标签「${v}」`)
+
+    // 编辑态只改一个名称，不拆分
+    if (editingId != null) {
+      if (docs.some((d) => d.id !== editingId && String(d.name) === raw)) {
+        setError(`已存在同名标签「${raw}」`)
+        return
+      }
+      setBusy(true)
+      setError('')
+      try {
+        await updateTag(editingId, { name: raw })
+        resetPanel()
+        await load()
+        show('success', '已保存')
+      } catch (e) {
+        setError((e as Error).message)
+      } finally {
+        setBusy(false)
+      }
       return
     }
+
+    // 新建态：一次可填多个，用顿号隔开；已存在的跳过，不打断其余创建
+    const names = splitNames(raw)
+    const existing = new Set(docs.map((d) => String(d.name)))
+    const dupes = names.filter((v) => existing.has(v))
+    const fresh = names.filter((v) => !existing.has(v))
+    if (!fresh.length) {
+      setError(
+        dupes.length > 1
+          ? `这些标签都已存在：${dupes.map((v) => `「${v}」`).join('、')}`
+          : `已存在同名标签「${dupes[0]}」`,
+      )
+      return
+    }
+
     setBusy(true)
     setError('')
+    const failed: string[] = []
     try {
-      if (editingId != null) await updateTag(editingId, { name: v })
-      else await createTerm('tags', v)
+      for (let i = 0; i < fresh.length; i++) {
+        setCreateProgress({ current: i + 1, total: fresh.length })
+        try {
+          await createTerm('tags', fresh[i])
+        } catch {
+          failed.push(fresh[i])
+        }
+      }
+      const ok = fresh.length - failed.length
       resetPanel()
       await load()
-      show('success', editingId != null ? '已保存' : '已创建')
-    } catch (e) {
-      setError((e as Error).message)
+
+      const notes: string[] = []
+      if (ok > 0) notes.push(ok > 1 ? `已创建 ${ok} 个标签` : '已创建')
+      if (dupes.length) notes.push(`${dupes.length} 个已存在，已跳过`)
+      if (failed.length) notes.push(`${failed.length} 个创建失败`)
+      show(failed.length ? 'error' : 'success', notes.join('，'))
+
+      // 失败的留回输入框，方便直接重试
+      if (failed.length) setName(failed.join('、'))
     } finally {
+      setCreateProgress(null)
       setBusy(false)
     }
   }
@@ -320,16 +384,23 @@ export const TagsViewInner = () => {
             id="tag-name-input"
             type="text"
             className="tag__input"
-            placeholder="# 例如：React、随笔、教程"
+            placeholder={editingId != null ? '# 标签名称' : '# 例如：React、随笔、教程（顿号可分隔多个）'}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !busy) void submit()
             }}
           />
+          {editingId == null && (
+            <p className="tag__hint">一次可填多个，用顿号（、）隔开，提交后逐个创建</p>
+          )}
           {error && <p className="tag__error">{error}</p>}
           <button type="button" className="tag__submit" disabled={busy} onClick={() => void submit()}>
-            {editingId != null ? '保存修改' : '+ 新增标签'}
+            {createProgress
+              ? `创建中 ${createProgress.current} / ${createProgress.total}…`
+              : editingId != null
+                ? '保存修改'
+                : '+ 新增标签'}
           </button>
           {editingId != null && (
             <button type="button" className="tag__cancel" onClick={resetPanel} disabled={busy}>
