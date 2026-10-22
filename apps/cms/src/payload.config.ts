@@ -285,14 +285,51 @@ const DATABASE_DRIVER = process.env.DATABASE_DRIVER || 'sqlite'
 const PG_SSL_INSECURE = process.env.PG_SSL_INSECURE === '1'
 
 /** 按环境变量选定的数据库适配器（构建时静态选择，两分支均打包） */
-// 连接池上限。历史原因：本地曾直连线上 Supabase 会话池（5432），每条池连接都对应
-// 服务端真实进程，dev 开满会和线上抢连接预算，所以 dev 压到 3。
-// 现在本地默认连 D:\pglocal 的绿色版 PG，不再有这个约束；上限沿用 dev 3 足够，
-// 需要本地并发压测时显式设 PG_POOL_MAX。
+// 连接池上限。
+//
+// ⚠️ 2026-10-22 全站 500 事故：这个值原来生产给 10，配合下面的 idleTimeoutMillis=0
+// （永不回收）会把 Supabase 会话池直接打死。会话池对每个项目只分配 pool_size=15 条
+// 连接，而 EdgeOne 每个函数实例各有一个 pg.Pool。一次滚动发布同时存在新旧两个实例，
+// 2 × 10 = 20 > 15 → 新实例连不上，报
+//   (EMAXCONNSESSION) max clients reached in session mode - max clients are limited to pool_size: 15
+// 而旧实例因为连接永不归还，故障不会自愈。
+//
+// 生产改成 5：给两个实例留出余量（2 × 5 = 10 < 15），第三个实例也还挤得下。
+// 本地仍是 3（单实例、无并发预算压力）。
 const PG_POOL_MAX = (() => {
   const raw = Number(process.env.PG_POOL_MAX)
   if (Number.isFinite(raw) && raw > 0) return raw
-  return IS_PRODUCTION ? 10 : 3
+  return IS_PRODUCTION ? 5 : 3
+})()
+
+/**
+ * 空闲连接回收时间。
+ *
+ * 原值写死 0（永不回收），出发点是性能：实测跨公网连东京 Supabase，新建连接要
+ * TCP+TLS+认证约 1s，每条查询再付 ~130ms RTT，pg 默认 10s 空闲断连会让停顿后的
+ * 每次点击都重付握手费。
+ *
+ * 但这个取舍在会话池上不成立 —— 详见上面 PG_POOL_MAX 的事故说明：连接不还，
+ * 别的实例就拿不到。生产必须给一个有限值：活跃期连接照样复用，静默 30s 后归还，
+ * 让滚动发布和冷启动有多余的池子预算。本地仍保留 0（只有一个实例，无竞争）。
+ */
+const PG_IDLE_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.PG_IDLE_TIMEOUT_MS)
+  if (Number.isFinite(raw) && raw >= 0) return raw
+  return IS_PRODUCTION ? 30_000 : 0
+})()
+
+/**
+ * 建连超时。
+ *
+ * 池子满时 pg 默认会一直等待，函数实例就那么悬着，最后被平台超时杀掉 ——
+ * 表现为请求转圈很久然后 500，日志里还看不到原因。给一个明确的 20s，
+ * 超时直接抛错，至少能快速失败并让调用方看到真实错误。
+ */
+const PG_CONNECT_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.PG_CONNECT_TIMEOUT_MS)
+  if (Number.isFinite(raw) && raw > 0) return raw
+  return 20_000
 })()
 
 const PG_URL = process.env.POSTGRES_URL
@@ -384,10 +421,13 @@ const db =
           // ── 连接池常驻配置（连远程库时是性能关键项，本机连接无所谓）──
           // 实测跨公网连东京 Supabase：新建连接要 TCP+TLS+认证约 1s，每条查询再付 ~130ms RTT；
           // 而 pg 默认 10s 空闲就断连 → 停顿后的每次点击都要重付握手费。
-          // 关闭空闲回收 + 开启 TCP 保活，让连接建立后长期复用。
-          idleTimeoutMillis: 0, // 0 = 永不因空闲回收连接（常驻连接池）
+          // 但「永不回收」会打死会话池（见文件上方 PG_POOL_MAX 的事故说明），
+          // 故生产取 30s：活跃期照样复用，静默半分钟后归还配额。本地仍 0。
+          idleTimeoutMillis: PG_IDLE_TIMEOUT_MS,
           keepAlive: true, // TCP 保活，及时探测被服务端断开的死连接
           max: PG_POOL_MAX,
+          // 池满时不无限等待，20s 内拿不到连接就抛错（默认行为是挂到平台超时）
+          connectionTimeoutMillis: PG_CONNECT_TIMEOUT_MS,
         },
         // 默认 push:false。本地现默认连绿色版 PG（.env 里设了 PAYLOAD_FORCE_PUSH=1，可自动同步 schema）；
         // 连线上 Supabase 时（.env.supabase / dev:supabase）必须保持关闭 —— dev push 会直接改生产库
