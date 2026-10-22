@@ -252,8 +252,12 @@ function urlNormalizationKeys(url: string): string[] {
 export async function fetchMediaAltMap(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   try {
+    // ⚠ select 里必须带 filename：cloud-storage 插件的 url 字段是 afterRead 钩子
+    // 按 data.filename 现算出来的虚拟字段，不是库里的列。只选 url/alt 时钩子拿不到
+    // filename，url 一律返回 undefined，整张映射表会是空的 —— 而且不报错、没日志，
+    // 表现只是「正文图片永远没有 alt」。实测：不选 filename 时 6 条 media 里 0 条有 url。
     const { docs } = await fetchJson<PayloadListResponse<ApiMedia>>(
-      '/api/media?limit=0&select[url]=url&select[alt]=alt',
+      '/api/media?limit=0&select[url]=url&select[alt]=alt&select[filename]=filename',
     );
     for (const doc of docs) {
       const url = doc?.url;
