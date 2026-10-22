@@ -24,9 +24,9 @@ export async function getStaticPaths() {
   const posts = sortPosts(await getCollection('posts'));
 
   // 规范 URL 是 getPostPath() 产出的 /posts/{分类标识}/{id} —— sitemap、RSS、canonical、
-  // 注：改用「分类标识」之前的历史链接 /posts/{中文分类名}/{id} 由 CMS catch-all 做 301。
   // CMS 侧渲染全部按这个形态引用；这里额外保留历史 /posts/{id}/ 入口并 301 过去，
   // 否则旧链接（以及已被搜索引擎收录的地址）会全部 404。
+  // 注：改用「分类标识」之前的历史链接 /posts/{中文分类名}/{id} 由 CMS catch-all 做 301。
   return [
     ...posts.map((post) => ({
       params: { slug: getPostPathParams(post) },
@@ -54,7 +54,6 @@ const category = getPostCategory(post);
 const tags = getPostTags(post);
 const description = getPostDescription(post);
 const cover = getPostCover(post);
-const coverAlt = (post.data.coverAlt as string | undefined) ?? '';
 const readingMinutes = getReadingMinutes(post);
 const { newer, older } = getAdjacentPosts(posts, post);
 const relatedPosts = getRelatedPosts(posts, post);
@@ -130,38 +129,10 @@ const articleSchema = {
           {tags.map((tag) => <span>{tag}</span>)}
         </div>
       )}
-      {/* Cover stays in header only when there's no TOC sidebar */}
-      {cover && tableOfContents.length < 2 && (
-        <img
-          class="article__cover"
-          src={cover}
-          alt={coverAlt}
-          width="1200"
-          height="630"
-          loading="eager"
-          fetchpriority="high"
-          referrerpolicy="no-referrer"
-          onerror="this.removeAttribute('onerror');this.setAttribute('src','/covers/default-cover.svg')"
-        />
-      )}
     </header>
 
     <div class="article__body">
       <div class="article__main">
-        {/* When a TOC sidebar exists, cover moves here so it sits beside the TOC */}
-        {cover && tableOfContents.length >= 2 && (
-          <img
-            class="article__cover"
-            src={cover}
-            alt={coverAlt}
-            width="1200"
-            height="630"
-            loading="eager"
-            fetchpriority="high"
-            referrerpolicy="no-referrer"
-            onerror="this.removeAttribute('onerror');this.setAttribute('src','/covers/default-cover.svg')"
-          />
-        )}
         <div class="post-content" data-sync-block="postContent">
           <Content />
         </div>

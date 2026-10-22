@@ -2107,22 +2107,7 @@ html.is-search-open {
   margin-top: 1.2rem;
 }
 
-.article__cover {
-  display: block;
-  width: 100%;
-  height: auto;
-  margin-top: 2rem;
-  border: 1px solid var(--edge);
-  border-radius: var(--radius);
-  background: var(--surface-muted);
-  box-shadow: 0 10px 26px rgba(20, 24, 32, 0.09);
-}
-
-/* Cover inside the prose column (TOC articles) — flush top, space below before h2 */
-.article__main > .article__cover {
-  margin-top: 0;
-  margin-bottom: 2.2rem;
-}
+/* 文章详情页不渲染封面图：封面只用于列表卡片、OG 分享图与 JSON-LD image。 */
 
 .toc {
   margin: 0;
@@ -3367,7 +3352,7 @@ body.is-dragging-floating {
   .js :is(
     .hero__intro > *, .hero__picks,
     .section__header, .section__more, .post-row,
-    .related-posts, .post-nav, .article__header > *, .article__main > .article__cover,
+    .related-posts, .post-nav, .article__header > *,
     .proj-section__head, .proj,
     .page-header, .archive-summary, .archive-year__head,
     .about__intro > *,
@@ -3381,7 +3366,7 @@ body.is-dragging-floating {
   .js :is(
     .hero__intro > *, .hero__picks,
     .section__header, .section__more, .post-row,
-    .related-posts, .post-nav, .article__header > *, .article__main > .article__cover,
+    .related-posts, .post-nav, .article__header > *,
     .proj-section__head, .proj,
     .page-header, .archive-summary, .archive-year__head,
     .about__intro > *,
@@ -3392,9 +3377,8 @@ body.is-dragging-floating {
   }
 
   /* Masthead content settles into focus — blur lifts as it rises.
-     (.js.js matches the (0,3,0) specificity of the main reveal selector —
-     it contains `.article__main > .article__cover` — so this later rule
-     wins and adds `filter` to the transition.) */
+     (.js.js matches the (0,3,0) specificity of the main reveal selector,
+     so this later rule wins and adds `filter` to the transition.) */
   .js.js :is(.hero__intro > *, .article__header > *) {
     transition: opacity var(--t-slow) var(--ease-out-soft),
       transform var(--t-slow) var(--ease-out-soft),
@@ -4094,13 +4078,6 @@ html.theme-anim body {
 /* 精选封面：撕纸毛边照片 */
 .pick-hero__thumb,
 .pick-side__thumb {
-  border-radius: 255px 15px 255px 15px / 15px 255px 15px 255px;
-  border: 2px solid var(--ink);
-  box-shadow: 3px 4px 0 var(--shadow-sm);
-}
-
-/* 文章正文封面：撕纸 */
-.article__cover {
   border-radius: 255px 15px 255px 15px / 15px 255px 15px 255px;
   border: 2px solid var(--ink);
   box-shadow: 3px 4px 0 var(--shadow-sm);

@@ -693,23 +693,16 @@ function renderFooterBar(author: string, year: number): string {
   return `<span>© ${year} ${escapeHtml(author)}</span>`
 }
 
-/** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]） */
-function renderArticleHeader(
-  post: MdEntry,
-  opts: { hasToc: boolean },
-): string {
+/** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]）
+ *  注意：详情页不渲染封面图（原先的两处 cover 判断口径不一，会叠出两张同款图）；
+ *  封面只用于列表卡片、OG 分享图与 JSON-LD 的 image。 */
+function renderArticleHeader(post: MdEntry): string {
   const category = getPostCategory(post)
   const date = toDate(post.data.date)
   const tags = getPostTags(post)
   const description = getPostDescription(post)
-  const cover = getPostCover(post)
   const readingMinutes = getReadingMinutes(post)
   const updated = toDate(post.data.updated)
-
-  const coverHtml =
-    cover && !opts.hasToc
-      ? `<img class="article__cover" src="${escapeAttr(cover)}" alt="${escapeAttr(post.data.coverAlt ?? '')}" loading="eager" fetchpriority="high" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/covers/default-cover.svg'" />`
-      : ''
 
   const meta = [
     category ? `<span>${escapeHtml(category)}</span>` : '',
@@ -726,8 +719,7 @@ function renderArticleHeader(
   return `<div class="post-meta">${meta}</div>
   <h1>${escapeHtml(post.data.title)}</h1>
   <p>${escapeHtml(description)}</p>
-  ${tagHtml}
-  ${coverHtml}`
+  ${tagHtml}`
 }
 
 /** 文章正文内容（锚点 posts/[...slug].astro 的 div[data-sync-block="postContent"]） */
@@ -1293,7 +1285,10 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
     }
   }
 
-  const hasToc = tocGroups.length >= 2
+  // 与 Astro 模板保持同一口径：h2+h3 的标题数 ≥2 就算有目录（模板用
+  // tableOfContents.length >= 2）。之前这里错用了「h2 分组数」，导致只有 h3
+  // 的文章模板判定有目录、注入侧判定无目录，侧栏被清空成空白列。
+  const hasToc = tocList.length >= 2
   const { newer, older } = getAdjacentPosts(posts, post)
   const related = getRelatedPosts(posts, post)
   const settings = ctx.settings
@@ -1306,7 +1301,7 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
     // 标题保持原始文本（未转义）：客户端直接赋给 document.title，
     // 服务端注入 <title> 时再统一做一次 HTML 转义。
     pageTitle: `${post.data.title} - ${siteName}`,
-    articleHeader: renderArticleHeader(post, { hasToc }),
+    articleHeader: renderArticleHeader(post),
     postContent: html,
     tocSidebar: hasToc ? renderTocSidebar(tocGroups) : '',
     articleFooter: renderArticleFooter(newer, older, related),
