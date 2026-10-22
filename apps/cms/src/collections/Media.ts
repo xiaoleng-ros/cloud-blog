@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { syncInvalidateHook } from '../lib/sync-cache'
-import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES } from '../lib/media-upload'
+import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES, toStorageSafeFilename } from '../lib/media-upload'
 
 /**
  * 图片 / 多媒体集合：文章封面、正文图片、头像等上传文件都会存到这里。
@@ -82,6 +82,29 @@ export const Media: CollectionConfig = {
       },
     ],
     beforeValidate: [
+      /**
+       * 把文件名洗成 Supabase Storage 能接受的 ASCII 形状。
+       *
+       * 为什么必须在服务端做：浏览器端（media-upload.ts）已经洗过一次，但
+       * `POST /api/media` 是公开可调用的 REST 端点，任何人拿会话（或以后加的
+       * API key）都能绕过前端直接传 `我的照片.jpg`。Payload 自己的
+       * `sanitizeFilename` 只处理控制字符与 Windows 非法字符，不管中文；而
+       * Supabase 的 S3 接口对 Key 做白名单校验，非 ASCII 一律 `InvalidKey`——
+       * 那是在 afterChange 里 throw 出来的，用户只会看到一次 500。
+       *
+       * 时机：Payload 的顺序是 generateFileData（设 filename）→ 字段
+       * beforeValidate → 集合 beforeValidate，所以这里改 `data.filename`
+       * 能同时影响落库值与 afterChange 写 S3 用的 Key。唯一副作用是
+       * getSafeFileName 的去重发生在我们之前，所以这里带 `dedupeSeed` 加
+       * 短哈希后缀，避免洗完与已有文件撞名。
+       */
+      ({ data, req }) => {
+        const filename = (data as { filename?: unknown } | undefined)?.filename
+        if (typeof filename !== 'string' || filename === '') return data
+        const safe = toStorageSafeFilename(filename, req.file?.name || filename)
+        if (safe === filename) return data
+        return { ...data, filename: safe }
+      },
       ({ data, req }) => {
         // Payload 的顺序是 generateFileData → 字段 beforeValidate → 集合 beforeValidate，
         // 所以到这里真实字节数已经写在 data.filesize（sharp 重编码后的大小），
