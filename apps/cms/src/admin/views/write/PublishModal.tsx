@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatDate } from 'cloud-blog/shared/post-utils'
 import { CoverUploader } from '../../components/CoverUploader'
 import { DateField } from '../../components/DateField'
-import { TagPicker } from '../../components/TagPicker'
-import { fetchSelectableCategories, fetchTerms, type TermOption } from '../lib/api'
+import { TagPicker, splitTagText } from '../../components/TagPicker'
+import { createTerm, fetchSelectableCategories, fetchTerms, type TermOption } from '../lib/api'
 
 /** 发布前的元信息（文章与随笔共用结构，字段按集合取用） */
 export interface PublishMeta {
@@ -49,7 +49,12 @@ export const PublishModal: React.FC<Props> = ({
   const [description, setDescription] = useState(initial.description ?? '')
   const [cover, setCover] = useState(initial.cover ?? '')
   const [categoryIds, setCategoryIds] = useState<number[]>(initial.categoryIds ?? [])
-  const [tagIds, setTagIds] = useState<number[]>(initial.tagIds ?? [])
+  // 标签走「文本框唯一数据源」：勾选卡片只是把名字写进这段文本，手打新名字也写进这里。
+  // 真正的 id 解析（含新建缺失标签）留到 submit 时做，避免边打字边建标签。
+  const [tagText, setTagText] = useState('')
+  // 用户是否动过标签框：用于「编辑旧文时标签列表没拉回来」的兜底——
+  // 没动过就沿用 initial.tagIds，绝不因为一次网络抖动把文章的标签清空
+  const tagTouchedRef = useRef(false)
   const [sticky, setSticky] = useState<number>(initial.sticky ?? 0)
   const [mood, setMood] = useState(initial.mood ?? '')
   // 默认日期用 Asia/Shanghai 现成工具，避免上海 00:00–08:00 时 toISOString 仍取 UTC 前一天
@@ -60,14 +65,62 @@ export const PublishModal: React.FC<Props> = ({
   const [error, setError] = useState('')
 
   // 挂载时拉取分类 / 标签列表（失败不阻塞发布）；分类只列「类型=分类且前台可见」的节点
+  // 标签拉回后再把 initial.tagIds 翻译成标签名填进文本框：ids→names 需要 name，只能等列表到位
+  const tagsReadyRef = useRef(false)
   useEffect(() => {
     void Promise.all([fetchSelectableCategories(), fetchTerms('tags')])
       .then(([cs, ts]) => {
         setCategories(cs)
         setTags(ts)
+        tagsReadyRef.current = true
+        const preset = initial.tagIds?.length
+          ? ts.filter((t) => initial.tagIds?.includes(Number(t.id))).map((t) => String(t.name))
+          : []
+        // 只做一次回填，且不覆盖用户已经在框里敲的内容
+        if (preset.length > 0) setTagText((cur) => (cur.trim() ? cur : preset.join('、')))
       })
       .catch(() => {})
+    // initial 只在挂载时读一次，故不列入依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /**
+   * 把文本框里的标签名解析成 id：已有标签按名字匹配，匹配不到的自动新建入库
+   *
+   * 这样用户手打的标签会真正落到 tags 集合里，标签管理页也能看到，
+   * 而不是像以前那样只能在已有标签里挑。
+   */
+  const resolveTagIds = async (text: string): Promise<number[]> => {
+    const names = splitTagText(text)
+    if (names.length === 0) return []
+    // 标签列表还没回来（首屏点太快）就先补拉一次，否则会把已有标签误判成新的重复建
+    let pool = tags
+    if (!tagsReadyRef.current) {
+      try {
+        pool = await fetchTerms('tags')
+        setTags(pool)
+        tagsReadyRef.current = true
+      } catch {
+        // 拉不到就用现有 pool 尽力匹配
+      }
+    }
+    const byName = new Map(pool.map((t) => [String(t.name), Number(t.id)]))
+    const ids: number[] = []
+    const created: TermOption[] = []
+    for (const name of names) {
+      const hit = byName.get(name)
+      if (hit) {
+        ids.push(hit)
+        continue
+      }
+      const term = await createTerm('tags', name)
+      byName.set(name, Number(term.id))
+      created.push(term)
+      ids.push(Number(term.id))
+    }
+    if (created.length > 0) setTags((prev) => [...prev, ...created])
+    return ids
+  }
 
   /** 提交校验并回调 */
   const submit = async () => {
@@ -82,6 +135,19 @@ export const PublishModal: React.FC<Props> = ({
       return
     }
     setError('')
+    // 标签名 → id（缺的现建）：失败要拦住，否则正文会带着「半个标签集」发出去
+    let tagIds: number[]
+    try {
+      tagIds = await resolveTagIds(tagText)
+    } catch (e) {
+      setError(`标签保存失败：${e instanceof Error ? e.message : '未知错误'}`)
+      return
+    }
+    // 兜底：编辑旧文时如果标签列表没拉回来、文本框又一直是空的（用户没动过），
+    // 沿用原有的 tagIds，避免一次网络抖动就把文章标签洗成空
+    if (!tagTouchedRef.current && tagText.trim() === '' && initial.tagIds?.length) {
+      tagIds = initial.tagIds
+    }
     await onConfirm({
       title: title.trim(),
       description: description.trim(),
@@ -183,14 +249,17 @@ export const PublishModal: React.FC<Props> = ({
             </>
           )}
 
-          <label className="publish-modal__label">标签（可多选）</label>
-          {/* TagPicker：细长框显示已选（顿号分隔）+ 右侧「选择」弹出卡片勾选，替代原生的 5 行多选列表 */}
+          <label className="publish-modal__label">标签（可多选，也可新建）</label>
+          {/* TagPicker：细长框可自由输入（顿号分隔）+ 右侧「选择」就地展开卡片勾选 */}
           <TagPicker
             options={tags}
-            selected={tagIds}
-            onChange={setTagIds}
+            text={tagText}
+            onTextChange={(v) => {
+              tagTouchedRef.current = true
+              setTagText(v)
+            }}
             disabled={saving}
-            placeholder="请选择标签"
+            placeholder="请选择标签，或直接输入（顿号分隔）"
           />
 
           {error && <p className="publish-modal__error">{error}</p>}
