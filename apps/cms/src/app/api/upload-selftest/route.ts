@@ -22,11 +22,26 @@ function diagnose(result: StorageSelfTestResult): string {
   if (bucketErr.ok) return '四段链路全部通过，图片上传应当正常。'
   const text = `${bucketErr.error ?? ''} ${bucketErr.code ?? ''}`
   if (/SignatureDoesNotMatch/i.test(text)) {
+    // 最隐蔽也最常见的一种：两个环境变量填成了同一个值。
+    // 指纹相同 ⇒ secret 里存的其实就是 accessKeyId（典型是复制串行，把上面那栏
+    // 又粘了一遍）。此时长度必然也错（32 而非 64），但只说「长度不对」会让人
+    // 以为是被截断，跑去重新复制同一栏 —— 必须明确指出来是填错了框。
+    const c = result.config
+    if (
+      c.accessKeyIdLength > 0 &&
+      c.accessKeyIdFingerprint === c.secretAccessKeyFingerprint
+    ) {
+      return (
+        `SUPABASE_S3_SECRET_ACCESS_KEY 与 SUPABASE_S3_ACCESS_KEY_ID 是同一个值` +
+        `（两者指纹相同、长度同为 ${c.accessKeyIdLength} 位）—— 几乎肯定是复制时把 ` +
+        `access key id 粘到了 secret 那一栏。请回 Supabase 控制台 Storage → S3 access keys，` +
+        `把「secret」那一条（64 位）单独复制，填进 SECRET 变量。`
+      )
+    }
     // 长度判据比「签名不匹配」有用得多：Supabase 的 key 长度是固定的
     // （accessKeyId 32 位、secretAccessKey 64 位）。长度对不上 ⇒ 值在复制环节被
     // 截断/多粘了字符，重新复制一次即可；长度正常却还签名失败 ⇒ 是真·旧密钥。
     // 两者处置不同（改粘贴 vs 重置），所以这里必须先分开。
-    const c = result.config
     const wrongLength =
       c.accessKeyIdLength !== 32 || c.secretAccessKeyLength !== 64
     if (wrongLength) {
