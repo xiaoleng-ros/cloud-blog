@@ -175,6 +175,29 @@ export function toStorageSafeFilename(filename: string, dedupeSeed?: string): st
   return `${stem}-${suffix}${ext ? `.${ext}` : ''}`
 }
 
+/**
+ * 给文件名追加 / 递增数字后缀，避开重名。
+ *
+ * 规则与 Payload 自己的 `incrementName` 保持一致（uploads/getSafeFileName.js）：
+ * `photo.jpg` → `photo-1.jpg`，`photo-1.jpg` → `photo-2.jpg`，`photo-99.jpg` → `photo-100.jpg`。
+ * 必须同规则，否则两边交替改名会互相踩。
+ *
+ * 存在理由：服务端洗完文件名后，可能与库里已有文件撞名。Payload 的
+ * `getSafeFileName` 在 beforeValidate **之前**跑，它看到的是原始（可能是中文）
+ * 文件名，因此「两张都叫 我的照片.jpg」的第二次上传会算出同一个
+ * `image-xxxxxx.jpg`，直接撞 `media.filename` 的唯一约束变成 400。
+ */
+export function incrementFilenameSuffix(filename: string): string {
+  const dot = filename.lastIndexOf('.')
+  const hasExtension = dot > 0 && dot < filename.length - 1
+  const base = hasExtension ? filename.slice(0, dot) : filename
+  const ext = hasExtension ? filename.slice(dot + 1) : ''
+  const matched = /^(.*)-(\d+)$/.exec(base)
+  // Number() 而不是 parseInt：`-007` 这种要归一到 -8，避免与已有 -8 撞
+  const next = matched ? `${matched[1]}-${Number(matched[2]) + 1}` : `${base}-1`
+  return ext ? `${next}.${ext}` : next
+}
+
 /** 6 位十六进制哈希（FNV-1a），不引 crypto，前后端同构可用 */
 function shortHash(input: string): string {
   let h = 0x811c9dc5

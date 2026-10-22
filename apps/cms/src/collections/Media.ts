@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { syncInvalidateHook } from '../lib/sync-cache'
-import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES, toStorageSafeFilename } from '../lib/media-upload'
+import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES, incrementFilenameSuffix, toStorageSafeFilename } from '../lib/media-upload'
 
 /**
  * 图片 / 多媒体集合：文章封面、正文图片、头像等上传文件都会存到这里。
@@ -97,13 +97,36 @@ export const Media: CollectionConfig = {
        * 能同时影响落库值与 afterChange 写 S3 用的 Key。唯一副作用是
        * getSafeFileName 的去重发生在我们之前，所以这里带 `dedupeSeed` 加
        * 短哈希后缀，避免洗完与已有文件撞名。
+       *
+       * ⚠ 但哈希后缀只解决「不同原名洗成同一结果」，不解决「同一原名传两次」：
+       *   种子都是原始文件名 → 后缀相同 → 撞 media.filename 唯一约束变成 400。
+       *   所以洗完之后还要查库确认唯一，重名就按 Payload 同款规则递增数字后缀。
        */
-      ({ data, req }) => {
+      async ({ data, req, operation, originalDoc }) => {
         const filename = (data as { filename?: unknown } | undefined)?.filename
         if (typeof filename !== 'string' || filename === '') return data
         const safe = toStorageSafeFilename(filename, req.file?.name || filename)
         if (safe === filename) return data
-        return { ...data, filename: safe }
+
+        // 洗完的名字可能已被占用（同一张图重复上传是最常见的情况）。
+        // 查库而不是猜：Supabase 侧 Key 无妨覆盖，真正的墙是 media.filename 唯一约束。
+        let unique = safe
+        const selfId = operation === 'update' ? (originalDoc as { id?: number } | undefined)?.id : undefined
+        for (let guard = 0; guard < 50; guard++) {
+          const clash = await req.payload.find({
+            collection: 'media',
+            where: { filename: { equals: unique } },
+            limit: 1,
+            depth: 0,
+            pagination: false,
+            overrideAccess: true,
+          })
+          const hit = clash.docs[0] as { id?: number } | undefined
+          // 编辑已有记录时，撞到的如果是自己，就不算冲突
+          if (!hit || (selfId !== undefined && hit.id === selfId)) break
+          unique = incrementFilenameSuffix(unique)
+        }
+        return { ...data, filename: unique }
       },
       ({ data, req }) => {
         // Payload 的顺序是 generateFileData → 字段 beforeValidate → 集合 beforeValidate，
