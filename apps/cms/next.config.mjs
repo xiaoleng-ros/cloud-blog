@@ -59,14 +59,21 @@ const nextConfig = {
   // 容器里读不到 → 又回到 "self-signed certificate in certificate chain"，
   // Payload 初始化失败、全站 500。outputFileTracingIncludes 是唯一可靠解法。
   //
-  // 同时兜住 AWS SDK：`/api/comment-image` 用运行时 `await import('@aws-sdk/client-s3')`
-  // 直传对象存储（不经过 Payload）。这个包只是 `@payloadcms/storage-s3` 的传递依赖，
-  // 本项目 dependencies 里没有直接声明，nft 对「动态 import + 传递依赖」的追踪不稳定。
-  // 一旦没进函数包，运行时报 ERR_MODULE_NOT_FOUND，被 catch 成 502「图片上传失败」，
-  // 而 EdgeOne 没有交互式日志——这种失败在现场和「凭据错」完全无法区分。
-  // 显式列入追踪，代价约 8MB（函数包 108MB，限额 128MiB，仍有余量）。
+  //
+  // ⚠️ 千万不要往这里加 `./node_modules/**` 类的 glob（2026-10-22 构建事故）。
+  // 本项目 apps/cms/package.json 有 `"cloud-blog": "file:../.."`，安装后
+  // apps/cms/node_modules/cloud-blog 是指回仓库根的符号链接。一旦追踪 glob 的根
+  // 落在 node_modules 上，nft 会顺着这个链接走回仓库根、再走进 apps/cms/node_modules，
+  // 立刻自成一圈，Turbopack 直接报：
+  //   'apps/cms/node_modules/cloud-blog' is a symlink causes that causes an infinite loop!
+  // 表现为 `Failed to write app endpoint /_not-found/page` → 整个构建 FATAL。
+  //
+  // 曾为了「保险」把 @aws-sdk 和 @smithy 加进来，实测既无必要也有害：
+  // 那版线上返回的是 `SignatureDoesNotMatch 403`（说明 SDK 已在包内、能连到端点），
+  // 不是 `ERR_MODULE_NOT_FOUND`；而加 glob 后的构建直接失败，部署根本没发生。
+  // AWS SDK 由 @payloadcms/storage-s3 静态 import 进入主包，追踪本就覆盖它。
   outputFileTracingIncludes: {
-    '/**': ['./certs/**/*.pem', './node_modules/@aws-sdk/**', './node_modules/@smithy/**'],
+    '/**': ['./certs/**/*.pem'],
   },
   // EdgeOne 云函数 128MiB 限额：把仅构建期/CLI 使用的工具链挡在文件追踪之外
   // （不进追踪 = 不进 standalone，比构建后删文件安全）。
