@@ -20,10 +20,30 @@ const navItems = await getNavItems();
  * 「更多」面板条目。
  *
  * href 留空表示页面还没建，渲染成不可点的占位；
- * 有 href 的会渲染成链接并在新标签打开（GitHub 走社交链接里同一份地址，
- * 不在这里再抄一遍 —— 以后换 GitHub 用户名只需改后台/社交链接一处）。
+ * 有 href 的会渲染成链接并在新标签打开。
+ *
+ * GitHub 地址按三级回退取：
+ *   1. 社交链接里的 github 条目（明确配置了就以它为准）
+ *   2. 站点设置的「GitHub 用户名」拼个人主页（与页脚 GitHub 指向同一处）
+ *   3. 站点设置的「GitHub 仓库地址」
+ * 三者都空才算「页面未建」，渲染成不可点占位。
+ *
+ * 为什么不能只看社交链接：socials 是「填了才显示」的纯文本字段，漏填 github 时
+ * 这里会拿到空串，条目静默降级成不可点的 span —— 看起来像按钮，点了没反应。
+ * 用 githubUser 兜住，后台只填了一处也能点得动。
  */
-const githubHref = (await getSocials()).find((s) => s.icon === 'github')?.href ?? '';
+const socialGithub = (await getSocials()).find((s) => s.icon === 'github')?.href?.trim();
+const settingGithubUser = (settings?.githubUser ?? '').trim().replace(/^@/, '');
+const settingGithubRepo = (settings?.githubRepo ?? '').trim();
+// 社交链接里的值必须是个绝对 http(s) 地址才算数：
+// parseSocials 对非法协议会塞 '#' 占位（见 site-settings.ts），而少写协议的值
+// （如误填 `github.com/xxx`）会被当成站内路径，点了跳到 /github.com/xxx 直接 404。
+// 这两种都当没填，继续往下回退。
+const isAbsoluteHttp = (href: string) => /^https?:\/\//i.test(href);
+const githubHref =
+  (socialGithub && isAbsoluteHttp(socialGithub) ? socialGithub : '') ||
+  (settingGithubUser ? `https://github.com/${settingGithubUser}` : '') ||
+  (isAbsoluteHttp(settingGithubRepo) ? settingGithubRepo : '');
 
 // 站内页面：交给 ClientRouter 走单页切换（data-more-link 让点击处理器放行默认行为）
 const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?: boolean }> = [
