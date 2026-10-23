@@ -77,6 +77,33 @@ export const formatDate = (date?: Date | string) => {
   return parts ? `${parts.year}-${parts.month}-${parts.day}` : '';
 };
 
+const SHANGHAI_HOUR = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Shanghai',
+  hour: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * 固定 Asia/Shanghai 时区的「时段」中文词（凌晨 / 上午 / 中午 / 下午 / 晚上）。
+ *
+ * 用途：文章页的版权条写「本文由 X 于 2025-03-03 中午 发布」——日期精确到天，
+ * 再补一个时段词，比只给日期更像手写留言，也不必公开具体到分秒的时间。
+ * 与 formatDate 一样走 Intl + 固定时区，输出不受构建机 TZ 影响。
+ * 非法或缺失日期返回空串，调用方自行决定要不要输出这一段。
+ */
+export const getShanghaiPeriod = (date?: Date | string): string => {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const hour = Number(SHANGHAI_HOUR.format(d)) % 24;
+  if (!Number.isFinite(hour)) return '';
+  if (hour < 6) return '凌晨';
+  if (hour < 11) return '上午';
+  if (hour < 14) return '中午';
+  if (hour < 18) return '下午';
+  return '晚上';
+};
+
 /** 置顶优先 → 日期倒序 → 标题升序 */
 export const sortPosts = <T extends PostEntry>(posts: T[]): T[] =>
   [...posts].sort((a, b) => {

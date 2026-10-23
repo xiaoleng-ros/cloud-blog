@@ -17,6 +17,7 @@ import {
   getPostUpdatedDate,
   getReadingMinutes,
   getRelatedPosts,
+  getShanghaiPeriod,
   site,
   sortPosts,
 } from '../../lib/posts';
@@ -60,11 +61,20 @@ const { newer, older } = getAdjacentPosts(posts, post);
 const relatedPosts = getRelatedPosts(posts, post);
 const tableOfContents = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3);
 
-// 版权卡：只用后台站点设置里的作者名（与页脚同口径），不引入新字段。
-// 版权署名里的「原文链接」在这里是静态模板，后台同步时由 blog-render.tsx 的
-// renderArticleLicense() 用同一套文案重算，两处任何一处改动都要同步另一处。
-const licenseOwner = (await getSiteSettings())?.siteAuthor ?? site.author;
+// 版权条：只用后台站点设置里的作者名（与页脚同口径），不引入新字段。
+// 「本文由 X 于 <日期> <时段> 发布」里的日期与时段都走 shared/post-utils 的固定
+// Asia/Shanghai 实现，保证与构建机时区无关。
+// 这段 markup 在后台同步时由 blog-render.tsx 的 renderArticleLicense() 用同一套
+// 文案重算（同步会整块替换 articleFooter），两处任何一处改动都要同步另一处。
+const siteSettings = await getSiteSettings();
+const licenseOwner = siteSettings?.siteAuthor ?? site.author;
+const licenseSiteName = siteSettings?.siteName ?? site.name;
 const licenseUrl = absoluteUrl(getPostPath(post));
+const licenseDate = formatDate(post.data.date);
+const licensePeriod = getShanghaiPeriod(post.data.date);
+// 日期和时段拼好后一起放进 <time>：Astro 会把模板里的换行折叠成一个空格，
+// 拼成变量能保证前后台同步出来的 HTML 一模一样（blog-render.tsx 里同样拼法）。
+const licenseCardDate = licensePeriod ? `${licenseDate} ${licensePeriod}` : licenseDate;
 
 // Group h3s under their parent h2 so the sidebar can reveal a section's
 // children only while reading that section (same pattern as the notes index).
@@ -145,27 +155,14 @@ const articleSchema = {
         </div>
 
         <footer class="article__footer" data-sync-block="articleFooter">
-          {/* 版权卡：只声明原创文章的转载规则，不涉及评论等用户内容。
-              链接指向站内 /privacy 的「文章版权」一节，避免两处文案各说一套。 */}
+          {/* 版权条：只声明原创文章的转载规则，不涉及评论等用户内容。
+              条款正文在站内 /privacy 的「文章版权」一节，这里只做三行提示，不再重复链接过去。
+              结构与 blog-render.tsx 的 renderArticleLicense() 逐字对应。 */}
           <section class="post-license" aria-label="文章版权">
-            <p class="post-license__title">
-              <Icon name="shield" size={16} />
-              本文采用 CC BY-NC-SA 4.0 授权
-            </p>
-            <p class="post-license__body">
-              「{post.data.title}」除特别注明外为本站原创内容，版权归 {licenseOwner} 所有。
-              转载请注明出处并保留本声明；不得用于商业用途；改编、翻译等演绎作品需以相同协议共享。
-            </p>
-            <p class="post-license__cite">
-              建议署名格式：作者 {licenseOwner}，原文链接
-              <a href={licenseUrl}>{licenseUrl}</a>，版权声明：基于
-              <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
-              协议授权。
-            </p>
-            <p class="post-license__more">
-              完整条款见<a href="/privacy#license">隐私政策 · 文章版权</a>。
-              站内转载或引用的他人作品，版权归原作者，不适用上述授权。
-            </p>
+            <span class="post-license__watermark" aria-hidden="true">CC</span>
+            <p class="post-license__line">本文由 <span class="post-license__author">{licenseOwner}</span>{licenseDate ? <Fragment> 于 <time datetime={post.data.date?.toISOString()}>{licenseCardDate}</time> 发布</Fragment> : <Fragment> 发布</Fragment>}</p>
+            <p class="post-license__line">文章地址：<a class="post-license__title-link" href={licenseUrl}>{post.data.title}</a></p>
+            <p class="post-license__line">本站原创文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a> 许可协议。完整转载请注明来自 <a href="/">{licenseSiteName}</a>！</p>
           </section>
 
           {(newer || older) && (

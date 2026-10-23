@@ -2703,63 +2703,91 @@ body.is-dragging-floating {
 }
 
 /* ---------- Post license (CC BY-NC-SA 4.0) ---------- */
-/* 文章底部版权卡：排在「上一篇/下一篇」之上，是正文结束后的第一块信息。
-   与 .post-license 的 markup 在 posts/[...slug].astro 与 cms 的 blog-render.tsx
-   各有一份（同步会整块替换 articleFooter），所以这里的类名不能改单边。 */
+/* 文章底部版权条：正文结束后的第一块信息，排在「上一篇/下一篇」之上。
+   markup 在 posts/[...slug].astro 与 cms 的 blog-render.tsx 各有一份
+   （同步会整块替换 articleFooter），所以类名不能只改单边。
+   版式参考常见博客的做法：一整条浅底信息带 + 右下角淡到几乎看不见的 CC 水印，
+   三行平铺（谁发的 / 文章地址 / 协议），不用图标和分段小标题。 */
 .post-license {
   position: relative;
-  margin-bottom: 2.2rem;
-  padding: 1rem 1.15rem 1.05rem;
+  /* 水印左右上下都会溢出，必须裁掉，否则窄屏会撑出横向滚动条 */
+  overflow: hidden;
+  margin-bottom: 2.4rem;
+  padding: 1.35rem 1.5rem 1.4rem;
   background: var(--surface-muted);
-  border: 1px dashed var(--edge);
-  border-radius: 14px 18px 12px 20px / 18px 12px 20px 14px;
-  font-size: 0.86rem;
-  line-height: 1.7;
-  color: var(--text-muted);
-}
-
-.post-license__title {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.55rem;
-  font-family: var(--font-hand-cn);
-  font-size: 0.98rem;
-  letter-spacing: 0.02em;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  line-height: 1.85;
   color: var(--text);
 }
 
-.post-license__title svg {
-  flex: none;
+/* CC 水印：用文字而不是图片，省一个资源、也自动跟随明暗主题换色。
+   按信息条高度取尺寸并垂直居中，上下两端都被裁掉一点（参考图就是这个观感）；
+   压在文字下层（z-index），且 pointer-events 关掉，避免挡住链接点击。 */
+.post-license__watermark {
+  position: absolute;
+  right: -0.6rem;
+  top: 50%;
+  z-index: 0;
+  transform: translateY(-50%);
+  font-family: "Helvetica Neue", Arial, "PingFang SC", sans-serif;
+  font-size: 10rem;
+  font-weight: 800;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  color: var(--text);
+  opacity: 0.055;
+  pointer-events: none;
+  user-select: none;
+}
+
+.post-license__line {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+}
+
+/* 参考图里三行之间留得比较松，比普通段落更像「留言」 */
+.post-license__line + .post-license__line {
+  margin-top: 0.7rem;
+}
+
+/* 作者名做成粉色斜体：和参考图一致，也是整条里唯一的强调 */
+.post-license__author {
+  color: var(--brand);
+  font-style: italic;
+  font-weight: 600;
+}
+
+.post-license__title-link {
   color: var(--brand);
 }
 
-.post-license__body,
-.post-license__cite,
-.post-license__more {
-  margin: 0 0 0.5rem;
-}
-
-.post-license__cite,
-.post-license__more {
-  font-size: 0.82rem;
-}
-
-.post-license__more {
-  margin-bottom: 0;
-  color: var(--text-faint);
-}
-
-/* 原文链接可能很长：允许在任意位置断行，否则窄屏会把卡片撑出去 */
+/* 标题和链接都可能很长：允许任意位置断行，否则窄屏会把信息条撑破。
+   常态不加下划线（参考图也没有），悬停才出现，避免三行里全是横线。 */
 .post-license a {
   color: var(--brand);
-  border-bottom: 1px solid var(--brand-soft);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
   overflow-wrap: anywhere;
   transition: border-color var(--t-fast) var(--ease-out);
 }
 
 .post-license a:hover {
   border-bottom-color: var(--brand);
+}
+
+@media (max-width: 640px) {
+  .post-license {
+    padding: 1.1rem 1.15rem 1.15rem;
+    font-size: 0.8rem;
+  }
+
+  /* 垂直居中靠上面的 top/transform 继承，这里只收窄字号和右侧溢出 */
+  .post-license__watermark {
+    right: -1.1rem;
+    font-size: 6.5rem;
+  }
 }
 
 /* ---------- Legacy shortcode blocks ---------- */

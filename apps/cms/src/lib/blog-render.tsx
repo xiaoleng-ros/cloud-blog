@@ -73,6 +73,7 @@ import { getBlock, setBlock } from './sync-cache'
 // 文章元数据/分类标签/日期处理：与前台博客共用同一份实现（消除两侧重复逻辑）
 import {
   formatDate,
+  getShanghaiPeriod,
   sortPosts,
   sortPostsByDate,
   getPostDescription,
@@ -762,33 +763,35 @@ function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; childre
 }
 
 /**
- * 文章版权卡（锚点 posts/[...slug].astro 的 section.post-license）。
- * 与 Astro 模板里的同名区块逐字对应：只声明原创文章的转载规则。
- * 原文链接用 site.url 拼绝对地址 —— 同步注入的 HTML 里没有 Astro 的 absoluteUrl，
- * 所以这里不能只写相对路径，否则分享出去的署名链接是坏的。
+ * 文章版权条（锚点 posts/[...slug].astro 的 section.post-license）。
+ * 与 Astro 模板里的同名区块逐字对应：三行扁平信息 + 右上角 CC 水印。
+ * 日期与时段走 shared/post-utils 的固定 Asia/Shanghai 实现，
+ * 「文章地址」用文章标题（不是 URL）—— 与前台一致，正文里另有 <a> 指向绝对地址。
  */
-function renderArticleLicense(post: MdEntry, author: string): string {
+function renderArticleLicense(post: MdEntry, author: string, siteName: string): string {
   const url = `${site.url.replace(/\/$/, '')}${getPostPath(post)}`
   const owner = escapeHtml(author)
   const title = escapeHtml(post.data.title)
-  return `<p class="post-license__title">
-      ${iconSvg('shield', 16)}
-      本文采用 CC BY-NC-SA 4.0 授权
-    </p>
-    <p class="post-license__body">
-      「${title}」除特别注明外为本站原创内容，版权归 ${owner} 所有。
-      转载请注明出处并保留本声明；不得用于商业用途；改编、翻译等演绎作品需以相同协议共享。
-    </p>
-    <p class="post-license__cite">
-      建议署名格式：作者 ${owner}，原文链接
-      <a href="${escapeAttr(url)}">${escapeHtml(url)}</a>，版权声明：基于
-      <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
-      协议授权。
-    </p>
-    <p class="post-license__more">
-      完整条款见<a href="/privacy#license">隐私政策 · 文章版权</a>。
-      站内转载或引用的他人作品，版权归原作者，不适用上述授权。
-    </p>`
+  const brand = escapeHtml(siteName)
+  const date = post.data.date
+  const dateText = formatDate(date)
+  const period = getShanghaiPeriod(date)
+  // post.data.date 在同步链路里来自 `String(doc.createdAt)`（见 blog-sync.ts），
+  // 是字符串而不是 Date，所以 <time datetime> 要重新归一化成 ISO，
+  // 否则会把非标准日期串原样塞进属性里。归一化失败就不写这个属性。
+  const iso = (() => {
+    if (!date) return ''
+    const d = date instanceof Date ? date : new Date(date as string)
+    return isNaN(d.getTime()) ? '' : d.toISOString()
+  })()
+  const posted = dateText
+    ? ` 于 <time${iso ? ` datetime="${escapeAttr(iso)}"` : ''}>${dateText}${period ? ` ${period}` : ''}</time> 发布`
+    : ' 发布'
+
+  return `<span class="post-license__watermark" aria-hidden="true">CC</span>
+    <p class="post-license__line">本文由 <span class="post-license__author">${owner}</span>${posted}</p>
+    <p class="post-license__line">文章地址：<a class="post-license__title-link" href="${escapeAttr(url)}">${title}</a></p>
+    <p class="post-license__line">本站原创文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a> 许可协议。完整转载请注明来自 <a href="/">${brand}</a>！</p>`
 }
 
 /** 文章页脚内容（锚点 posts/[...slug].astro 的 footer[data-sync-block="articleFooter"]） */
@@ -798,9 +801,10 @@ function renderArticleFooter(
   related: MdEntry[],
   post: MdEntry,
   author: string,
+  siteName: string,
 ): string {
   const licenseHtml = `<section class="post-license" aria-label="文章版权">
-    ${renderArticleLicense(post, author)}
+    ${renderArticleLicense(post, author, siteName)}
   </section>`
 
   const navHtml =
@@ -1355,6 +1359,7 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
       related,
       post,
       settings?.siteAuthor ?? site.author,
+      siteName,
     ),
   }
 }
