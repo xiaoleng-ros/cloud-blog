@@ -105,6 +105,8 @@ export async function GET() {
     urlEntry('/tags', { changefreq: 'weekly', priority: 0.5 }),
     // 搜索页：对搜索引擎价值低
     urlEntry('/search', { changefreq: 'never', priority: 0.2 }),
+    // 隐私政策：合规声明页，几乎不变更，但需要能被检索到
+    urlEntry('/privacy', { changefreq: 'yearly', priority: 0.3 }),
   ];
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>

@@ -3,6 +3,7 @@ import { getCollection, render } from 'astro:content';
 import CommentsBox from '../../components/CommentsBox.astro';
 import Icon from '../../components/Icon.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getSiteSettings } from '../../lib/site-settings';
 import {
   absoluteUrl,
   formatDate,
@@ -58,6 +59,12 @@ const readingMinutes = getReadingMinutes(post);
 const { newer, older } = getAdjacentPosts(posts, post);
 const relatedPosts = getRelatedPosts(posts, post);
 const tableOfContents = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3);
+
+// 版权卡：只用后台站点设置里的作者名（与页脚同口径），不引入新字段。
+// 版权署名里的「原文链接」在这里是静态模板，后台同步时由 blog-render.tsx 的
+// renderArticleLicense() 用同一套文案重算，两处任何一处改动都要同步另一处。
+const licenseOwner = (await getSiteSettings())?.siteAuthor ?? site.author;
+const licenseUrl = absoluteUrl(getPostPath(post));
 
 // Group h3s under their parent h2 so the sidebar can reveal a section's
 // children only while reading that section (same pattern as the notes index).
@@ -138,6 +145,29 @@ const articleSchema = {
         </div>
 
         <footer class="article__footer" data-sync-block="articleFooter">
+          {/* 版权卡：只声明原创文章的转载规则，不涉及评论等用户内容。
+              链接指向站内 /privacy 的「文章版权」一节，避免两处文案各说一套。 */}
+          <section class="post-license" aria-label="文章版权">
+            <p class="post-license__title">
+              <Icon name="shield" size={16} />
+              本文采用 CC BY-NC-SA 4.0 授权
+            </p>
+            <p class="post-license__body">
+              「{post.data.title}」除特别注明外为本站原创内容，版权归 {licenseOwner} 所有。
+              转载请注明出处并保留本声明；不得用于商业用途；改编、翻译等演绎作品需以相同协议共享。
+            </p>
+            <p class="post-license__cite">
+              建议署名格式：作者 {licenseOwner}，原文链接
+              <a href={licenseUrl}>{licenseUrl}</a>，版权声明：基于
+              <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
+              协议授权。
+            </p>
+            <p class="post-license__more">
+              完整条款见<a href="/privacy#license">隐私政策 · 文章版权</a>。
+              站内转载或引用的他人作品，版权归原作者，不适用上述授权。
+            </p>
+          </section>
+
           {(newer || older) && (
             <nav class="post-nav" aria-label="相邻文章">
               {older && (

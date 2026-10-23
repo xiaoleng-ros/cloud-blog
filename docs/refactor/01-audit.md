@@ -25,7 +25,7 @@
 | 路由 | 文件 | 页面模块 |
 | --- | --- | --- |
 | `/` | `index.astro` | Hero 卡、精选列表、最新文章列表、侧栏站点运行时间卡 |
-| `/posts/{分类}/{id}/` | `posts/[...slug].astro` | 文章头、正文、目录、相邻/相关、评论区、JSON-LD |
+| `/posts/{分类}/{id}/` | `posts/[...slug].astro` | 文章头、正文、目录、CC 版权卡、相邻/相关、评论区、JSON-LD |
 | `/posts/{id}/`（历史） | 同上 | 由 cms catch-all 301 到新路径 |
 | `/notes/` | `notes.astro` | 随笔流、年月时间索引、评论区 |
 | `/archive/`、`/archive/{n}/` | `archive/[...page].astro` | 归档头、统计、按年列表、分页（每页 5 篇） |
@@ -35,6 +35,7 @@
 | `/stats/` | `stats.astro` | 统计卡、分类环形图、年份分布、运行天数行 |
 | `/about/` | `about.astro` | 个人便签、技能环、项目分组 |
 | `/search/` | `search.astro` | 客户端搜索（读 `site-index.json`，`lib/search-match.ts` 打分） |
+| `/privacy/` | `privacy.astro` | 隐私政策 15 章（含未来处理清单、文章版权与转载规则），页脚固定入口 |
 | `/404` | `404.astro` | 空态页 |
 | 端点 | `rss.xml.ts`、`sitemap.xml.ts`、`robots.txt.ts`、`site-index.json.ts` | 派生输出 |
 

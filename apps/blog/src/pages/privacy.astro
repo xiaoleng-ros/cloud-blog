@@ -1,0 +1,663 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { site } from '../lib/posts';
+import { getSiteSettings } from '../lib/site-settings';
+
+// 作者名/站点名优先取后台站点设置，后台不可用时回退本地配置（与页脚同口径）
+const settings = await getSiteSettings();
+const author = settings?.siteAuthor ?? site.author;
+const siteName = settings?.siteName ?? site.name;
+
+// 政策文本里出现的联系邮箱：固定一个，不随后台变化（后台没有邮箱字段）
+// 用专门注册的对外邮箱而不是 QQ 号：避免公开个人 QQ 邮箱，也方便以后整体替换/停用
+const CONTACT_MAIL = 'iceuucloud@yeah.net';
+const UPDATED_AT = '2026年10月23日';
+
+const toc = [
+  { href: '#who', label: '这份政策管什么' },
+  { href: '#collect', label: '收集哪些信息' },
+  { href: '#future', label: '后续可能增加的处理' },
+  { href: '#use', label: '怎么用这些信息' },
+  { href: '#public', label: '哪些内容会公开' },
+  { href: '#storage', label: 'Cookie 与本地存储' },
+  { href: '#third', label: '第三方服务' },
+  { href: '#place', label: '存储地点与跨境' },
+  { href: '#keep', label: '保存多久' },
+  { href: '#rights', label: '你的权利' },
+  { href: '#minor', label: '未成年人' },
+  { href: '#safety', label: '安全措施' },
+  { href: '#license', label: '文章版权与转载' },
+  { href: '#change', label: '政策更新' },
+  { href: '#contact', label: '联系方式' },
+];
+---
+
+<BaseLayout
+  title="隐私政策"
+  description={`${siteName}的隐私政策：本站收集哪些信息、如何使用与保存、会公开到什么程度、将来可能增加哪些处理、文章采用什么版权协议，以及你可以怎样查阅和删除。`}
+  pageClass="content-page"
+>
+  <section class="privacy-page">
+    <header class="page-header">
+      <p class="eyebrow">Privacy</p>
+      <h1>隐私政策</h1>
+      <p>本站会收集哪些信息、拿去做什么、存多久、哪些会被公开，以及文章可以怎么转载 —— 一次写清楚。</p>
+    </header>
+
+    <div class="privacy-meta">
+      <span>生效日期：{UPDATED_AT}</span>
+      <span>最后更新：{UPDATED_AT}</span>
+      <span>适用站点：{site.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+    </div>
+
+    <div class="privacy-summary">
+      <p class="privacy-summary__title">先看这几句话</p>
+      <ul>
+        <li>本站是一个<strong>个人非经营性博客</strong>，不要求注册账号，没有广告联盟，不做用户画像，不出售任何数据。</li>
+        <li>只有在你<strong>主动发评论或传配图</strong>时，本站才会收到并保存你填写的内容，以及请求自带的 IP 地址和浏览器标识（User-Agent）。</li>
+        <li>除此之外，本站只用浏览器<strong>本地存储</strong>记住主题、音乐音量这类偏好，这些数据不离开你的设备。</li>
+        <li>浏览量与点赞<strong>只累加数字</strong>；即使将来显示评论者的属地与浏览器/系统，也只到「省市级 + 浏览器名」，不会定位你的具体位置。本政策已把<strong>将来可能上线的功能一并写明</strong>（第三节），开启时不会再改一版政策。</li>
+        <li>本站<strong>原创文章</strong>采用 <strong>CC BY-NC-SA 4.0</strong> 协议：可转载、可改编，但需署名、不得商用、演绎作品需同协议共享（第十三节）。</li>
+      </ul>
+    </div>
+
+    <nav class="privacy-toc" aria-label="政策目录">
+      <p class="privacy-toc__title">目录</p>
+      <ol>
+        {toc.map((item) => (
+          <li><a href={item.href}>{item.label}</a></li>
+        ))}
+      </ol>
+    </nav>
+
+    <article class="privacy-body">
+      <section id="who">
+        <h2>一、这份政策管什么</h2>
+        <p>
+          本政策适用于 <strong>{site.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</strong>
+          域名下的所有页面，包括文章、随笔、归档、标签、统计、关于与评论功能。它说明 {author}（以下称「本站」「我」）
+          在你访问本站时如何处理与个人信息有关的数据。
+        </p>
+        <p>
+          这是一份面向普通访客的说明，不是法律意见。本站为个人独立运营的非商业博客，不提供需要实名认证的服务，
+          也不以收集个人信息作为运营目的。如果你不同意本政策，最稳妥的做法是停止使用评论功能 ——
+          仅浏览文章时，本站不会主动向你索取任何身份信息。
+        </p>
+      </section>
+
+      <section id="collect">
+        <h2>二、本站收集哪些信息</h2>
+
+        <h3>1. 你主动填写的信息（仅在发评论 / 传图时）</h3>
+        <ul>
+          <li><strong>昵称</strong>（必填）：用于在评论区显示你的署名。可以填任何你愿意公开的名字，不必是真名。</li>
+          <li><strong>邮箱</strong>（可选）：仅用于生成头像，以及（若将来启用回复提醒并主动勾选订阅）在有人回复你时通知你。<strong>不会公开显示</strong>，也不会用于营销。</li>
+          <li><strong>个人网址</strong>（可选）：若填写，会作为你昵称上的链接公开展示。</li>
+          <li><strong>评论正文</strong>：你写下的文字、表情与排版内容，审核通过后公开显示。</li>
+          <li><strong>评论配图</strong>（可选）：你上传的图片。上传前你的浏览器会先在本地压缩，压缩后的图片存入本站的对象存储。</li>
+        </ul>
+
+        <h3>2. 提交评论时自动记录的信息</h3>
+        <p>为了让评论功能正常、可追溯、可防垃圾，服务端在收到评论请求时会一并记录：</p>
+        <ul>
+          <li><strong>IP 地址</strong>：用于频率限制（防止刷屏）、识别垃圾评论来源，以及在必要时配合依法调查。</li>
+          <li><strong>浏览器标识（User-Agent）</strong>：一段由浏览器自动带上来的文字，可解析出浏览器类型（Chrome / Edge / Firefox / Safari 等）与操作系统（Windows / macOS / Android / iOS / Linux 等）。它不包含你的文件、硬件配置或设备唯一编号。</li>
+          <li><strong>评论时间</strong>与<strong>评论所在页面地址</strong>：用于排序与按文章归档评论。</li>
+          <li><strong>IP 归属地</strong>：本站可能由 IP 解析出省市级归属地，用于在评论区标注「来自某地」。<strong>不会据此定位你的具体位置</strong>，也不会保存定位轨迹。</li>
+        </ul>
+
+        <h3>3. 本站不会收集的信息</h3>
+        <p>
+          本站不要求也<strong>不收集</strong>：真实姓名、身份证件号码、手机号、精确地理位置（GPS）、通讯录、相册（除你主动选择上传的图片外）、
+          生物识别信息、银行卡或支付信息、账号密码（本站没有访客账号体系）、以及任何用于广告定向的画像数据。
+        </p>
+
+        <h3>4. 匿名统计</h3>
+        <p>
+          本站会对<strong>页面浏览量</strong>与<strong>文章点赞数</strong>做汇总计数。这类计数只落到「某个页面被访问/被点赞多少次」这一层，
+          <strong>不与 IP、User-Agent 或你的昵称关联</strong>，也无法反向识别到具体的人。点赞状态只记在你自己的浏览器里，
+          服务端只保存一个总数。这些统计目前尚未全部开启，具体口径与边界写在第三节。
+        </p>
+
+        <h3>5. 服务器日志</h3>
+        <p>
+          本站部署在云服务商的边缘函数与 CDN 上，服务商会在其侧记录访问日志（通常包含 IP、时间、请求地址、响应状态、User-Agent）。
+          这部分日志由服务商按其自身规则保存与管理，本站只在排查故障或遭遇攻击时按需查看。
+        </p>
+      </section>
+
+      <section id="future">
+        <h2>三、后续可能增加的处理</h2>
+        <p>
+          本站还在陆续加功能。为了让你现在就能看清全貌、也为了避免以后每开一个功能就换一版政策，
+          我把<strong>现阶段已经想清楚、将来可能启用</strong>的处理方式一次性列在这里。
+          <strong>下列任何一项启用时，都属于本政策已经覆盖的范围，不会再改一版政策</strong>，最多更新本文顶部的「最后更新」日期。
+        </p>
+
+        <h3>1. 页面浏览量统计</h3>
+        <p>
+          本站可能对文章的访问次数做计数。口径是<strong>「某个页面被打开过多少次」</strong>：
+        </p>
+        <ul>
+          <li><strong>会记录</strong>：被访问的页面地址（如 <code>/posts/xxx</code>）、访问时间、累加出的次数。</li>
+          <li><strong>不会记录</strong>：访客身份、IP 与浏览记录之间的对应关系、你从哪个网站跳转过来、你在页面上停留多久、点了什么。</li>
+          <li><strong>不做跨站跟踪</strong>：本站不生成访客 ID，不把你在不同页面的访问串成一条「你个人的访问轨迹」，也无法据此还原某个人的阅读习惯。</li>
+          <li><strong>防刷</strong>：为防止刷量，服务端可能对同一来源的高频请求做<strong>临时</strong>频率判断。这类判断只用于当次请求的放行与否，不写入统计结果，也不用于识别个人。</li>
+          <li><strong>本地去重</strong>：为了不把你自己反复刷新的次数也算进去，浏览器可能在本地存一个「这个页面我已经算过一次」的标记。它只在你设备上，不发送到服务器。</li>
+        </ul>
+
+        <h3>2. 文章点赞</h3>
+        <p>
+          本站提供文章点赞。点赞在服务端<strong>只累加一个总数</strong>，不保存「谁点的」；
+          「你是否点过赞」这个状态只记在你自己的浏览器里。因此点赞数据无法关联到任何具体的人，也无法撤回某一个人的点赞记录 ——
+          你清除本站的浏览器数据后，就可以重新点赞一次。
+        </p>
+
+        <h3>3. 评论者属地</h3>
+        <p>
+          本站可能根据提交评论时的 IP 地址解析出<strong>省市级</strong>归属地，显示为「来自某省/某市」，
+          用于让评论区有基本的上下文、也便于识别异常来源。边界是：
+        </p>
+        <ul>
+          <li>只到<strong>省、市</strong>一级，不解析到区县、街道或具体坐标。</li>
+          <li>解析结果<strong>可能公开显示</strong>在评论旁边；原始 IP 地址始终<strong>不公开</strong>。</li>
+          <li>不保存你的移动轨迹，不记录你在不同时间从哪些地点访问。</li>
+          <li>IP 库由第三方提供（可能部署在本站服务端，也可能以接口形式调用）。若以接口形式调用，只发送 IP、不发送你的昵称或邮箱。</li>
+        </ul>
+
+        <h3>4. 浏览器与操作系统</h3>
+        <p>
+          评论者的浏览器标识（User-Agent）可能被解析成「Chrome / Edge / Firefox / Safari」「Windows / macOS / Android / iOS / Linux」这样的
+          <strong>名称</strong>，与评论一起<strong>可能公开显示</strong>在评论区，用于区分同名访客、也便于判断兼容性问题。
+          展示的只是解析后的名称，不会公开 User-Agent 原文，也不会解析出设备型号、屏幕尺寸、字体列表这类可做指纹识别的信息。
+        </p>
+
+        <h3>5. 评论回复通知</h3>
+        <p>
+          本站<strong>目前没有</strong>邮件通知功能。若将来启用「有人回复你的评论时给你发一封提醒邮件」，规则会是：
+          只使用你在评论时填写的邮箱、只发送与那条回复有关的内容、每封邮件都带退订方式，
+          且不把你的邮箱用于任何其他用途、不提供给第三方。<strong>该功能默认不会自动开启</strong>，
+          需要你在评论时主动勾选订阅；不勾选就永远收不到这类邮件。
+        </p>
+
+        <h3>6. 内容审核与反垃圾</h3>
+        <p>
+          评论在公开前可能经过人工或自动审核。判定为垃圾的评论不会公开展示，但其内容与提交时的 IP、浏览器标识会保留在后台，
+          用于后续识别同类垃圾与处理申诉。审核只针对评论本身，不对访客做画像。
+        </p>
+
+        <h3>7. 什么情况下才会再改政策</h3>
+        <p>
+          只有出现<strong>超出上述清单</strong>的变化时，我才会改这版政策。典型情形包括：
+          新增本节未列出的数据类型（例如要求注册账号、收集手机号、接入第三方登录）、
+          把数据用于本节未说明的目的（例如投放广告、做用户画像）、
+          新增会接触到个人信息的第三方服务（例如新的统计平台、新的图床或字体 CDN）、
+          或者数据存储地点发生跨境变更。
+          这类变化会更新本文顶部的日期，涉及重大调整时还会在站内公告。
+        </p>
+      </section>
+
+      <section id="use">
+        <h2>四、这些信息被用来做什么</h2>
+        <ul>
+          <li><strong>显示与组织评论</strong>：让你的昵称、头像、正文、楼层关系正常显示，并支持回复、点赞、排序。</li>
+          <li><strong>防止垃圾信息与滥用</strong>：通过 IP 频率限制、敏感词过滤、以及（如已启用）Akismet 反垃圾服务判断评论是否为垃圾。</li>
+          <li><strong>保障站点安全</strong>：识别异常请求、阻断攻击、排查故障。</li>
+          <li><strong>履行法定义务</strong>：在法律法规要求、或有权机关依法提出要求时，提供必要的记录。</li>
+          <li><strong>了解哪些内容有人看</strong>：页面浏览量、点赞与（如启用的）评论属地，只用于让我知道哪些文章更值得写、以及评论区是否正常，不用于向任何人推销。</li>
+        </ul>
+        <p>
+          <strong>本站承诺不做</strong>：用户画像与行为分析、广告投放与再营销、把数据出售/出租/交换给第三方、
+          用你的邮箱向你发送与本站无关的营销邮件。
+        </p>
+        <p>
+          处理个人信息的合法性基础是：你主动提交评论构成<strong>同意</strong>；频率限制、反垃圾与日志留存属于
+          <strong>履行法定义务与保障网络安全的必要措施</strong>。
+        </p>
+      </section>
+
+      <section id="public">
+        <h2>五、哪些内容会被公开</h2>
+        <p>评论区是公开区域，请只填写你愿意长期公开的内容。</p>
+        <ul>
+          <li><strong>公开可见</strong>：昵称、头像、个人网址、评论正文、评论配图、评论时间，以及（如启用）IP 归属地与解析出的浏览器/操作系统名称。</li>
+          <li><strong>可能公开</strong>：第三节列出的属地与浏览器/系统名称一旦启用，就会显示在评论旁边 —— 只到省市级与名称本身，不含原文 IP 与完整 User-Agent。</li>
+          <li><strong>不公开</strong>：邮箱、完整 IP 地址、完整 User-Agent 原文。这些只在后台由本站管理员可见，用于审核与反垃圾。</li>
+          <li><strong>请注意</strong>：如果你在评论正文里自己写出了手机号、住址、身份证号等信息，它会随正文一起公开。这类内容请勿填写；发现后可联系我删除。</li>
+          <li><strong>搜索引擎</strong>：公开页面（含评论）可能被搜索引擎收录。若某条评论已被收录，删除后搜索引擎的缓存可能仍需一段时间才会更新。</li>
+        </ul>
+      </section>
+
+      <section id="storage">
+        <h2>六、Cookie 与本地存储</h2>
+        <p>
+          本站<strong>不设置用于追踪、统计或广告的 Cookie</strong>，也没有接入任何第三方统计脚本。
+          为记住你的使用偏好，本站使用了浏览器本地存储（localStorage / sessionStorage），这些数据
+          <strong>只存在于你的设备上，不会发送到服务器</strong>：
+        </p>
+        <ul>
+          <li><strong>主题偏好</strong>：记住你选择的是浅色还是深色。</li>
+          <li><strong>音乐播放器状态</strong>：音量、播放进度、是否暂停。</li>
+          <li><strong>更新提示标记</strong>：记住你已经看过哪一版更新公告，避免反复打扰。</li>
+          <li><strong>点赞记录</strong>：记住你点过赞的文章，避免重复点赞。</li>
+          <li><strong>评论表单信息</strong>：评论组件可能在本地暂存你填过的昵称与邮箱，方便下次自动填充。</li>
+          <li><strong>浏览次数去重标记</strong>：若启用了浏览量统计，本地会记一个「这个页面我已经算过一次」的标记，避免你自己刷新时重复计数。</li>
+        </ul>
+        <p>
+          你可以在浏览器设置中随时清除这些数据（清除本站的「网站数据 / Cookie 及网站数据」即可），
+          清除后仅表现为偏好重置，不影响正常阅读。
+        </p>
+      </section>
+
+      <section id="third">
+        <h2>七、第三方服务</h2>
+        <p>
+          本站自身不搭建全部基础设施，以下第三方会在其职责范围内接触到你的部分数据。
+          请求这些服务时，你的 IP 与浏览器标识会作为网络请求的固有部分被对方收到：
+        </p>
+        <ul class="privacy-vendors">
+          <li>
+            <strong>云服务商（边缘函数与 CDN）</strong> —— 托管本站页面与接口，接收全部访问请求。用途：内容分发、防护与访问日志。
+          </li>
+          <li>
+            <strong>Supabase（数据库与对象存储）</strong> —— 保存评论数据与评论配图。用途：数据持久化。
+          </li>
+          <li>
+            <strong>Google Fonts</strong> —— 提供站点的两款中文手写字体样式表。用途：字体加载。
+            该请求会将你的 IP 发送给 Google；若你所在的网络无法访问，页面会回退到系统字体，不影响阅读。
+          </li>
+          <li>
+            <strong>cravatar.cn</strong> —— 头像服务（Gravatar 的国内镜像）。用途：根据邮箱哈希取回你的头像图片。
+            对方只收到邮箱的哈希值与你的 IP，收不到明文邮箱。
+          </li>
+          <li>
+            <strong>音乐接口（meting.mikus.ink）</strong> —— 提供音乐播放器的歌单与音频地址。用途：播放音乐。
+            仅在音乐播放器工作时才发起请求。
+          </li>
+          <li>
+            <strong>Akismet</strong> —— 反垃圾评论服务（若本站已配置启用）。用途：判断评论是否为垃圾。
+            提交内容包含评论正文、昵称、邮箱、IP 与浏览器标识。
+            <em>该服务可能并未启用；未启用时不会向它发送任何数据。</em>
+          </li>
+        </ul>
+        <p>
+          上述第三方各自独立处理数据，其行为受各自隐私政策约束，本站无法控制。
+          除法律要求或上述必要功能外，本站不会主动向任何第三方提供你的个人信息。
+        </p>
+      </section>
+
+      <section id="place">
+        <h2>八、数据存储地点与跨境传输</h2>
+        <p>
+          本站的评论数据与评论配图存放在 <strong>Supabase</strong> 的云端数据库中，数据中心位于
+          <strong>日本（东京，ap-northeast-1）</strong>。这意味着你提交的评论相关信息会被传输并存储在中国境外。
+        </p>
+        <p>
+          如果你在中国境内，这构成个人信息出境。本站采取的措施是：只出境为实现评论功能<strong>所必需的最小信息</strong>
+          （昵称、邮箱、正文、IP、浏览器标识），不出境任何敏感个人信息；并在本政策中明确告知出境的目的、方式与接收方。
+          若你不希望信息出境，请不要使用评论功能，浏览文章不受影响。
+        </p>
+        <p>页面与接口本身的边缘节点由云服务商就近调度，可能位于多个地区。</p>
+      </section>
+
+      <section id="keep">
+        <h2>九、信息保存多久</h2>
+        <ul>
+          <li><strong>评论内容</strong>（昵称、邮箱、正文、配图、IP、浏览器标识）：在你或我删除该评论前<strong>持续保存</strong>。评论是本站的内容资产，通常长期保留。</li>
+          <li><strong>网络访问日志</strong>：依照《中华人民共和国网络安全法》第二十一条关于网络日志留存不少于六个月的要求，相关日志留存<strong>不少于 6 个月</strong>，之后由服务商按其策略滚动清理。</li>
+          <li><strong>浏览器本地存储</strong>：保存在你的设备上，直到你清除或浏览器回收，本站无法远程删除。</li>
+          <li><strong>反垃圾判定结果</strong>：可能随评论一并保存（标记为垃圾的评论不公开展示）。</li>
+          <li><strong>浏览量计数</strong>：只是一串累加的数字，随页面一直保留，不含任何可识别到个人的信息，因此没有「到期」的概念。</li>
+          <li><strong>待审核评论</strong>：未通过审核的评论会定期清理，不会无限期堆在后台；若你要求删除，会提前清理。</li>
+        </ul>
+        <p>超过保存期限后，本站会删除或匿名化处理相关数据。</p>
+      </section>
+
+      <section id="rights">
+        <h2>十、你的权利</h2>
+        <p>对你留在本站的个人信息，你有以下权利，均可通过文末邮箱提出：</p>
+        <ul>
+          <li><strong>查阅与复制</strong>：确认本站是否处理你的信息，并获取副本。</li>
+          <li><strong>更正</strong>：修改你评论中填写错误的昵称、网址或正文。</li>
+          <li><strong>删除</strong>：要求删除你发出的评论及其关联的 IP、浏览器标识、配图。删除后该评论不再公开展示。</li>
+          <li><strong>撤回同意</strong>：随时撤回对评论信息处理的同意；撤回不影响撤回前已进行的处理。</li>
+          <li><strong>注销 / 匿名化</strong>：要求把你的历史评论批量改为匿名或删除。</li>
+          <li><strong>解释与投诉</strong>：要求说明本政策的处理规则；对处理结果不满可向网信、市场监管等部门投诉举报。</li>
+        </ul>
+        <p>
+          为保护评论作者本人，提出删除请求时我可能需要你证明「这条评论确实是你发的」
+          （例如用评论时填写的邮箱发信，或提供该评论的管理口令/可核对的信息）。
+          我通常在 <strong>15 个工作日内</strong>答复；情况复杂时会先告知延期理由。
+        </p>
+      </section>
+
+      <section id="minor">
+        <h2>十一、未成年人</h2>
+        <p>
+          本站内容面向一般读者，<strong>不专门面向未成年人</strong>，也不会有意收集未成年人的个人信息。
+          不满 14 周岁的儿童请在监护人指导下使用本站；若监护人发现儿童在评论区留下了个人信息，
+          可联系我删除。若你在评论中暴露了未成年人的身份信息，本站有权直接删除。
+        </p>
+      </section>
+
+      <section id="safety">
+        <h2>十二、本站如何保护这些信息</h2>
+        <ul>
+          <li>全站启用 HTTPS 加密传输，评论接口与数据库之间使用 TLS 连接。</li>
+          <li>评论后台仅对本站管理员开放，需登录并通过令牌校验；管理入口对搜索引擎屏蔽。</li>
+          <li>IP 频率限制与敏感词过滤在第一层拦截刷屏与垃圾内容。</li>
+          <li>评论正文入库前会做 XSS 清洗，避免恶意脚本影响其他访客。</li>
+          <li>数据库与对象存储的访问凭证只存在于服务端环境变量中，不下发到浏览器。</li>
+        </ul>
+        <p>
+          需要坦白的是：没有任何系统能保证绝对安全。若发生数据泄露并可能影响你的权益，
+          本站会在知悉后尽快在站内公告，并按法律要求向主管部门报告。
+        </p>
+      </section>
+
+      <section id="license">
+        <h2>十三、文章版权与转载规则</h2>
+        <p>
+          本节说的不是个人信息，而是<strong>文章内容的授权方式</strong> —— 之所以放在同一页，
+          是因为访客既会问「我的数据怎么处理」，也会问「这篇文章我能不能转」，一次写清省得找两处。
+        </p>
+        <p>
+          本站的<strong>原创文章</strong>（含随笔）除页面另有说明外，均采用
+          <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">知识共享 署名-非商业性使用-相同方式共享 4.0 国际许可协议（CC BY-NC-SA 4.0）</a>
+          授权。你可以自由分享与改编，但必须遵守下面四条：
+        </p>
+        <ul>
+          <li>
+            <strong>署名</strong>：转载或引用时，请以本页给出的方式标注作者、原文链接与协议名称。
+            推荐的署名格式是：<em>作者 {author}，原文链接［文章地址］，版权声明：基于 CC BY-NC-SA 4.0 协议授权。</em>
+            不要暗示作者为你的改编版本背书，也不要删除原文中的版权声明。
+          </li>
+          <li>
+            <strong>非商业性使用</strong>：不得以营利为主要目的转载、复制或再利用文章内容。
+            这包括但不限于付费专栏、付费课程、带广告分成的转载站、以及需要付费才能阅读的合集。
+            <strong>若你需要商业使用，请先用文末邮箱联系我取得书面许可</strong>，说明用途与范围。
+          </li>
+          <li>
+            <strong>相同方式共享</strong>：若你对文章做了改编、翻译、节选重组或其他演绎创作，
+            你的演绎作品必须<strong>使用同样的 CC BY-NC-SA 4.0 协议</strong>发布，
+            不能改成更宽松的授权（例如直接标为「允许商用」）。
+          </li>
+          <li>
+            <strong>不得增加额外限制</strong>：不得对转载内容附加技术或法律上的额外限制
+            （例如用付费墙、登录墙、防盗链拦住他人再分享），也不能对协议本身施加附加条款。
+          </li>
+        </ul>
+
+        <h3>不适用本授权的内容</h3>
+        <ul>
+          <li><strong>转载或引用的他人作品</strong>：站内若出现转载内容，版权归原作者，我无权再授权给你，
+            请按原文出处的方式使用；如发现本站转载侵犯了你的权益，联系我后会删除。</li>
+          <li><strong>站内配图</strong>：封面、评论配图与文章内图片可能是你自己上传、第三方素材或我拍摄的，
+            授权状态各自不同。转载前请单独确认，不要默认它们也跟随文章的 CC 协议。</li>
+          <li><strong>评论区内容</strong>：评论版权归评论作者本人；我仅在本站范围内展示与必要的审核处理。</li>
+          <li><strong>代码片段</strong>：文中示例代码你可以自由使用，但如果其中引用了第三方库或带有其许可声明，
+            仍需遵守该库自己的协议。</li>
+        </ul>
+
+        <h3>免责声明</h3>
+        <p>
+          文章内容按「现状」提供，我尽力保证准确，但不对其完整性、时效性、或是否适用于你的特定场景作任何明示或暗示的担保。
+          技术类文章可能随时间失效（依赖版本更新、服务下线等），请以你手头环境的实测结果为准。
+          因使用本站内容产生的任何直接或间接损失（包括按文章操作导致的数据损坏、服务故障、费用支出），
+          我<strong>不承担赔偿责任</strong>。
+        </p>
+
+        <h3>协议原文</h3>
+        <p>
+          上面的四条是便于阅读的摘要，不构成对协议的解释。
+          正式条款以 Creative Commons 官方文本为准：
+        </p>
+        <ul>
+          <li><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">协议要点（中文简体）</a></li>
+          <li><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.zh-hans" target="_blank" rel="noopener noreferrer">法律文本（中文简体）</a></li>
+        </ul>
+        <p>
+          若本节的摘要与协议原文存在冲突，以协议原文为准；若你需要的是与协议无关的其他授权
+          （例如商业使用、纸质出版、二次制作视频），请发邮件到文末地址单独商议。
+        </p>
+      </section>
+
+      <section id="change">
+        <h2>十四、政策的更新</h2>
+        <p>
+          第三节已经把<strong>现阶段能预见的处理方式全部写明</strong>，其中任何一项上线（开启浏览量统计、显示属地与浏览器/系统、开启回复邮件通知等）
+          都属于本政策已覆盖的范围，<strong>不需要重新征求同意，也不会换一版政策</strong>。
+        </p>
+        <p>
+          只有出现<strong>超出第三节清单</strong>的变化 —— 例如新增未列出的数据类型、把数据用于新目的、接入新的第三方服务、
+          或变更存储地点 —— 我才会修改本政策，并同步更新本文顶部的「最后更新」日期。
+          涉及重大变化时，会在站内以公告形式提前提示；如你不接受，请停止使用相关功能，仅浏览文章不受影响。
+        </p>
+      </section>
+
+      <section id="contact">
+        <h2>十五、联系方式</h2>
+        <p>
+          对本政策有任何疑问、异议，或需要行使上述权利，请发送邮件至
+          <a href={`mailto:${CONTACT_MAIL}`}>{CONTACT_MAIL}</a>，并在标题中注明「隐私相关」。
+          我会尽快回复。
+        </p>
+        <p class="privacy-end">—— 本政策自 {UPDATED_AT} 起生效。</p>
+      </section>
+    </article>
+  </section>
+</BaseLayout>
+
+<style>
+  /* 阅读型长文：窄栏 + 稳定的段落节奏。
+     这一页内容全部是静态模板输出，没有后台注入，所以用 scoped 样式即可
+     （不像标签墙那样必须 is:global 才能命中注入内容）。 */
+  .privacy-page {
+    max-width: 46rem;
+    margin: 0 auto;
+  }
+
+  .privacy-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.2rem;
+    margin: -1.4rem 0 1.8rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 0.8rem;
+  }
+
+  /* 开头三句话：便利贴黄，给没耐心的人一条捷径 */
+  .privacy-summary {
+    margin-bottom: 2rem;
+    padding: 1.1rem 1.25rem 1.2rem;
+    background: var(--sticky-yellow);
+    color: var(--on-sticky);
+    border: 2px solid var(--on-sticky-line);
+    border-radius: 14px 20px 12px 22px / 20px 12px 22px 14px;
+    box-shadow: 3px 4px 0 var(--shadow-sm);
+    transform: rotate(-0.25deg);
+  }
+
+  .privacy-summary__title {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-hand-cn);
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+  }
+
+  .privacy-summary ul {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+    line-height: 1.75;
+  }
+
+  .privacy-summary strong {
+    font-weight: 750;
+  }
+
+  /* 目录：两栏，长标题不挤成一条 */
+  .privacy-toc {
+    margin-bottom: 2.4rem;
+    padding: 1rem 1.25rem 1.1rem;
+    background: var(--surface-muted);
+    border: 1px dashed var(--edge);
+    border-radius: var(--radius);
+  }
+
+  .privacy-toc__title {
+    margin: 0 0 0.55rem;
+    color: var(--text-faint);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .privacy-toc ol {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.3rem 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: toc;
+  }
+
+  .privacy-toc li {
+    counter-increment: toc;
+    font-size: 0.88rem;
+  }
+
+  .privacy-toc li::before {
+    content: counter(toc, cjk-ideographic) "、";
+    color: var(--text-faint);
+    margin-right: 0.1rem;
+  }
+
+  .privacy-toc a {
+    color: var(--text-muted);
+    border-bottom: 1px solid transparent;
+    transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+  }
+
+  .privacy-toc a:hover {
+    color: var(--brand);
+    border-bottom-color: var(--brand);
+  }
+
+  /* ---------- 正文 ---------- */
+  .privacy-body {
+    font-size: 0.95rem;
+    line-height: 1.85;
+  }
+
+  .privacy-body section {
+    /* 从目录跳进来时，标题别贴到视口最上沿（顶栏是 fixed） */
+    scroll-margin-top: 6.5rem;
+  }
+
+  .privacy-body section + section {
+    margin-top: 2.2rem;
+  }
+
+  .privacy-body h2 {
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px dashed var(--edge);
+    font-family: var(--font-hand-cn);
+    font-size: 1.16rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+
+  .privacy-body h3 {
+    margin: 1.4rem 0 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 750;
+  }
+
+  .privacy-body p {
+    margin: 0 0 0.85rem;
+  }
+
+  .privacy-body ul {
+    margin: 0 0 0.85rem;
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+  }
+
+  .privacy-body li::marker {
+    color: var(--brand);
+  }
+
+  .privacy-body strong {
+    font-weight: 750;
+    color: var(--text);
+  }
+
+  .privacy-body em {
+    color: var(--text-muted);
+    font-style: normal;
+  }
+
+  .privacy-body code {
+    padding: 0.05rem 0.35rem;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+  }
+
+  .privacy-body a {
+    color: var(--brand);
+    border-bottom: 1px solid var(--brand-soft);
+    transition: border-color var(--t-fast) var(--ease-out);
+  }
+
+  .privacy-body a:hover {
+    border-bottom-color: var(--brand);
+  }
+
+  /* 第三方清单：每条一行「名称 —— 说明」，用左侧竖线分组 */
+  .privacy-vendors {
+    margin: 0 0 0.9rem;
+    padding-left: 1rem;
+    list-style: none;
+    border-left: 2px solid var(--border);
+  }
+
+  .privacy-vendors li {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .privacy-vendors strong {
+    color: var(--text);
+  }
+
+  .privacy-end {
+    margin-top: 1.6rem !important;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    text-align: right;
+  }
+
+  @media (max-width: 640px) {
+    .privacy-summary {
+      transform: none;
+    }
+
+    .privacy-toc ol {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>

@@ -688,9 +688,17 @@ function renderFooterInner(
   }`
 }
 
-/** 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]）；声明文字字段已按用户要求删除，仅留版权行 */
+/**
+ * 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]）；
+ * 声明文字字段已按用户要求删除，仅留版权行 + 隐私政策入口。
+ *
+ * ⚠️ 隐私政策链接是**固定**的（/privacy 是 Astro 静态页，不来自后台数据），
+ * 但底栏整块由同步覆盖，所以这里必须跟着 Footer.astro 一起输出，
+ * 否则后台一同步这条链接就会消失。
+ */
 function renderFooterBar(author: string, year: number): string {
-  return `<span>© ${year} ${escapeHtml(author)}</span>`
+  return `<span>© ${year} ${escapeHtml(author)}</span>
+    <a class="site-footer__privacy" href="/privacy">隐私政策</a>`
 }
 
 /** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]）
@@ -753,12 +761,48 @@ function renderTocSidebar(tocGroups: Array<{ slug: string; text: string; childre
   </nav>`
 }
 
+/**
+ * 文章版权卡（锚点 posts/[...slug].astro 的 section.post-license）。
+ * 与 Astro 模板里的同名区块逐字对应：只声明原创文章的转载规则。
+ * 原文链接用 site.url 拼绝对地址 —— 同步注入的 HTML 里没有 Astro 的 absoluteUrl，
+ * 所以这里不能只写相对路径，否则分享出去的署名链接是坏的。
+ */
+function renderArticleLicense(post: MdEntry, author: string): string {
+  const url = `${site.url.replace(/\/$/, '')}${getPostPath(post)}`
+  const owner = escapeHtml(author)
+  const title = escapeHtml(post.data.title)
+  return `<p class="post-license__title">
+      ${iconSvg('shield', 16)}
+      本文采用 CC BY-NC-SA 4.0 授权
+    </p>
+    <p class="post-license__body">
+      「${title}」除特别注明外为本站原创内容，版权归 ${owner} 所有。
+      转载请注明出处并保留本声明；不得用于商业用途；改编、翻译等演绎作品需以相同协议共享。
+    </p>
+    <p class="post-license__cite">
+      建议署名格式：作者 ${owner}，原文链接
+      <a href="${escapeAttr(url)}">${escapeHtml(url)}</a>，版权声明：基于
+      <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a>
+      协议授权。
+    </p>
+    <p class="post-license__more">
+      完整条款见<a href="/privacy#license">隐私政策 · 文章版权</a>。
+      站内转载或引用的他人作品，版权归原作者，不适用上述授权。
+    </p>`
+}
+
 /** 文章页脚内容（锚点 posts/[...slug].astro 的 footer[data-sync-block="articleFooter"]） */
 function renderArticleFooter(
   newer: MdEntry | undefined,
   older: MdEntry | undefined,
   related: MdEntry[],
+  post: MdEntry,
+  author: string,
 ): string {
+  const licenseHtml = `<section class="post-license" aria-label="文章版权">
+    ${renderArticleLicense(post, author)}
+  </section>`
+
   const navHtml =
     newer || older
       ? `<nav class="post-nav" aria-label="相邻文章">
@@ -793,7 +837,8 @@ function renderArticleFooter(
 </section>`
       : ''
 
-  return `${navHtml}
+  return `${licenseHtml}
+  ${navHtml}
   ${relatedHtml}`
 }
 
@@ -1304,7 +1349,13 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
     articleHeader: renderArticleHeader(post),
     postContent: html,
     tocSidebar: hasToc ? renderTocSidebar(tocGroups) : '',
-    articleFooter: renderArticleFooter(newer, older, related),
+    articleFooter: renderArticleFooter(
+      newer,
+      older,
+      related,
+      post,
+      settings?.siteAuthor ?? site.author,
+    ),
   }
 }
 
@@ -1723,6 +1774,7 @@ function noteFirstLine(body: string): string {
 const EXTRA_INDEX_PAGES: Array<{ href: string; label: string; keywords: string }> = [
   { href: '/stats', label: '统计', keywords: '数据 statistics 归档 标签墙' },
   { href: '/tags', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
+  { href: '/privacy', label: '隐私政策', keywords: '隐私 privacy 政策 条款 数据 个人信息 合规' },
 ]
 
 export function buildSiteIndex(ctx: {

@@ -33,6 +33,7 @@
 | SEO 描述 | `description ?? ai[0]` | `posts` 集合 | 文章管理 | 派生回退链 |
 | 目录 `tocSidebar` | 标题目录 | 正文派生 | — | 纯前台计算 |
 | 相邻/相关 `articleFooter` | 上/下篇、相关 | `posts` 集合派生 | — | 排序与匹配规则在 `shared/post-utils` |
+| 版权卡 `articleFooter` 首块 | CC BY-NC-SA 4.0 声明 + 署名 + 原文绝对地址 | `posts` 集合 + `siteAuthor` | 站点设置（作者名） | 文案在 `posts/[...slug].astro` 与 `blog-render.tsx` 的 `renderArticleLicense()` 各一份，须同步改；条款正文见 `/privacy#license` |
 | 阅读时长 | 分钟数 | 正文派生 | — | — |
 | JSON-LD | headline/author/date… | 集合字段 + `siteAuthor` | 文章管理 / 站点设置 | 作者回退 `SITE_DEFAULTS.author`（站点级） |
 | 评论区 `CommentsBox` | 评论列表/表单 | Waline（进程内） | 后台评论管理页 | 仅文章页；`path` 存解码原形 |

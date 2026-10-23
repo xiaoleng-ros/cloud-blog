@@ -2700,6 +2700,66 @@ body.is-dragging-floating {
   overflow: hidden;
 }
 
+/* ---------- Post license (CC BY-NC-SA 4.0) ---------- */
+/* 文章底部版权卡：排在「上一篇/下一篇」之上，是正文结束后的第一块信息。
+   与 .post-license 的 markup 在 posts/[...slug].astro 与 cms 的 blog-render.tsx
+   各有一份（同步会整块替换 articleFooter），所以这里的类名不能改单边。 */
+.post-license {
+  position: relative;
+  margin-bottom: 2.2rem;
+  padding: 1rem 1.15rem 1.05rem;
+  background: var(--surface-muted);
+  border: 1px dashed var(--edge);
+  border-radius: 14px 18px 12px 20px / 18px 12px 20px 14px;
+  font-size: 0.86rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.post-license__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.55rem;
+  font-family: var(--font-hand-cn);
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.post-license__title svg {
+  flex: none;
+  color: var(--brand);
+}
+
+.post-license__body,
+.post-license__cite,
+.post-license__more {
+  margin: 0 0 0.5rem;
+}
+
+.post-license__cite,
+.post-license__more {
+  font-size: 0.82rem;
+}
+
+.post-license__more {
+  margin-bottom: 0;
+  color: var(--text-faint);
+}
+
+/* 原文链接可能很长：允许在任意位置断行，否则窄屏会把卡片撑出去 */
+.post-license a {
+  color: var(--brand);
+  border-bottom: 1px solid var(--brand-soft);
+  overflow-wrap: anywhere;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+
+.post-license a:hover {
+  border-bottom-color: var(--brand);
+}
+
 /* ---------- Legacy shortcode blocks ---------- */
 .legacy-folding {
   padding: 0.9rem 1.1rem;
@@ -3123,6 +3183,29 @@ body.is-dragging-floating {
 
 .site-footer__bar a:hover {
   color: var(--brand);
+}
+
+/* 隐私政策入口：跟在版权行右侧，前面加一个小圆点当分隔（比再塞一个字符到
+   HTML 里干净，后台同步出来的 markup 也不必带分隔符）。 */
+.site-footer__privacy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-bottom: 1px solid transparent;
+  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+}
+
+.site-footer__privacy::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.site-footer__privacy:hover {
+  border-bottom-color: var(--brand);
 }
 
 /* ---------- Notes (随笔) timeline ---------- */

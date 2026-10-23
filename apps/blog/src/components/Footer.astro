@@ -115,6 +115,9 @@ const icp = settings === null ? OFFLINE_ICP : (settings.siteIcp?.trim() ?? '');
 
   <div class="site-footer__bar" data-sync-block="footerBar">
     <span>© <span data-copyright-year>{buildYear}</span> {author}</span>
+    {/* 隐私政策入口：固定链接，不随后台页脚链接配置变动。
+        它与版权行同属 footerBar 同步区块，所以 blog-render.tsx 的 renderFooterBar 必须同步输出。 */}
+    <a class="site-footer__privacy" href="/privacy">隐私政策</a>
   </div>
 </footer>
 

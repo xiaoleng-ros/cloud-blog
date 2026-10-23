@@ -59,6 +59,7 @@ function firstLine(body: string): string {
 const EXTRA_PAGES: Array<{ href: string; label: string; keywords: string }> = [
   { href: '/stats', label: '统计', keywords: '数据 statistics 归档 标签墙' },
   { href: '/tags', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
+  { href: '/privacy', label: '隐私政策', keywords: '隐私 privacy 政策 条款 数据 个人信息 合规' },
 ];
 
 function pageEntries(
