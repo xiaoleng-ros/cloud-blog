@@ -59,6 +59,18 @@ const cover = getPostCover(post);
 const readingMinutes = getReadingMinutes(post);
 const { newer, older } = getAdjacentPosts(posts, post);
 const relatedPosts = getRelatedPosts(posts, post);
+
+// 相邻文章横幅（排在版权条上方）：卡片用对方的封面做大图底、加模糊，文字是「标题【分类】」。
+// 封面必须由 <img> 承载：同步净化器会整条丢掉内联 style 里的 url()，
+// 所以 background-image 写不进 style 里，只能走元素本身。
+const adjacentCards = [
+  { direction: 'prev' as const, label: '上一篇', emptyLabel: '已经是最早一篇了', post: older },
+  { direction: 'next' as const, label: '下一篇', emptyLabel: '已经是最新一篇了', post: newer },
+].map((card) => ({
+  ...card,
+  cover: card.post ? getPostCover(card.post) : undefined,
+  category: card.post ? getPostCategory(card.post) : undefined,
+}));
 const tableOfContents = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3);
 
 // 版权条：只用后台站点设置里的作者名（与页脚同口径），不引入新字段。
@@ -155,6 +167,53 @@ const articleSchema = {
         </div>
 
         <footer class="article__footer" data-sync-block="articleFooter">
+          {/* 相邻文章：封面大图横幅卡，排在版权条上方。
+              两栏永远成对渲染 —— 缺上一篇/下一篇时用不可点击的虚线占位卡补位，
+              否则剩一张卡会撑满整行、位置还会左右跳动。
+              结构与 blog-render.tsx 的 renderArticleFooter() 逐字对应。 */}
+          {(older || newer) && (
+            <nav class="post-nav" aria-label="相邻文章">
+              {adjacentCards.map((card) =>
+                card.post ? (
+                  <a
+                    class={`post-nav__card post-nav__card--${card.direction}`}
+                    href={getPostPath(card.post)}
+                  >
+                    {card.cover ? (
+                      <img
+                        class="post-nav__cover"
+                        src={card.cover}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        referrerpolicy="no-referrer"
+                      />
+                    ) : (
+                      <span class="post-nav__cover post-nav__cover--fallback" aria-hidden="true" />
+                    )}
+                    <span class="post-nav__mask" aria-hidden="true" />
+                    <span class="post-nav__text">
+                      <span class="post-nav__label">{card.label}</span>
+                      <span class="post-nav__title">
+                        {card.post.data.title}
+                        {card.category && <span class="post-nav__category">【{card.category}】</span>}
+                      </span>
+                    </span>
+                  </a>
+                ) : (
+                  <span
+                    class={`post-nav__card post-nav__card--${card.direction} post-nav__card--empty`}
+                  >
+                    <span class="post-nav__text">
+                      <span class="post-nav__label">{card.label}</span>
+                      <span class="post-nav__title">{card.emptyLabel}</span>
+                    </span>
+                  </span>
+                ),
+              )}
+            </nav>
+          )}
+
           {/* 版权条：只声明原创文章的转载规则，不涉及评论等用户内容。
               条款正文在站内 /privacy 的「文章版权」一节，这里只做三行提示，不再重复链接过去。
               结构与 blog-render.tsx 的 renderArticleLicense() 逐字对应。 */}
@@ -164,23 +223,6 @@ const articleSchema = {
             <p class="post-license__line">文章地址：<a class="post-license__title-link" href={licenseUrl}>{post.data.title}</a></p>
             <p class="post-license__line">本站原创文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a> 许可协议。完整转载请注明来自 <a href="/">{licenseSiteName}</a>！</p>
           </section>
-
-          {(newer || older) && (
-            <nav class="post-nav" aria-label="相邻文章">
-              {older && (
-                <a class="post-nav__prev" href={getPostPath(older)}>
-                  <span>上一篇</span>
-                  <strong>{older.data.title}</strong>
-                </a>
-              )}
-              {newer && (
-                <a class="post-nav__next" href={getPostPath(newer)}>
-                  <span>下一篇</span>
-                  <strong>{newer.data.title}</strong>
-                </a>
-              )}
-            </nav>
-          )}
 
           {relatedPosts.length > 0 && (
             <section class="related-posts" aria-labelledby="related-heading">

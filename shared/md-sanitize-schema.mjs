@@ -21,6 +21,11 @@ export const MD_EXTRA_TAGS = [
   'video',
   'audio',
   'source',
+  // 文章页脚的「上一篇/下一篇」横幅容器。defaultSchema 没有 nav，
+  // 净化时会 unwrap 掉外层，两张卡片会从并排栅格掉成上下堆叠 ——
+  // 首次服务端渲染正常，一旦 SSE 实时同步重放该区块就会塌。
+  // nav 只是语义容器，不承载任何可执行内容，放行无额外风险。
+  'nav',
 ];
 
 /**
@@ -47,7 +52,9 @@ export const MD_IFRAME_SRC_PATTERN = new RegExp(
 
 export const MD_EXTRA_ATTRIBUTES = {
   a: ['href', 'title', 'target', 'rel'],
-  img: ['src', 'alt', 'loading', 'decoding', 'width', 'height', 'style'],
+  // referrerPolicy（hast 属性名是驼峰，flattenAttrNames 会转成 DOM 的 referrerpolicy）：
+  // 相邻文章横幅的封面是外链，带 no-referrer 与首页封面卡同口径
+  img: ['src', 'alt', 'loading', 'decoding', 'width', 'height', 'style', 'referrerPolicy'],
   // src 用正则限定 host：hast-util-sanitize 对 [name, ...allowed] 形态按允许值列表校验，
   // 非白名单 iframe 的 src 会被剥掉；整节点丢弃由 astro.config 挂的 mdIframeHostGuard 兜住。
   iframe: [

@@ -794,6 +794,46 @@ function renderArticleLicense(post: MdEntry, author: string, siteName: string): 
     <p class="post-license__line">本站原创文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans" target="_blank" rel="noopener noreferrer">CC BY-NC-SA 4.0</a> 许可协议。完整转载请注明来自 <a href="/">${brand}</a>！</p>`
 }
 
+/**
+ * 相邻文章卡（上一篇/下一篇）：封面大图横幅，文字是「标题【分类】」。
+ * 与 posts/[...slug].astro 里 adjacentCards 的 markup 逐字对应。
+ *
+ * 缺哪一侧就渲染一张不可点击的虚线占位卡，而不是只渲染一张：
+ * 两列网格里只剩一张会撑满整行，且卡片会左右跳位，观感比「明确告诉读者到头了」更糟。
+ *
+ * 封面走 <img> 而不是内联 style 的 background-image —— 客户端同步净化器会把
+ * style 里带 url( 的整条属性丢掉，写进 style 的背景在实时同步后会消失。
+ */
+function renderAdjacentCard(direction: 'prev' | 'next', post: MdEntry | undefined): string {
+  const label = direction === 'prev' ? '上一篇' : '下一篇'
+  if (!post) {
+    const emptyLabel = direction === 'prev' ? '已经是最早一篇了' : '已经是最新一篇了'
+    return `<span class="post-nav__card post-nav__card--${direction} post-nav__card--empty">
+  <span class="post-nav__text">
+    <span class="post-nav__label">${label}</span>
+    <span class="post-nav__title">${emptyLabel}</span>
+  </span>
+</span>`
+  }
+
+  const cover = getPostCover(post)
+  const category = getPostCategory(post)
+  const thumb = cover
+    ? `<img class="post-nav__cover" src="${escapeAttr(cover)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+    : `<span class="post-nav__cover post-nav__cover--fallback" aria-hidden="true"></span>`
+
+  return `<a class="post-nav__card post-nav__card--${direction}" href="${escapeAttr(getPostPath(post))}">
+  ${thumb}
+  <span class="post-nav__mask" aria-hidden="true"></span>
+  <span class="post-nav__text">
+    <span class="post-nav__label">${label}</span>
+    <span class="post-nav__title">${escapeHtml(post.data.title)}${
+      category ? `<span class="post-nav__category">【${escapeHtml(category)}】</span>` : ''
+    }</span>
+  </span>
+</a>`
+}
+
 /** 文章页脚内容（锚点 posts/[...slug].astro 的 footer[data-sync-block="articleFooter"]） */
 function renderArticleFooter(
   newer: MdEntry | undefined,
@@ -807,20 +847,13 @@ function renderArticleFooter(
     ${renderArticleLicense(post, author, siteName)}
   </section>`
 
+  // 横幅排在版权条**上方**（与模板顺序一致）。单篇文章（两篇都没有）时整块不渲染。
   const navHtml =
     newer || older
       ? `<nav class="post-nav" aria-label="相邻文章">
-      ${
-        older
-          ? `<a class="post-nav__prev" href="${escapeAttr(getPostPath(older))}"><span>上一篇</span><strong>${escapeHtml(older.data.title)}</strong></a>`
-          : ''
-      }
-      ${
-        newer
-          ? `<a class="post-nav__next" href="${escapeAttr(getPostPath(newer))}"><span>下一篇</span><strong>${escapeHtml(newer.data.title)}</strong></a>`
-          : ''
-      }
-    </nav>`
+    ${renderAdjacentCard('prev', older)}
+    ${renderAdjacentCard('next', newer)}
+  </nav>`
       : ''
 
   const relatedHtml =
@@ -841,8 +874,9 @@ function renderArticleFooter(
 </section>`
       : ''
 
-  return `${licenseHtml}
-  ${navHtml}
+  // 顺序必须与模板一致：横幅在上，版权条在中，相关文章在下。
+  return `${navHtml}
+  ${licenseHtml}
   ${relatedHtml}`
 }
 

@@ -2538,90 +2538,163 @@ body.is-dragging-floating {
   border-top: 1px solid var(--border);
 }
 
-/* Post navigation — directional strip, no card boxes */
+/* 相邻文章 —— 封面大图横幅卡（上一篇 / 下一篇）
+   两栏等比并排，封面铺满后加模糊，再压一层随主题变化的暗色渐变，
+   保证白色标题在浅色封面上也读得清。 */
+
 .post-nav {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  /* stretch（默认）让同一行的两张卡等高：一张是两行标题、另一张是一行，
+     高度差由各自的封面背景补满，不会露出参差的底边。 */
+  align-items: stretch;
+  gap: 0.9rem;
+  /* 与下方的版权条之间留一点呼吸，别让两块贴死 */
+  margin-bottom: 1.6rem;
 }
 
-.post-nav__prev,
-.post-nav__next {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 1.4rem 0;
-  color: var(--text);
-  transition: color var(--t-fast) var(--ease-out);
-}
-
-.post-nav__prev {
-  padding-right: 2.5rem;
-  border-right: 1px solid var(--border);
-}
-
-.post-nav__next {
-  padding-left: 2.5rem;
-  text-align: right;
-}
-
-.post-nav__prev:hover,
-.post-nav__next:hover {
-  color: var(--brand);
-}
-
-.post-nav__prev span,
-.post-nav__next span {
+.post-nav__card {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  color: var(--text-faint);
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  transition: color var(--t-fast) var(--ease-out);
+  justify-content: center;
+  /* 参考图那种扁横条。这里用 min-height 而不是 aspect-ratio 定高：
+     aspect-ratio 会把高度钉死在 16:3，两行标题（约 93px）就会被
+     overflow:hidden 切掉；改成 min-height 后卡片随内容长高，
+     同一行里由 grid 的 stretch 对齐，两张卡仍然等高。 */
+  min-height: 6rem;
+  padding: 0.9rem 1.4rem;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--edge);
+  background: var(--surface-muted);
+  color: #fff;
+  text-align: center;
+  text-decoration: none;
+  /* 卡片是 overflow:hidden 的裁剪框，模糊的封面不会糊到相邻内容上 */
+  isolation: isolate;
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out),
+    translate var(--t-fast) var(--ease-spring);
 }
 
-.post-nav__next span {
-  justify-content: flex-end;
+/* 封面：放大一点再模糊，避免 blur 在边缘渗出透明边 */
+.post-nav__cover {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: blur(7px) saturate(0.92);
+  transform: scale(1.12);
+  transition: filter var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-out);
 }
 
-.post-nav__prev:hover span,
-.post-nav__next:hover span {
-  color: var(--brand);
-}
-
-.post-nav__prev span::before {
-  content: "←";
-  display: inline-block;
-  font-size: 1.1em;
-  line-height: 1;
-  transition: translate var(--t-fast) var(--ease-spring);
-}
-
-.post-nav__next span::after {
-  content: "→";
-  display: inline-block;
-  font-size: 1.1em;
-  line-height: 1;
-  transition: translate var(--t-fast) var(--ease-spring);
-}
-
-.post-nav__prev:hover span::before {
-  translate: -3px 0;
-}
-
-.post-nav__next:hover span::after {
-  translate: 3px 0;
-}
-
-.post-nav strong {
+/* 无封面时用与首页同款的色相渐变兜底，不至于露出一块死灰色 */
+.post-nav__cover--fallback {
   display: block;
-  font-size: 1.04rem;
+  background: linear-gradient(
+    140deg,
+    hsl(var(--h, 24) 32% 60%),
+    hsl(calc(var(--h, 24) + 18) 36% 48%)
+  );
+}
+
+/* 压暗层：浅色主题用稍重的遮罩，深色主题可以轻一点，两边都保证白字对比度。
+   中间一段必须最深 —— 标题正好压在卡片正中，而封面可能是接近纯白的图。
+   实测：叠一层 alpha=0.62 的深色后，纯白封面上的白字对比度约 5.2:1，
+   过 WCAG AA 的 4.5:1；若按 0.44 收中间，只剩约 3:1，长标题会糊。 */
+.post-nav__mask {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    150deg,
+    rgb(18 14 12 / 0.54),
+    rgb(18 14 12 / 0.62) 50%,
+    rgb(18 14 12 / 0.54)
+  );
+}
+
+.markdown-preview-dark .post-nav__mask {
+  background: linear-gradient(
+    150deg,
+    rgb(8 10 14 / 0.58),
+    rgb(8 10 14 / 0.66) 50%,
+    rgb(8 10 14 / 0.58)
+  );
+}
+
+.post-nav__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.post-nav__label {
+  color: rgb(255 255 255 / 0.72);
+  font-size: 0.72rem;
   font-weight: 700;
-  line-height: 1.45;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.post-nav__title {
+  /* 长标题最多两行，超出裁掉 —— 横幅高度是固定的，不能让它撑开 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.4;
   letter-spacing: -0.01em;
-  color: inherit;
+  text-wrap: balance;
+}
+
+.post-nav__category {
+  margin-left: 0.15rem;
+  color: rgb(255 255 255 / 0.82);
+  font-weight: 600;
+}
+
+/* 悬停：抬一点、边框转成品牌色，封面恢复清晰 —— 给“能点”一个明确回应。
+   color 必须再钉一次 #fff：全局 a:hover{color:var(--accent)} 是 (0,1,1)，
+   比 .post-nav__card (0,1,0) 高，不覆盖的话悬停时白标题会变成强调色。 */
+.post-nav__card:not(.post-nav__card--empty):hover {
+  translate: 0 -0.2rem;
+  border-color: var(--brand);
+  box-shadow: var(--shadow-sm);
+  color: #fff;
+}
+
+.post-nav__card:not(.post-nav__card--empty):hover .post-nav__cover {
+  filter: blur(3px) saturate(1);
+  transform: scale(1.06);
+}
+
+/* 空态：没有上一篇/下一篇时的占位。虚线框 + 弱化文字，
+   形状与真卡完全一致，所以两列不会一高一低、也不会左右跳位。 */
+.post-nav__card--empty {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.post-nav__card--empty .post-nav__label {
+  color: var(--text-faint);
+}
+
+.post-nav__card--empty .post-nav__title {
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 /* Related articles — post-row style, no card boxes */
@@ -2935,19 +3008,9 @@ body.is-dragging-floating {
     grid-template-columns: 1fr;
   }
 
-  .post-nav__prev {
-    padding-right: 0;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .post-nav__next {
-    padding-left: 0;
-    text-align: left;
-  }
-
-  .post-nav__next span {
-    justify-content: flex-start;
+  /* 单列后两张横幅会上下叠，高度跟着内容走就够了，不必再单独定高 */
+  .post-nav__card {
+    min-height: 5.5rem;
   }
 }
 
@@ -4258,17 +4321,17 @@ html.theme-anim body {
   border-bottom: 2px solid var(--ink);
 }
 
-/* 相邻文章导航：手绘箭头 */
-.post-nav__prev,
-.post-nav__next {
-  border: 1.5px solid transparent;
-  border-radius: 12px 16px 13px 15px;
+/* 相邻文章横幅：手绘圆角，与首页封面卡同款不规则边框。
+   半径比封面小图克制得多 —— 横幅是 16:3 的长条，照抄 255px 会糊成一坨。 */
+.post-nav__card {
+  border-radius: 22px 12px 24px 13px / 13px 24px 12px 22px;
+  border: 2px solid var(--ink);
+  box-shadow: 3px 4px 0 var(--shadow-sm);
 }
-.post-nav__prev:hover,
-.post-nav__next:hover {
-  background: var(--sticky-pink);
-  border-color: var(--on-sticky-line);
-  color: var(--on-sticky);
+
+.post-nav__card--empty {
+  border: 2px dashed var(--border-strong);
+  box-shadow: none;
 }
 
 /* 相关文章行 */
