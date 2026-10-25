@@ -19,6 +19,7 @@ import { createRequire } from 'node:module'
 import { Client } from 'pg'
 import { resolvePgTls } from './pg-tls'
 import { rateLimitIp, hitForbiddenWords, akismetCheck } from './waline-anti-spam'
+import { identityOf, lookupAddr, lookupAddrs } from './comment-identity'
 
 const require_ = createRequire(import.meta.url)
 // sanitize-html 是 CJS，用 createRequire 加载避免打包器静态分析问题
@@ -119,13 +120,13 @@ export interface RawCounter {
 }
 
 /** 规范化为 @waline/client 期望的字段名（objectId 而非 id） */
-export function normalizeComment(raw: RawComment) {
+export function normalizeComment(raw: RawComment, addr = '') {
   const time = raw.insertedat ?? raw.createdat
+  const identity = identityOf(raw)
   return {
     objectId: raw.id,
     user_id: raw.user_id,
     nick: raw.nick ?? '匿名',
-    mail: raw.mail ?? '',
     link: raw.link ?? '',
     url: raw.url ?? '',
     comment: raw.comment ?? '',
@@ -133,15 +134,61 @@ export function normalizeComment(raw: RawComment) {
     like: Number(raw.like ?? 0),
     sticky: raw.sticky ? Number(raw.sticky) > 0 : false,
     time: time ? new Date(time).getTime() : Date.now(),
-    ip: raw.ip ?? '',
-    ua: raw.ua ?? '',
     pid: raw.pid,
     rid: raw.rid,
-    // 前端可能要展示属地/浏览器/系统，这里先留空，由调用方按需解析 UA 填入
-    addr: '',
-    browser: '',
-    os: '',
+    // 下面四个由 comment-identity 计算：头像与 UA 是纯函数，属地需要查库/查接口
+    addr,
+    browser: identity.browser,
+    os: identity.os,
+    avatar: identity.avatar,
   }
+}
+
+/** 内部用：规范化时多带一个 ip，仅用于查属地，绝不进公开响应。 */
+interface NormalizedWithIp extends ReturnType<typeof normalizeComment> {
+  ip: string
+}
+
+function normalizeWithIp(raw: RawComment): NormalizedWithIp {
+  return { ...normalizeComment(raw), ip: raw.ip ?? '' }
+}
+
+type NormalizedComment = ReturnType<typeof normalizeComment>
+type CommentNode = NormalizedComment & { children?: NormalizedComment[] }
+type CommentNodeWithIp = NormalizedWithIp & { children?: NormalizedWithIp[] }
+
+/**
+ * 把评论树摊平成一维数组（根 + 所有子回复）。
+ * 属地是在 DB 连接关闭之后才查的，需要能遍历整棵树回填 addr。
+ */
+function flattenTree<T extends { children?: T[] }>(nodes: T[]): T[] {
+  const out: T[] = []
+  for (const node of nodes) {
+    out.push(node)
+    if (node.children?.length) out.push(...flattenTree(node.children))
+  }
+  return out
+}
+
+/**
+ * 回填 IP 属地。
+ * 刻意放在 withDb 之外：属地查询要走 HTTP，占着数据库连接等外网是最常见的拖垮连接池的写法。
+ */
+async function attachAddr(tree: CommentNodeWithIp[]): Promise<void> {
+  const flat = flattenTree(tree)
+  if (!flat.length) return
+  const addrMap = await lookupAddrs(flat.map((node) => node.ip))
+  for (const node of flat) {
+    node.addr = addrMap.get(String(node.ip ?? '').trim()) ?? ''
+  }
+}
+
+/** 剥掉内部字段，得到能安全返回给访客的形状。 */
+function toPublic(node: CommentNodeWithIp): CommentNode {
+  const { ip: _ip, children, ...rest } = node
+  const out: CommentNode = rest
+  if (children?.length) out.children = children.map(toPublic)
+  return out
 }
 
 // ==================== XSS 清洗 ====================
@@ -204,7 +251,7 @@ export async function listComments(options: {
   const { path, page, pageSize, sortBy } = options
   const url = normalizeUrl(path)
 
-  return withDb(async (client) => {
+  const tree = await withDb(async (client) => {
     // 只返回 approved 状态的评论给前端
     const countResult = await client.query(
       `SELECT COUNT(*) FROM ${table('comment')} WHERE url = $1 AND status = 'approved'`,
@@ -232,10 +279,8 @@ export async function listComments(options: {
     const roots = rows.filter((r) => r.rid == null && r.pid == null)
     const children = rows.filter((r) => r.rid != null || r.pid != null)
 
-    const tree = roots.map((root) => {
-      const node: ReturnType<typeof normalizeComment> & {
-        children?: ReturnType<typeof normalizeComment>[]
-      } = normalizeComment(root)
+    const nodes = roots.map((root) => {
+      const node: CommentNodeWithIp = normalizeWithIp(root)
       const replies = children
         .filter((c) => c.rid === root.id || c.pid === root.id)
         .sort((a, b) => {
@@ -243,18 +288,27 @@ export async function listComments(options: {
           const tb = new Date(b.insertedat ?? b.createdat ?? 0).getTime()
           return ta - tb
         })
-        .map((c) => normalizeComment(c))
+        .map((c) => normalizeWithIp(c))
       if (replies.length) node.children = replies
       return node
     })
 
-    return { count, data: tree, totalPages }
+    return { nodes, count, totalPages }
   })
+
+  // 属地查询放在数据库连接归还之后，避免握着连接等外网接口
+  await attachAddr(tree.nodes)
+
+  return {
+    count: tree.count,
+    data: tree.nodes.map(toPublic),
+    totalPages: tree.totalPages,
+  }
 }
 
 /** 获取最近评论（全站，用于侧边栏） */
 export async function recentComments(count: number): Promise<ReturnType<typeof normalizeComment>[]> {
-  return withDb(async (client) => {
+  const nodes = await withDb(async (client) => {
     const result = await client.query(
       `SELECT * FROM ${table('comment')}
        WHERE status = 'approved'
@@ -262,8 +316,10 @@ export async function recentComments(count: number): Promise<ReturnType<typeof n
        LIMIT $1`,
       [count],
     )
-    return (result.rows as RawComment[]).map(normalizeComment)
+    return (result.rows as RawComment[]).map(normalizeWithIp)
   })
+  await attachAddr(nodes)
+  return nodes.map(toPublic)
 }
 
 /** 获取某几篇文章的评论数 */
@@ -314,6 +370,16 @@ export async function createComment(
   if (!sanitized.trim()) throw new WalineServerError('评论内容不能为空', 400)
   if (!url.trim()) throw new WalineServerError('缺少评论所属页面地址', 400)
 
+  // 昵称与邮箱必填：前端的 requiredMeta 只是体验层，直接打接口能绕过去，
+  // 而头像要按邮箱算，没有邮箱的评论在列表里就是一张默认图。
+  const finalNick = (nick ?? '').trim()
+  const finalMail = (mail ?? '').trim()
+  if (!finalNick) throw new WalineServerError('昵称不能为空', 400)
+  if (!finalMail) throw new WalineServerError('邮箱不能为空', 400)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(finalMail)) {
+    throw new WalineServerError('邮箱格式不正确', 400)
+  }
+
   // 字数限制
   const maxLen = Number(process.env.COMMENT_MAX_LENGTH ?? 2000) || 2000
   if (orig.length > maxLen) throw new WalineServerError(`评论内容过长（最多 ${maxLen} 字）`, 400)
@@ -324,16 +390,22 @@ export async function createComment(
     const fw = hitForbiddenWords(orig)
     if (fw) throw new WalineServerError('评论包含违禁词', 400)
     // Akismet 可选
-    const akismetResult = await akismetCheck({ comment: orig, nick, mail, ip: context.ip, ua })
+    const akismetResult = await akismetCheck({
+      comment: orig,
+      nick: finalNick,
+      mail: finalMail,
+      ip: context.ip,
+      ua,
+    })
     if (akismetResult === 'spam') {
       // 命中 Akismet：存为 spam 而不是直接拒绝，方便后台误判恢复
       const status = 'spam'
       return insertComment({
         comment: sanitized,
         orig,
-        nick,
-        mail,
-        link,
+        nick: finalNick,
+        mail: finalMail,
+        link: link?.trim() || '',
         url: normalizeUrl(url),
         ua,
         ip: context.ip,
@@ -351,8 +423,8 @@ export async function createComment(
   return insertComment({
     comment: sanitized,
     orig,
-    nick: nick?.trim() || '匿名',
-    mail: mail?.trim() || '',
+    nick: finalNick,
+    mail: finalMail,
     link: link?.trim() || '',
     url: normalizeUrl(url),
     ua,
@@ -378,7 +450,7 @@ async function insertComment(params: {
   status: string
   user_id: number | null
 }): Promise<ReturnType<typeof normalizeComment>> {
-  return withDb(async (client) => {
+  const raw = await withDb(async (client) => {
     // 如果有 pid，查询父评论取 rid（根评论 id）
     let finalRid = params.rid
     if (params.pid != null && finalRid == null) {
@@ -410,12 +482,15 @@ async function insertComment(params: {
         params.url,
       ],
     )
-    const raw = result.rows[0] as RawComment
-    const out = normalizeComment(raw)
-    // 把 orig 也带回去，前端编辑时要用
-    ;(out as ReturnType<typeof normalizeComment> & { orig?: string }).orig = params.orig
-    return out
+    return result.rows[0] as RawComment
   })
+
+  // 刚发出的评论也要带属地，否则作者自己看到的卡片比别人少一个徽章
+  const addr = await lookupAddr(params.ip)
+  const out = normalizeComment(raw, addr)
+  // 把 orig 也带回去，前端编辑时要用
+  ;(out as ReturnType<typeof normalizeComment> & { orig?: string }).orig = params.orig
+  return out
 }
 
 // ==================== 评论：点赞 ====================

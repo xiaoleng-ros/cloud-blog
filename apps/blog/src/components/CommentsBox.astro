@@ -2,6 +2,9 @@
 // Waline 官方评论组件（构建时打包，表情图包本地化，运行时零外链）。
 // 计数头措辞固定「评论」：走官方 locale.comment 覆盖。
 import '@waline/client/style';
+// 属地/浏览器/系统的徽章小图标（定位针、Windows、Chrome…）在这份单独的样式表里，
+// 不引就只有纯文字色块。
+import '@waline/client/meta';
 ---
 
 <section class="cbox" data-cbox>
@@ -126,7 +129,8 @@ import '@waline/client/style';
         imageUploader: uploadImage,
         // GIF 搜索走第三方接口，按零外链口径关闭
         search: false,
-        requiredMeta: ['nick'],
+        // 昵称与邮箱都必填：邮箱同时决定评论头像（gravatar / QQ 头像）
+        requiredMeta: ['nick', 'mail'],
         wordLimit: 500,
         // 固定按时间排序：最新在上、越早越靠下（排序选项 UI 由下方 sweep 移除）
         commentSorting: 'latest',

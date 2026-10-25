@@ -3523,6 +3523,31 @@ body.is-dragging-floating {
   --waline-badge-color: var(--brand);
 }
 
+/* 头像：官方默认是正圆，这里改成与封面卡同族的轻微圆角方块，
+   并加一圈发丝边，避免浅色邮箱头像糊在白底上。
+   尺寸比官方默认（3.25rem）小一点，让昵称/时间这一行更突出。 */
+.cbox [data-waline] {
+  --waline-avatar-size: 2.75rem;
+  --waline-avatar-radius: 32%;
+}
+
+.cbox .wl-user-avatar {
+  border: 1px solid var(--hairline);
+  background: var(--surface-muted);
+}
+
+/* 属地 / 浏览器 / 系统三个徽章：官方默认 0.625em 偏小，
+   中文在 10px 下几乎看不清，抬到 0.7em 并给一点内边距。 */
+.cbox .wl-card .wl-meta > span {
+  font-size: 0.7em;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.cbox .wl-card .wl-meta {
+  gap: 0.25em;
+}
+
 /* ---------- Motion: scroll reveal + theme crossfade ---------- */
 @media (prefers-reduced-motion: no-preference) {
   .js :is(

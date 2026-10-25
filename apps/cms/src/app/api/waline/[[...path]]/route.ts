@@ -15,6 +15,7 @@ import {
   table,
 } from '../../../../lib/waline-server'
 import { scheduleLazyGc } from '../../../../lib/comment-image-gc'
+import { lookupAddr as prefetchAddr } from '../../../../lib/comment-identity'
 
 // 评论服务用 pg 直连，只能在 Node 运行时跑
 export const runtime = 'nodejs'
@@ -142,7 +143,9 @@ async function handle(request: Request): Promise<Response> {
         return Response.json({ errno: 403, errmsg: '无权操作' }, { status: 403 })
       }
       const updated = await updateComment(id, body)
-      return ok(normalizeComment(updated))
+      // normalizeComment 已不含 mail/ip/ua；管理员在这里只需看到更新后的内容，
+      // 邮箱等后台字段走带鉴权的 /api/comments
+      return ok({ ...normalizeComment(updated, await prefetchAddr(updated.ip)) })
     }
 
     // DELETE /api/comment/:id —— 管理员删除

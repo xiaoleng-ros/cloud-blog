@@ -1,5 +1,6 @@
 import { Client } from 'pg'
 import { resolvePgTls } from './pg-tls'
+import { identityOf, lookupAddrs } from './comment-identity'
 import {
   WalineServerError,
   ensureAdminAccount,
@@ -73,6 +74,7 @@ interface RawAdminComment {
   pid?: number | null
   rid?: number | null
   ua?: string | null
+  ip?: string | null
 }
 
 const stripHtml = (value: string) =>
@@ -102,31 +104,8 @@ function extractImages(raw: RawAdminComment): string[] {
   return [...found].slice(0, 12)
 }
 
-/**
- * 简易 UA 解析：提取浏览器和系统。
- * 不引 ua-parser-js（~1.3MB），用正则覆盖主流浏览器/系统即可。
- */
-function parseUa(ua: string | null | undefined): { browser: string; os: string } {
-  if (!ua) return { browser: '', os: '' }
-  let browser = ''
-  if (/Edg\//.test(ua)) browser = 'Edge'
-  else if (/Chrome\//.test(ua)) browser = 'Chrome'
-  else if (/Firefox\//.test(ua)) browser = 'Firefox'
-  else if (/Safari\//.test(ua)) browser = 'Safari'
-
-  let os = ''
-  if (/Windows NT 10/.test(ua)) os = 'Windows 10/11'
-  else if (/Windows NT/.test(ua)) os = 'Windows'
-  else if (/Mac OS X/.test(ua)) os = 'macOS'
-  else if (/Android/.test(ua)) os = 'Android'
-  else if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS'
-  else if (/Linux/.test(ua)) os = 'Linux'
-
-  return { browser, os }
-}
-
 const normalize = (raw: RawAdminComment): WalineComment => {
-  const { browser, os } = parseUa(raw.ua)
+  const identity = identityOf(raw)
   return {
     id: raw.id,
     nick: (raw.nick ?? '').trim() || '匿名',
@@ -139,9 +118,9 @@ const normalize = (raw: RawAdminComment): WalineComment => {
     like: Number(raw.like ?? 0) || 0,
     createdAt: raw.insertedat ?? raw.createdat ?? null,
     addr: '',
-    browser,
-    os,
-    avatar: '',
+    browser: identity.browser,
+    os: identity.os,
+    avatar: identity.avatar,
     parentId: raw.pid ?? null,
     rootId: raw.rid ?? null,
   }
@@ -177,13 +156,18 @@ export async function listComments(options: {
   from?: string
   to?: string
 }): Promise<WalineListResult> {
-  const all = await withDb(async (client) => {
+  const { rows: all, ips } = await withDb(async (client) => {
     const result = await client.query(
-      `SELECT id, nick, mail, link, url, comment, status, "like", insertedat, createdat, pid, rid, ua
+      `SELECT id, nick, mail, link, url, comment, status, "like", insertedat, createdat, pid, rid, ua, ip
        FROM ${table('comment')}
        ORDER BY createdat DESC`,
     )
-    return (result.rows as RawAdminComment[]).map(normalize)
+    const raw = result.rows as RawAdminComment[]
+    // ip 单独留着：normalize 出来的对象不带 ip（后台界面不展示 IP），
+    // 但属地回填需要它来查
+    const ipMap = new Map<number, string>()
+    for (const item of raw) ipMap.set(item.id, item.ip ?? '')
+    return { rows: raw.map(normalize), ips: ipMap }
   })
 
   const posts = all.filter((item) => isPostComment(item.url))
@@ -238,9 +222,24 @@ export async function listComments(options: {
   const totalPages = Math.ceil(matched.length / pageSize)
   const page = Math.min(Math.max(1, options.page), Math.max(1, totalPages))
   const start = (page - 1) * pageSize
+  const rows = matched.slice(start, start + pageSize)
+
+  // 只给本页的评论查属地：全量几百条都查会把后台列表拖到十几秒
+  const pageThunks: WalineComment[] = []
+  const collect = (node: WalineCommentNode) => {
+    pageThunks.push(node)
+    for (const child of node.replies) collect(child)
+  }
+  for (const node of rows) collect(node)
+  if (pageThunks.length) {
+    const addrMap = await lookupAddrs(pageThunks.map((item) => ips.get(item.id)))
+    for (const item of pageThunks) {
+      item.addr = addrMap.get(String(ips.get(item.id) ?? '').trim()) ?? ''
+    }
+  }
 
   return {
-    rows: matched.slice(start, start + pageSize),
+    rows,
     page,
     totalPages,
     pageSize,
