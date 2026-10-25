@@ -87,7 +87,9 @@ async function handle(request: Request): Promise<Response> {
       if (type === 'count') {
         const urls = (params.get('url') ?? '').split(',').filter(Boolean)
         const counts = await commentCount(urls)
-        return ok(counts)
+        // 官方形状同样是数组，顺序与传入的 url 一致：
+        //   qf: a.forEach((t,n)=>{t.textContent=e[n].toString()})
+        return ok(urls.map((u) => counts[u] ?? 0))
       }
       // 最近评论
       if (type === 'recent') {
@@ -160,10 +162,17 @@ async function handle(request: Request): Promise<Response> {
     }
 
     // ==================== 计数（阅读量 / 反应） ====================
+    //
+    // ⚠️ 响应形状必须与官方 Waline 一致：data 是**数组**，按 paths 的顺序一一对应。
+    // 官方客户端有三处消费点全部按下标取值，返回成「以路径为键的对象」会直接炸：
+    //   ch=(e,t)=>{t.forEach((t,n)=>{let r=e[n].time;...})}          阅读量回填
+    //   qf: t.textContent=e[n].toString()                            评论数
+    //   reaction: let[s]=await i({...}) → s[`reaction${t}`]          对象解构会抛
+    //             "(intermediate value) is not iterable"，整个评论区渲染中断。
     if (stripped === '/api/article' && method === 'GET') {
       const paths = (params.get('path') ?? '').split(',').filter(Boolean)
       const types = (params.get('type') ?? 'time').split(',').filter(Boolean)
-      const result: Record<string, Record<string, number>> = {}
+      const result: Record<string, number>[] = []
       for (const p of paths) {
         const counter = await getCounter(p)
         const obj: Record<string, number> = {}
@@ -171,7 +180,7 @@ async function handle(request: Request): Promise<Response> {
           if (t === 'time') obj.time = counter.time ?? 0
           else if (/^reaction[0-8]$/.test(t)) obj[t] = (counter as unknown as Record<string, number | null>)[t] ?? 0
         }
-        result[p] = obj
+        result.push(obj)
       }
       return ok(result)
     }
@@ -184,7 +193,8 @@ async function handle(request: Request): Promise<Response> {
       else if (/^reaction[0-8]$/.test(body.type)) {
         obj[body.type] = (counter as unknown as Record<string, number | null>)[body.type] ?? 0
       }
-      return ok({ [body.path]: obj })
+      // POST 的消费方是 ch(e, nodes)：传进来的 e 直接按数组用，这里同样给数组。
+      return ok([obj])
     }
 
     // ==================== 健康检查 ====================
