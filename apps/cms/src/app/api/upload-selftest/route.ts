@@ -55,11 +55,14 @@ export async function GET(request: NextRequest) {
     )
   } catch (err) {
     const e = err as { name?: string; message?: string; stack?: string }
+    // 不回显 stack：调用者虽是已登录用户，但栈里会带出函数包的绝对路径与内部模块名，
+    // 对定位上传问题毫无帮助（真正有用的是下面的 diagnosis 与三段 ok），
+    // 却会在对方把响应贴进 issue/聊天记录时泄露部署结构。
+    console.error('[upload-selftest] 自检失败', e?.stack ?? e?.message ?? err)
     return NextResponse.json(
       {
         ok: false,
         fatal: `${e?.name ?? ''} ${e?.message ?? String(err)}`.trim(),
-        stack: e?.stack?.split('\n').slice(0, 8).join('\n'),
       },
       { status: 500, headers: { 'Cache-Control': 'no-store' } },
     )

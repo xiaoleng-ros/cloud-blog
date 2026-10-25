@@ -15,8 +15,12 @@ import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES, incrementFilenameSuffix, toStor
  * access.read 保持公开，保证图片 URL 可直接被浏览器加载，不经过 Payload 鉴权。
  *
  * 服务端约束（不依赖后台组件）：
- *   - mimeTypes: upload collection 会校验真实文件头，Payload 默认还把 SVG 这类
- *     「可携带脚本的图片」列在 RESTRICTED 名单里直接拒绝，所以这里不需要额外处理
+ *   - mimeTypes: upload collection 会校验真实文件头。**但不要指望它拦住 SVG**：
+ *     `checkFileRestrictions` 的 RESTRICTED 名单只在「未配置 mimeTypes」时才生效，
+ *     配了 `image/*` 之后 SVG 会进 `inspectSvg` 内容检查而不是直接拒绝。
+ *     内容检查能挡住 <script>/onload/javascript: 等明显载荷，但 SVG 本质是 XML 文档，
+ *     任何漏网的语法变体都是存储型 XSS 的入口（同源部署本地 staticDir 时尤其危险）。
+ *     这里显式写白名单把 SVG 排除在外，后台只需要位图，没有理由放行矢量图。
  *   - 大小：Payload 没有 maxFileSize 配置项，必须由 beforeValidate 钩子拦，
  *     否则绕过后台组件直接 POST /api/media 就能塞进任意大的文件
  */
@@ -44,7 +48,15 @@ export const Media: CollectionConfig = {
     // 本地开发用：无 S3 凭据时，Payload 走此目录存到本地磁盘。
     // 生产环境配了 s3Storage 插件后，此项被插件覆盖（disableLocalStorage=true 时忽略）。
     staticDir: 'media',
-    mimeTypes: ['image/*'],
+    // 显式列位图类型，**不含 image/svg+xml**（原为 'image/*'，会让 SVG 通过 MIME 校验）。
+    // 另附 avif/heic 等后台可能用到的位图格式，避免误伤正常上传。
+    mimeTypes: [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/avif',
+    ],
   },
   fields: [
     {

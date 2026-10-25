@@ -16,6 +16,10 @@ import {
 } from '../../../../lib/waline-server'
 import { scheduleLazyGc } from '../../../../lib/comment-image-gc'
 import { lookupAddr as prefetchAddr } from '../../../../lib/comment-identity'
+// IP 解析统一走 lib/client-ip：XFF 是追加式头部，取首段等于取攻击者自己填的值。
+// 实测确认 EdgeOne 原样透传客户端发来的 XFF（伪造 `1.2.3.4, 203.0.113.9` 后库里存的就是
+// `1.2.3.4`），所以必须从右往左取第一个合法 IP，否则换一个头就是一个新限流桶。
+import { clientIp } from '../../../../lib/client-ip'
 
 // 评论服务用 pg 直连，只能在 Node 运行时跑
 export const runtime = 'nodejs'
@@ -24,35 +28,39 @@ export const dynamic = 'force-dynamic'
 
 const ADMIN_EMAIL = 'cms-moderation@invalid.local'
 
-/** 取客户端真实 IP：只信 XFF 首段，防止伪造 */
-function clientIp(request: Request): string {
-  const xff = request.headers.get('x-forwarded-for')
-  if (xff) return xff.split(',')[0]?.trim() ?? ''
-  return request.headers.get('x-real-ip') ?? ''
-}
-
 /**
- * 鉴权：检查请求是否带有效的管理员令牌。
- * 简化版：服务端在进程内用 JWT_TOKEN 自签令牌（与 waline-admin 一致）。
- * 这里只校验 token 能否用 JWT_TOKEN 解开，不查 wl_users（管理后台自己保证）。
+ * 鉴权：管理动作（改/删评论）必须来自**真实登录的后台会话**。
+ *
+ * ==================== 为什么重写这段 ====================
+ *
+ * 原实现用 `process.env.JWT_TOKEN` 验一个自带 Bearer 令牌，只验签、不查用户是否存在、
+ * 也不查会话是否被吊销。三个问题叠在一起：
+ *
+ * 1. **签发端已经不存在**：全仓 grep 不到任何 `jwt.sign`/`mintAdminToken`（它只活在
+ *    这条注释里），也就是说没人能合法产出这种令牌 —— 这个分支是死代码。
+ * 2. **它是一个长期有效的后门**：只要有人从任何途径拿到 JWT_TOKEN（比如历史上
+ *    泄露过的 .env、备份、日志），就能永久管理评论，且因为不查会话，改密码/删账号
+ *    都吊销不掉它。而 payload 自己的会话令牌是 `useSessions` + 24h 过期的，能吊销。
+ * 3. **依赖未声明**：`jsonwebtoken` 不在 apps/cms/package.json 里（靠传递依赖解析），
+ *    上游少一个包就会在运行期崩。
+ *
+ * 现在改成与后台管理页完全同一条鉴权链：读 payload-token cookie → jose 验签 →
+ * 查 users 集合 → 校验 sid 仍在有效会话列表里（`verifyRequestUser` 已经做了全部这些）。
  */
-import { createRequire } from 'node:module'
-const require_ = createRequire(import.meta.url)
-
-function verifyAdminToken(request: Request): { ok: boolean; userId?: number } {
-  const auth = request.headers.get('authorization')
-  if (!auth?.startsWith('Bearer ')) return { ok: false }
-  const token = auth.slice(7)
-  const key = process.env.JWT_TOKEN
-  if (!key) return { ok: false }
+async function verifyAdminToken(request: Request): Promise<{ ok: boolean; userId?: number }> {
+  // 没有 cookie 就没什么可验的，先短路避免无谓地实例化 Payload
+  if (!request.headers.get('cookie')?.includes('token')) return { ok: false }
   try {
-    const jwt = require_('jsonwebtoken')
-    const decoded = jwt.verify(token, key)
-    // payload 直接是 user id（与 waline-admin 的 mintAdminToken 一致）
-    const userId = typeof decoded === 'string' ? Number(decoded) : Number(decoded?.sub ?? decoded)
-    if (!Number.isFinite(userId)) return { ok: false }
-    return { ok: true, userId }
-  } catch {
+    const { getPayload } = await import('payload')
+    const { default: config } = await import('@payload-config')
+    const { verifyRequestUser } = await import('../../../../lib/feishu-session')
+    const payload = await getPayload({ config })
+    const user = await verifyRequestUser(request, payload)
+    if (!user) return { ok: false }
+    const id = Number(user.id)
+    return Number.isFinite(id) ? { ok: true, userId: id } : { ok: true }
+  } catch (err) {
+    console.warn('[waline] 管理员鉴权失败', err instanceof Error ? err.message : err)
     return { ok: false }
   }
 }
@@ -93,7 +101,11 @@ async function handle(request: Request): Promise<Response> {
       }
       // 最近评论
       if (type === 'recent') {
-        const count = Number(params.get('count') ?? 10) || 10
+        // ⚠️ 必须钳制：count 直接当 SQL LIMIT 用，且每条结果都要过属地查询。
+        // 未钳制时匿名请求 `?type=recent&count=1000000` 会拉全表 + 打爆
+        // ip.zxinc.org 配额（lookupAddrs 单批预算 4s，超时后整批降级为空）。
+        // 与下面 pageSize 的 Math.min 同口径。
+        const count = Math.min(50, Math.max(1, Number(params.get('count') ?? 10) || 10))
         const data = await recentComments(count)
         return ok(data)
       }
@@ -124,7 +136,7 @@ async function handle(request: Request): Promise<Response> {
 
     if (stripped === '/api/comment' && method === 'POST') {
       const body = (await request.json()) as Record<string, unknown>
-      const auth = verifyAdminToken(request)
+      const auth = await verifyAdminToken(request)
       const created = await createComment(
         {
           comment: String(body.comment ?? ''),
@@ -148,12 +160,16 @@ async function handle(request: Request): Promise<Response> {
     const updateMatch = stripped.match(/^\/api\/comment\/(\d+)$/)
     if (updateMatch && method === 'PUT') {
       const id = Number(updateMatch[1])
-      const auth = verifyAdminToken(request)
+      const auth = await verifyAdminToken(request)
       const body = (await request.json()) as Record<string, unknown>
       // 点赞：body 里有 like 字段且非管理员
       if (body.like !== undefined && !auth.ok) {
-        const like = Number(body.like)
-        const newLike = await likeComment(id, like < 0)
+        // 只接受明确的 +1 / -1，其余（NaN、字符串、0、999）一律按点赞处理。
+        // 原实现用 `like < 0` 判方向，`{"like":"abc"}` 会走点赞分支而 `Number()` 得到
+        // NaN —— 虽然这里的布尔判断不会把 NaN 传下去，但显式归一化更不容易被后续改动引偏。
+        const raw = Number(body.like)
+        const unlike = raw === -1 || raw < 0
+        const newLike = await likeComment(id, unlike)
         return ok({ like: newLike })
       }
       // 管理员更新
@@ -169,7 +185,7 @@ async function handle(request: Request): Promise<Response> {
     // DELETE /api/comment/:id —— 管理员删除
     if (updateMatch && method === 'DELETE') {
       const id = Number(updateMatch[1])
-      const auth = verifyAdminToken(request)
+      const auth = await verifyAdminToken(request)
       if (!auth.ok) {
         return Response.json({ errno: 403, errmsg: '无权操作' }, { status: 403 })
       }
@@ -186,8 +202,12 @@ async function handle(request: Request): Promise<Response> {
     //   reaction: let[s]=await i({...}) → s[`reaction${t}`]          对象解构会抛
     //             "(intermediate value) is not iterable"，整个评论区渲染中断。
     if (stripped === '/api/article' && method === 'GET') {
-      const paths = (params.get('path') ?? '').split(',').filter(Boolean)
-      const types = (params.get('type') ?? 'time').split(',').filter(Boolean)
+      // ⚠️ 必须限条数：这个分支对每个 path 串行发一次 getCounter（一次 DB 往返）。
+      // 匿名请求 `?path=/a,/a,/a,...（一万个）` 原本会让单个请求打出一万次查询，
+      // 直接把连接池占死 —— 一次 curl 就能拖垮全站评论与阅读量接口。
+      // 官方客户端一次最多带一页的路径数（个位数），50 已经非常宽裕。
+      const paths = (params.get('path') ?? '').split(',').filter(Boolean).slice(0, 50)
+      const types = (params.get('type') ?? 'time').split(',').filter(Boolean).slice(0, 16)
       const result: Record<string, number>[] = []
       for (const p of paths) {
         const counter = await getCounter(p)

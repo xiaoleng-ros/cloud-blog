@@ -121,11 +121,65 @@ const LOGIN_WINDOW_MS = 60_000
 const LOGIN_MAX_ATTEMPTS = 10
 const loginAttempts = new Map<string, { count: number; resetAt: number }>()
 
+/**
+ * 从 XFF 串里挑出最右侧的合法公网 IP（该段由平台网关写入，客户端无法伪造）。
+ * 与 apps/cms/src/lib/client-ip.ts 的 clientIp() 同逻辑，
+ * 因为 middleware 跑在 Edge runtime，不能直接 import 那个模块。
+ */
+function pickRightmostPublicIp(header: string): string {
+  const isPublic = (value: string): boolean => {
+    if (!value) return false
+    const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(value)
+    if (v4) {
+      const n = v4.slice(1, 5).map(Number)
+      if (n.some((x) => x > 255)) return false
+      const [a, b] = n
+      if (a === 0 || a === 10 || a === 127 || a >= 224) return false
+      if (a === 169 && b === 254) return false
+      if (a === 172 && b >= 16 && b <= 31) return false
+      if (a === 192 && b === 168) return false
+      if (a === 100 && b >= 64 && b <= 127) return false
+      return true
+    }
+    if (/^[0-9a-f:]+$/i.test(value) && value.includes(':')) {
+      if (value === '::' || value === '::1') return false
+      if (/^f[cd]/i.test(value)) return false
+      if (/^fe[89ab]/i.test(value)) return false
+      return true
+    }
+    return false
+  }
+
+  const stripPort = (value: string): string => {
+    const t = value.trim()
+    if (!t) return ''
+    if (t.startsWith('[')) {
+      const close = t.indexOf(']')
+      return close > 0 ? t.slice(1, close) : ''
+    }
+    return t.split(':').length - 1 === 1 ? t.slice(0, t.indexOf(':')) : t
+  }
+
+  const parts = header.split(',')
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const candidate = stripPort(parts[i] ?? '')
+    if (isPublic(candidate)) return candidate
+  }
+  return ''
+}
+
 function loginRateLimited(request: NextRequest): boolean {
-  // x-forwarded-for 取第一个（客户端地址）；取不到 IP 时放弃计数放行——
-  // 落到共享 'unknown' 桶会把正常用户一起误伤，比不限频更糟。
+  // XFF 从**右往左**取第一个合法 IP。
+  //
+  // 原实现取首段（`,split(',')[0]`），而 X-Forwarded-For 是追加式头部：攻击者在请求里
+  // 自带 `X-Forwarded-For: 1.2.3.4` 时，平台只会把真实对端追加到后面。实测 EdgeOne
+  // 原样透传（发 `1.2.3.4, 203.0.113.9` 后服务端收到的就是这两个值），于是取首段
+  // 等于「攻击者自己决定限流桶」——每次换一个伪造值就能无限次爆破后台密码。
+  //
+  // middleware 跑在 Edge runtime，不能 import lib/client-ip（那里用了 node: 前缀的
+  // 类型不便共享），所以这里内联一份等价的纯字符串逻辑。两处必须同步改。
   const forwarded = request.headers.get('x-forwarded-for')
-  const ip = forwarded?.split(',')[0]?.trim()
+  const ip = forwarded ? pickRightmostPublicIp(forwarded) : ''
   if (!ip) return false
 
   const now = Date.now()

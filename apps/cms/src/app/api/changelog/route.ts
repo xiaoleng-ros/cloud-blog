@@ -71,6 +71,16 @@ type Payload = {
 /** 进程内缓存：key = year */
 const cache = new Map<number, { at: number; data: Payload }>()
 
+/**
+ * 正在进行中的上游请求：key = year。
+ *
+ * 本接口匿名可调，一次未命中就要打 GitHub（未认证额度 60 次/小时，全站共享）。
+ * 没有这张表时，20 个并发请求会同时穿透缓存、同时打 GitHub —— 既能瞬间烧掉配额，
+ * 也能把上游打成 429 后自己返回错误。把同一个 year 的并发请求合并到同一个
+ * Promise 上，上游调用次数与「实际到达的波次」成正比，而不是与请求数成正比。
+ */
+const inFlight = new Map<number, Promise<Payload>>()
+
 async function fetchJson(url: string, headers: Record<string, string> = {}, timeoutMs = 12000) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
@@ -241,9 +251,27 @@ export async function GET(request: Request) {
     return NextResponse.json(hit.data, { headers: { 'x-changelog-cache': 'hit' } })
   }
 
-  const [contributions, ...groups] = await Promise.all([loadContributions(year), ...GROUPS.map(loadGroup)])
-  const data: Payload = { user: GITHUB_USER, repo: REPO, year, fetchedAt: new Date().toISOString(), contributions, groups }
-  cache.set(year, { at: Date.now(), data })
+  // 同一 year 的并发请求合并成一次上游调用。
+  // 为什么必须做：本接口匿名可调，且一次未命中就要打 GitHub（未认证 60 次/小时/来源 IP，
+  // 全站共享）。并发 20 个 /api/changelog?year=2026 会让 20 个请求同时穿透 5 分钟缓存、
+  // 同时打 GitHub —— 既能瞬间耗尽配额，也能把上游打成 429 后自己返回错误。
+  // 用 inFlight 挂一个 Promise，落在同一个 year 上的并发请求全部复用同一份结果。
+  const pending = inFlight.get(year)
+  if (pending) return NextResponse.json(await pending, { headers: { 'x-changelog-cache': 'coalesced' } })
 
-  return NextResponse.json(data, { headers: { 'x-changelog-cache': 'miss' } })
+  const task = (async () => {
+    const [contributions, ...groups] = await Promise.all([loadContributions(year), ...GROUPS.map(loadGroup)])
+    const data: Payload = { user: GITHUB_USER, repo: REPO, year, fetchedAt: new Date().toISOString(), contributions, groups }
+    cache.set(year, { at: Date.now(), data })
+    return data
+  })()
+
+  inFlight.set(year, task)
+  try {
+    const data = await task
+    return NextResponse.json(data, { headers: { 'x-changelog-cache': 'miss' } })
+  } finally {
+    // 无论成功失败都要摘掉，否则一次失败会让该 year 永久卡在「有个 pending」的状态
+    inFlight.delete(year)
+  }
 }

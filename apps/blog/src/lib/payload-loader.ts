@@ -18,9 +18,9 @@
  * astro.config 中的 payload-hot-reload 集成，让已打开的前台页面自动刷新。
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import matter from 'gray-matter';
 import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
 import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, fetchSyncDigest, type MdEntry } from './payload-api';
 import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs';
@@ -223,10 +223,36 @@ function collectLocalMarkdown(dir: string): Array<{ id: string; file: string }> 
   return results.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/**
+ * gray-matter 是 CJS 包（入口第一行 `const fs = require('fs')`）。
+ *
+ * 不能在模块顶层 `import matter from 'gray-matter'` —— Astro 7 执行 `astro sync` 时
+ * 会建一个临时 Vite server，把内容配置与 loader 放进 Rolldown 的 ModuleRunner（ESM 沙箱）
+ * 里跑，而且那个临时 server 硬编码了 `ssr: { external: [] }`（见
+ * node_modules/astro/dist/core/sync/index.js:195），**用户 config 里的 ssr.external
+ * 会被它覆盖掉**。结果是 CJS 入口被当 ESM 直接 eval，在任何内容处理之前就
+ * `require is not defined`，整个构建失败（`[GenerateContentTypesError]`）。
+ *
+ * 用 `createRequire` 在函数里按需 require：ModuleRunner 只看到 `node:module` 的内置
+ * 模块，gray-matter 由 Node 原生 loader 加载，绕开沙箱。顺带把加载推迟到真正解析
+ * 本地 markdown 时（只有 dev 兜底路径会走到），构建期完全不触发。
+ */
+type MatterFn = (input: string) => { data: Record<string, unknown>; content: string }
+const requireFromHere = createRequire(import.meta.url)
+let matterFn: MatterFn | null = null
+function grayMatter(input: string): { data: Record<string, unknown>; content: string } {
+  if (!matterFn) {
+    // CJS 导出可能带 `.default`（取决于打包方式），两种形态都接受
+    const loaded = requireFromHere('gray-matter') as MatterFn & { default?: MatterFn }
+    matterFn = loaded.default ?? loaded
+  }
+  return matterFn(input)
+}
+
 /** 把本地 markdown 文件解析成与 API 相同结构的条目 */
 function localEntries(files: Array<{ id: string; file: string }>): MdEntry[] {
   return files.map(({ id, file }) => {
-    const { data, content } = matter(readFileSync(file, 'utf-8'));
+    const { data, content } = grayMatter(readFileSync(file, 'utf-8'));
     return { id, data, body: content };
   });
 }

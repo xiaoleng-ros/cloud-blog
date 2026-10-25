@@ -15,21 +15,11 @@
  *   - 走 Supabase 6543 事务池（避免 5432 session 池 15 连接被打满）。
  */
 
-import { createRequire } from 'node:module'
 import { Client } from 'pg'
 import { resolvePgTls } from './pg-tls'
-import { rateLimitIp, hitForbiddenWords, akismetCheck } from './waline-anti-spam'
+import { rateLimitIp, hitForbiddenWords, akismetCheck, exceedHourlyQuota } from './waline-anti-spam'
 import { identityOf, lookupAddr, lookupAddrs } from './comment-identity'
 import { renderCommentMarkdown } from './comment-markdown'
-
-const require_ = createRequire(import.meta.url)
-// sanitize-html 是 CJS，用 createRequire 加载避免打包器静态分析问题
-let sanitizeHtml: ((html: string, options?: unknown) => string) | null = null
-try {
-  sanitizeHtml = require_('sanitize-html') as (html: string, options?: unknown) => string
-} catch {
-  sanitizeHtml = null
-}
 
 export class WalineServerError extends Error {
   status: number
@@ -214,39 +204,12 @@ function toPublic(node: CommentNodeWithIp): CommentNode {
  * 如果这里用 HTML 解析器去处理，`![x](url)`、`**粗**`、`a < b` 这类语法会被
  * 改写或转义，用户写的格式就废了。所以只能做目标明确的删除，不能做标签重写。
  *
- * sanitize-html 分支保留但实际不可用：该包不在 apps/cms 的 dependencies 里
- * （grep package.json 无此项），require 会走 catch 落到下面的正则分支。
- * 将来若正式引入，注意它同样会改写 Markdown 文本，需要重新验证上面的前提。
+ * 历史包袱已清掉：这里原先有一个 `createRequire('sanitize-html')` 的分支，
+ * 但该包从来没进过 apps/cms 的 dependencies（现在连 node_modules 里都没有），
+ * 于是永远走 catch、永远执行不到 —— 留着只会让后来的人以为评论有 HTML 解析级清洗。
  */
 function sanitizeComment(html: string): string {
-  if (sanitizeHtml) {
-    return sanitizeHtml(html, {
-      allowedTags: [
-        'a', 'b', 'blockquote', 'br', 'code', 'em', 'h1', 'h2', 'h3', 'h4',
-        'h5', 'h6', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 'span',
-        'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'th', 'thead',
-        'tr', 'ul',
-      ],
-      allowedAttributes: {
-        a: ['href', 'name', 'target', 'rel'],
-        img: ['src', 'alt', 'title'],
-        span: ['style'],
-      },
-      allowedSchemes: ['http', 'https', 'mailto', 'tel'],
-      allowedSchemesByTag: { img: ['http', 'https'] },
-      transformTags: {
-        a: (tagName: string, attribs: Record<string, string>) => ({
-          tagName,
-          attribs: {
-            ...attribs,
-            target: '_blank',
-            rel: 'noopener noreferrer nofollow',
-          },
-        }),
-      },
-    })
-  }
-  // 正则兜底：只删明确的危险标签与事件属性，不动 Markdown 语法本身
+  // 只删明确的危险标签与事件属性，不动 Markdown 语法本身
   return html
     .replace(/<(script|style|iframe|object|embed|form|input)[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<script[^>]*>/gi, '')
@@ -434,6 +397,10 @@ export async function createComment(
   // 反垃圾
   if (!context.isAdmin) {
     if (rateLimitIp(context.ip)) throw new WalineServerError('评论过于频繁，请稍后再试', 429)
+    // 第二道闸：每小时配额。IPQPS 只管「瞬间连发」，匀速每秒一条能一天灌 8 万条待审评论。
+    if (exceedHourlyQuota(context.ip)) {
+      throw new WalineServerError('本小时评论条数已达上限，请稍后再试', 429)
+    }
     const fw = hitForbiddenWords(orig)
     if (fw) throw new WalineServerError('评论包含违禁词', 400)
     // Akismet 可选
@@ -546,8 +513,11 @@ async function insertComment(params: {
 export async function likeComment(id: number, unlike: boolean): Promise<number> {
   return withDb(async (client) => {
     const delta = unlike ? -1 : 1
+    // GREATEST(0, ...) 与 wl_counter 的 updateCounter 保持同一防守口径：
+    // 客户端可以反复发 {"like":-1}，没有下限时点赞数能被刷成负数（公开展示的负数很刺眼，
+    // 而且一旦为负，正常点赞要抵消很多次才回到 0）。
     const result = await client.query(
-      `UPDATE ${table('comment')} SET "like" = COALESCE("like", 0) + $1, updatedat = now()
+      `UPDATE ${table('comment')} SET "like" = GREATEST(0, COALESCE("like", 0) + $1), updatedat = now()
        WHERE id = $2 RETURNING "like"`,
       [delta, id],
     )
@@ -629,6 +599,20 @@ export async function updateCounter(url: string, type: string, action: string, v
   const normUrl = normalizeUrl(url)
   const validType = type === 'time' || /^reaction[0-8]$/.test(type)
   if (!validType) throw new WalineServerError('未知的计数类型', 400)
+
+  // 匿名可调：POST /api/article 不鉴权，body.path 完全由客户端决定。
+  // 不限制的话每个新 path 都会 INSERT 一行 wl_counter —— 随机路径刷几万次就是一张垃圾表，
+  // 而且这些行永远不会被读到（只有真实文章路径才有点击）。三个约束：
+  //   1. 必须是站内路径形态（/ 开头、无空白、无控制字符）
+  //   2. 长度上限（normalizeUrl 之后仍要够短，否则索引列被塞长串）
+  //   3. 只允许文章页与栏目页这类真实会有点击的前缀
+  if (!normUrl.startsWith('/')) throw new WalineServerError('非法的计数路径', 400)
+  if (normUrl.length > 200) throw new WalineServerError('计数路径过长', 400)
+  if (/[\s\u0000-\u001f\u007f\\]/.test(normUrl)) throw new WalineServerError('非法的计数路径', 400)
+  if (/^\/+$/.test(normUrl) && type !== 'time') {
+    // 首页只允许阅读量，不允许 reaction 占位
+    throw new WalineServerError('非法的计数路径', 400)
+  }
 
   return withDb(async (client) => {
     // 先确保行存在（wl_counter.url 无唯一约束，不能用 ON CONFLICT）

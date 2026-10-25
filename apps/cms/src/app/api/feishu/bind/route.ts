@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verifyRequestUser } from '../../../../lib/feishu-session'
+import { isSameOriginRequest } from '../../../../lib/same-origin'
 import { getDb } from '../../../../lib/blog-sync'
 
 /**
@@ -59,17 +60,9 @@ async function authorize(request: Request) {
     } as const
   }
 
-  // 畸形 Origin 头（如非 URL 字符串）不能让 new URL 抛 500：解析失败按跨站处理（同 change-password）
-  const originHeader = request.headers.get('origin')
-  let sameOrigin = true
-  if (originHeader) {
-    try {
-      sameOrigin = new URL(originHeader).origin === new URL(request.url).origin
-    } catch {
-      sameOrigin = false
-    }
-  }
-  if (!sameOrigin) {
+  // 同源校验（写操作防 CSRF）：判定统一在 lib/same-origin，
+  // 原先这里「无 Origin 即放行」的写法是 CSRF 缺口。
+  if (!isSameOriginRequest(request)) {
     return {
       payload,
       user: null,

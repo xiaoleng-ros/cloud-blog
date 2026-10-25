@@ -33,14 +33,25 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
-  // 生产环境守卫：未配置 HEALTH_TOKEN 或 token 不匹配 → 404（用 404 而非 401/403，
-  // 不暴露「这个端点存在」这一事实本身）
-  if (process.env.NODE_ENV === 'production') {
-    const expected = process.env.HEALTH_TOKEN
+  // 守卫：只要配置了 HEALTH_TOKEN 就必须带对，**不看 NODE_ENV**。
+  //
+  // 原实现只在 NODE_ENV === 'production' 时校验。问题是「生产」这个判据不由我们控制：
+  // EdgeOne 预发环境、next dev --production 的构建、容器里漏注入 NODE_ENV 的部署，
+  // 任何一处判据失效，这个端点就会把 cwd / 目录结构 / CA 路径 / 连接串 host+user
+  // 连同（历史版本里的）数据库密码一并吐给匿名访问者。
+  //
+  // 改成「配了 token 就永远校验」之后：线上行为不变（本来就配了），
+  // 而本地/预发即使忘了设 NODE_ENV 也照样受保护。未配置 token 时保留原先的
+  // 生产 404 语义，本地开发仍可直接访问。
+  const expected = process.env.HEALTH_TOKEN
+  if (expected) {
     const provided = request.headers.get('x-health-token')
-    if (!expected || !provided || !safeEqual(provided, expected)) {
+    if (!provided || !safeEqual(provided, expected)) {
       return new NextResponse(null, { status: 404 })
     }
+  } else if (process.env.NODE_ENV === 'production') {
+    // 生产没配 token = 谁都不给看（用 404 而非 401/403，不暴露端点存在）
+    return new NextResponse(null, { status: 404 })
   }
 
   const cwd = process.cwd()
@@ -153,7 +164,19 @@ export async function GET(request: NextRequest) {
       const host = parsed.hostname
       const user = decodeURIComponent(parsed.username || '')
       // 评论服务走 6543 事务池（避免 5432 session 池 15 连接打满）
-      const pooler6543 = url.replace(':5432/', ':6543/')
+      //
+      // ⚠️ 历史事故：这里曾直接回显 `url.replace(':5432/', ':6543/')`，
+      // 也就是把**含明文密码的完整连接串**写进 JSON。生产有 HEALTH_TOKEN 挡着，
+      // 但本地/预发 NODE_ENV 不是 production 时任何人访问 /api/health 就能拿走数据库密码。
+      // 现在只回显「把 5432 换成 6543 之后会变成什么」的脱敏形态：
+      // 保留 host/port/db，密码位固定打码，足够核对「端口替换逻辑对不对」，
+      // 又不能再被当成凭据使用。
+      const pooler6543 = (() => {
+        const clone = new URL(url)
+        clone.port = '6543'
+        clone.password = '***'
+        return clone.toString().replace(/\/\/[^@]*@/, '//***@')
+      })()
       return {
         configured: true,
         host,

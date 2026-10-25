@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { APIError } from 'payload'
 import { verifyRequestUser } from '../../../lib/feishu-session'
+import { isSameOriginRequest } from '../../../lib/same-origin'
 import { validatePasswordStrength } from '../../../lib/password'
 import { getDb, type PayloadDb } from '../../../lib/blog-sync'
 
@@ -60,18 +61,10 @@ function verifyLocalPassword(password: string, salt: string, hash: string): Prom
 }
 
 export async function POST(request: Request) {
-  // 带 cookie 的写操作：先做同源校验，防止 CSRF
-  const originHeader = request.headers.get('origin')
-  if (originHeader) {
-    let origin: URL
-    try {
-      origin = new URL(originHeader)
-    } catch {
-      return errorJson('跨站请求被拒绝', 403)
-    }
-    if (origin.origin !== new URL(request.url).origin) {
-      return errorJson('跨站请求被拒绝', 403)
-    }
+  // 带 cookie 的写操作：先做同源校验，防止 CSRF。
+  // 具体判定（含「无 Origin 时退到 Sec-Fetch-Site」）统一在 lib/same-origin。
+  if (!isSameOriginRequest(request)) {
+    return errorJson('跨站请求被拒绝', 403)
   }
 
   const payload = await getDb()

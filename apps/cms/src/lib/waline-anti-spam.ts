@@ -35,11 +35,68 @@ export function rateLimitIp(ip: string): boolean {
   return false
 }
 
+// ==================== 小时级配额（第二道闸） ====================
+
+/**
+ * 为什么光有 IPQPS 不够：
+ * 1 次/秒的窗口只拦「瞬间连发」，一个 IP 匀速每秒一条，一天能灌 86400 条。
+ * 默认 COMMENT_AUDIT 未关，这些都会进 waiting 待审队列 —— 数据库照样被灌满，
+ * 后台审核页每条都要跑一次 Markdown 渲染，等于把审核人拖死。
+ *
+ * 所以再加一道滑动上限：同一 IP 每小时最多 COMMENT_IP_HOURLY 条（默认 20）。
+ * 正常访客一小时发 20 条已经很多了；脚本刷量则会立刻撞墙。
+ *
+ * 注意：内存计数在 EdgeOne 多实例/冷启动下不精确（每个实例独立计数）。
+ * 这是「提高成本」而不是「绝对封死」——要绝对封死得落库计数，
+ * 那会在评论主链路上多一次写，得不偿失。
+ */
+const IP_HOURLY = Number(process.env.COMMENT_IP_HOURLY ?? 20) || 20
+const HOUR_MS = 60 * 60 * 1000
+
+interface QuotaBucket {
+  count: number
+  resetAt: number
+}
+const ipQuota = new Map<string, QuotaBucket>()
+
+/**
+ * 取不到可信 IP 时用的全局兜底桶。
+ * 关键取舍：不能把所有「无 IP」请求塞进同一个 keyed 桶后**放行**（那等于没有限制），
+ * 也不能直接拒绝（某些健康检查/内网调用会挂）。折中：给一个小得多的共享额度。
+ */
+const FALLBACK_KEY = '__no_ip__'
+const NO_IP_HOURLY = Number(process.env.COMMENT_NOIP_HOURLY ?? 30) || 30
+
+/** 返回 true 表示「该 IP 本小时额度已用尽，应拒绝」 */
+export function exceedHourlyQuota(ip: string): boolean {
+  if (IP_HOURLY <= 0) return false
+  const key = ip || FALLBACK_KEY
+  const limit = ip ? IP_HOURLY : NO_IP_HOURLY
+  const now = Date.now()
+
+  if (ipQuota.size > 5000) {
+    for (const [k, rec] of ipQuota) {
+      if (now > rec.resetAt) ipQuota.delete(k)
+    }
+  }
+
+  const rec = ipQuota.get(key)
+  if (!rec || now > rec.resetAt) {
+    ipQuota.set(key, { count: 1, resetAt: now + HOUR_MS })
+    return false
+  }
+  rec.count++
+  return rec.count > limit
+}
+
 // 定期清理过期的 ip bucket，防止内存泄漏（每分钟扫一次）
 setInterval(() => {
   const now = Date.now()
   for (const [ip, bucket] of ipBuckets) {
     if (bucket.resetAt < now) ipBuckets.delete(ip)
+  }
+  for (const [ip, rec] of ipQuota) {
+    if (rec.resetAt < now) ipQuota.delete(ip)
   }
 }, 60_000).unref()
 

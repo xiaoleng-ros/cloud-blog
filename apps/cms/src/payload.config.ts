@@ -165,6 +165,18 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const REQUIRE_SECRET = process.env.PAYLOAD_REQUIRE_SECRET === '1'
 const providedSecret = process.env.PAYLOAD_SECRET
 
+/**
+ * 站点公开基址（用于 CORS/CSRF 白名单与 payload.serverURL）。
+ *
+ * 只认绝对 http(s) 地址：写错成 `/api` 这类相对值时必须当成「未配置」而不是原样塞进
+ * 白名单 —— 白名单里放相对路径永远不会命中，会让 CSRF 校验静默退化成「不采信来源」。
+ */
+const serverUrl = (() => {
+  const raw = (process.env.NEXT_PUBLIC_SERVER_URL ?? '').trim().replace(/\/+$/, '')
+  if (!raw) return ''
+  return /^https?:\/\/[^/\s]+/i.test(raw) ? raw : ''
+})()
+
 /** 历史上曾硬编码进仓库的兜底密钥，等同公开值，任何环境都不得再使用 */
 const LEGACY_LEAKED_SECRET = 'clay-blog-dev-secret-key-2026-random-string-change-in-production'
 
@@ -554,10 +566,37 @@ export default buildConfig({
   editor: lexicalEditor(),
   // 加密密钥（必须与 .env 中的 PAYLOAD_SECRET 一致，上方已校验非空）
   secret: payloadSecret,
+  // ==================== CORS / CSRF 白名单 ====================
+  //
+  // 为什么必须显式配：Payload 的 config.serverURL 留空时，getRequestOrigin() 会用
+  //   Host 头 + 请求协议拼出「请求来源」，且**只有当它命中 cors/csrf 白名单时**才采信，
+  //   否则返回空串并打 warning。空串会让 Cookie 域、CSRF 校验、绝对链接全部按「没有来源」
+  //   处理 —— 既多一层运行期不确定性，也会在日志里刷警告。
+  //
+  // 这里从 NEXT_PUBLIC_SERVER_URL 推导（生产 .env.production 已设为 https://blog.iceuu.icu）。
+  // 本地没配时退回空数组：Payload 的语义是「空名单 = 不采信 Host 推导的来源」，
+  // 本地开发本来就走 localhost:9527 直连、由浏览器同源策略兜底，行为不变。
+  //
+  // 注意 csrf 与 cors 同源：前后台一体化部署（/ 前台、/admin 与 /api 后台），
+  // 后台的写操作全部由同一个域名发起，加白名单不会误伤任何既有链路。
+  ...(serverUrl
+    ? { serverURL: serverUrl, cors: [serverUrl], csrf: [serverUrl] }
+    : {}),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
-  // 数据库：由上方环境变量动态选择（默认 SQLite 单文件库）
+  // ==================== 关闭 GraphQL ====================
+  //
+  // Payload 默认在 /api/graphql 暴露完整 GraphQL 端点，含 loginUser / forgotPassword /
+  // 以及全部集合的读写 mutation，且**默认对匿名开放**（是否放行由各集合的 access 决定，
+  // 但端点本身没有第二道闸）。本站只用 REST（前台 Astro 走 REST 构建、后台走 REST 与
+  // 自定义路由），从未调用过 GraphQL —— 全仓 grep `api/graphql` 零命中。
+  //
+  // 留着它只有代价：多一个需要单独审的匿名攻击面、多一份 playground、多一个登录入口
+  // 绕过 /api/users/login 的中间件限流。直接关掉。
+  graphQL: {
+    disable: true,
+  },
   db,
   sharp,
   // 对象存储插件：Supabase Storage 接入（未配置 S3_* 时为空数组，走本地磁盘）

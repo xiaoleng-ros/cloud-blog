@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { resolveStorageConfig } from '../../../lib/supabase-storage'
 import { scheduleLazyGc } from '../../../lib/comment-image-gc'
+import { clientIp } from '../../../lib/client-ip'
 
 /**
  * 访客评论配图上传。
@@ -160,12 +161,23 @@ export async function POST(request: Request) {
     return errorJson('图片上传暂不可用', 503)
   }
 
-  // 与 waline-bridge 同口径：只信平台注入的 XFF 首段
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
+  // 与 waline 侧同口径：走共享的 clientIp()（从 XFF 右侧取合法 IP）。
+  // 原先在这里取首段，同样能被 `curl -H 'X-Forwarded-For: 1.2.3.4'` 绕过，
+  // 一小时 30 张的上传配额形同虚设 —— 攻击者可以无限往对象存储塞图片。
+  const ip = clientIp(request) || 'unknown'
   if (rateLimited(ip)) return errorJson('上传太频繁，请稍后再试', 429)
+
+  // 先看 Content-Length 再读 body。
+  //
+  // 原来的顺序是「直接 await request.formData()，拿到 File 后再判 size」——
+  // 那意味着无论多大都会先把整个请求体读进内存。匿名上游挂一个 2GB 的
+  // multipart 请求就能把函数内存打满（EdgeOne 函数内存有硬上限，超了直接崩），
+  // 而 multipart 的分段头开销很小，给一个 4MB 的上限足够容纳 3MB 图片 + 边界。
+  // 拿不到 Content-Length（chunked）时不拦，仍由下面的 file.size 兜底。
+  const declaredLength = Number(request.headers.get('content-length') ?? '')
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BYTES + 1024 * 1024) {
+    return errorJson('请求体过大（单张上限 3MB）', 413)
+  }
 
   let form: FormData
   try {
