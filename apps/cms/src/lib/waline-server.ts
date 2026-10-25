@@ -595,21 +595,82 @@ export async function getCounter(url: string): Promise<RawCounter> {
  * type: 'time'（阅读量）/ 'reaction0'~'reaction8'
  * action: 'inc' / 'dec' / 'set'
  */
+/**
+ * 允许被计数的路径形状 —— 与 `apps/cms/src/app/api/blog-sync/route.ts` 的
+ * `STATIC_SYNC_PATHS` / `DYNAMIC_SYNC_PATH_PATTERNS` 同口径（都是站点真实存在的路由）。
+ *
+ * 为什么必须按形状白名单、而不是只查「以 / 开头」：
+ * 这里做的是**INSERT**。只校验形态的话，攻击者可以用 `/x1`、`/x2`… 无限造行，
+ * 每行都是一次 insert，几分钟就能把 wl_counter 灌成几十万行的垃圾表 ——
+ * 而这些行永远不会被读到（真实点击只发生在上面的路径上）。
+ * 形状白名单把攻击面从「任意字符串」压到「若干固定路由 + 文章 ID」。
+ */
+const COUNTABLE_STATIC_PATHS = new Set([
+  '/',
+  '/notes',
+  '/archive',
+  '/about',
+  '/tags',
+  '/stats',
+  '/search',
+  '/privacy',
+])
+const COUNTABLE_DYNAMIC_PATTERNS = [
+  /^\/posts\/[^/]+\/\d+$/, // 文章详情：/posts/{分类标识}/{数字 ID}
+  /^\/categories\/[^/]+$/,
+  /^\/tags\/[^/]+$/,
+  /^\/archive\/\d+$/, // 归档分页：/archive/2 …
+]
+
+/** 去尾斜杠（根路径除外），与 blog-sync 的归一化保持一致，避免同一页拆成两条计数 */
+function normalizeCounterPath(path: string): string {
+  if (path.length <= 1) return '/'
+  return path.replace(/\/+$/, '') || '/'
+}
+
+function isCountablePath(path: string): boolean {
+  const narrowed = normalizeCounterPath(path)
+  if (COUNTABLE_STATIC_PATHS.has(narrowed)) return true
+  return COUNTABLE_DYNAMIC_PATTERNS.some((re) => re.test(narrowed))
+}
+
+/**
+ * 新建计数行的全局限速。
+ *
+ * 形状白名单之后仍有一个残余面：`/posts/{任意分类}/{任意数字}` 依然能造出新行。
+ * 这里再兜一层「每小时最多新建 N 行」，把最坏情况钉死成常数。
+ * 只拦**新建**，已有行的自增（真实阅读量）不受影响。
+ */
+const MAX_NEW_COUNTER_ROWS_PER_HOUR = 500
+const COUNTER_WINDOW_MS = 60 * 60 * 1000
+let counterWindowStart = 0
+let counterRowsCreated = 0
+
+function reserveNewCounterRow(): boolean {
+  const now = Date.now()
+  if (now - counterWindowStart > COUNTER_WINDOW_MS) {
+    counterWindowStart = now
+    counterRowsCreated = 0
+  }
+  if (counterRowsCreated >= MAX_NEW_COUNTER_ROWS_PER_HOUR) return false
+  counterRowsCreated += 1
+  return true
+}
+
 export async function updateCounter(url: string, type: string, action: string, value?: number): Promise<RawCounter> {
   const normUrl = normalizeUrl(url)
   const validType = type === 'time' || /^reaction[0-8]$/.test(type)
   if (!validType) throw new WalineServerError('未知的计数类型', 400)
 
   // 匿名可调：POST /api/article 不鉴权，body.path 完全由客户端决定。
-  // 不限制的话每个新 path 都会 INSERT 一行 wl_counter —— 随机路径刷几万次就是一张垃圾表，
-  // 而且这些行永远不会被读到（只有真实文章路径才有点击）。三个约束：
-  //   1. 必须是站内路径形态（/ 开头、无空白、无控制字符）
-  //   2. 长度上限（normalizeUrl 之后仍要够短，否则索引列被塞长串）
-  //   3. 只允许文章页与栏目页这类真实会有点击的前缀
-  if (!normUrl.startsWith('/')) throw new WalineServerError('非法的计数路径', 400)
-  if (normUrl.length > 200) throw new WalineServerError('计数路径过长', 400)
+  //
+  // 注意 normalizeUrl 内部会 `new URL(url, 'http://local')`，任何输入都会被补成
+  // `/xxx` 形态 —— 所以「以 / 开头」这类判断在这里恒真、等于没写。
+  // 真正的约束只能是**形状白名单**（见 COUNTABLE_* 注释）。
+  if (!normUrl || normUrl.length > 200) throw new WalineServerError('计数路径过长', 400)
   if (/[\s\u0000-\u001f\u007f\\]/.test(normUrl)) throw new WalineServerError('非法的计数路径', 400)
-  if (/^\/+$/.test(normUrl) && type !== 'time') {
+  if (!isCountablePath(normUrl)) throw new WalineServerError('非法的计数路径', 400)
+  if (normUrl === '/' && type !== 'time') {
     // 首页只允许阅读量，不允许 reaction 占位
     throw new WalineServerError('非法的计数路径', 400)
   }
@@ -621,6 +682,10 @@ export async function updateCounter(url: string, type: string, action: string, v
       [normUrl],
     )
     if (!existing.rowCount) {
+      // 只对新行计入配额（已有行的自增是真实阅读，不该被限）
+      if (!reserveNewCounterRow()) {
+        throw new WalineServerError('计数创建过于频繁，请稍后再试', 429)
+      }
       await client.query(
         `INSERT INTO ${table('counter')} (url, time, reaction0, reaction1, reaction2, reaction3, reaction4, reaction5, reaction6, reaction7, reaction8)
          VALUES ($1, 0, 0,0,0,0,0,0,0,0,0)`,
