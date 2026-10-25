@@ -1,6 +1,7 @@
 import { Client } from 'pg'
 import { resolvePgTls } from './pg-tls'
 import { identityOf, lookupAddrs } from './comment-identity'
+import { commentToPlainText } from './comment-markdown'
 import {
   WalineServerError,
   ensureAdminAccount,
@@ -77,19 +78,13 @@ interface RawAdminComment {
   ip?: string | null
 }
 
-const stripHtml = (value: string) =>
-  value
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim()
-
 /**
- * 从评论正文提取配图地址（HTML <img src> + markdown ![](url)）。
+ * 从评论原文提取配图地址。
+ *
+ * 库里存的是**原始 Markdown**（渲染发生在读接口，见 comment-markdown.ts），
+ * 所以这里要同时认两种写法：
+ *   1. `<img src="...">` —— 客户端提交前会把 :emoji: 和粘贴的图片转成标签；
+ *   2. `![alt](url)` —— markdown 图片语法，用户手写或图片上传组件产出。
  * 只保留 http(s) 与站内路径，丢弃 javascript:/data:。
  */
 function extractImages(raw: RawAdminComment): string[] {
@@ -99,8 +94,12 @@ function extractImages(raw: RawAdminComment): string[] {
     const url = value.trim().replace(/&amp;/g, '&')
     if (/^https?:\/\//i.test(url) || url.startsWith('/')) found.add(url)
   }
+  const source = raw.comment ?? ''
   const imgRe = /<img[^>]+src\s*=\s*["']([^"']+)["']/gi
-  for (let m = imgRe.exec(raw.comment ?? ''); m; m = imgRe.exec(raw.comment ?? '')) push(m[1])
+  for (let m = imgRe.exec(source); m; m = imgRe.exec(source)) push(m[1])
+  // markdown 图片：![alt](url) 或 ![alt](url "title")
+  const mdRe = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g
+  for (let m = mdRe.exec(source); m; m = mdRe.exec(source)) push(m[1])
   return [...found].slice(0, 12)
 }
 
@@ -112,7 +111,9 @@ const normalize = (raw: RawAdminComment): WalineComment => {
     mail: raw.mail ?? '',
     link: raw.link ?? '',
     url: raw.url ?? '',
-    text: stripHtml(raw.comment ?? ''),
+    // 后台展示用纯文本：先按评论的同一套 Markdown 管线渲染，再去标签。
+    // 直接 stripHtml 原始 Markdown 会把 `![x](url)` 原样留在摘要里。
+    text: commentToPlainText(raw.comment ?? ''),
     images: extractImages(raw),
     status: raw.status ?? '',
     like: Number(raw.like ?? 0) || 0,
@@ -343,7 +344,7 @@ export async function exportCommentsCsv(options: {
       row.mail,
       row.link,
       row.url,
-      stripHtml(row.comment ?? ''),
+      commentToPlainText(row.comment ?? ''),
       row.status,
       row.like,
       row.insertedat ?? row.createdat,

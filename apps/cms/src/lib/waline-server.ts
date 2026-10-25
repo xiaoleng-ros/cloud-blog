@@ -20,6 +20,7 @@ import { Client } from 'pg'
 import { resolvePgTls } from './pg-tls'
 import { rateLimitIp, hitForbiddenWords, akismetCheck } from './waline-anti-spam'
 import { identityOf, lookupAddr, lookupAddrs } from './comment-identity'
+import { renderCommentMarkdown } from './comment-markdown'
 
 const require_ = createRequire(import.meta.url)
 // sanitize-html 是 CJS，用 createRequire 加载避免打包器静态分析问题
@@ -129,7 +130,14 @@ export function normalizeComment(raw: RawComment, addr = '') {
     nick: raw.nick ?? '匿名',
     link: raw.link ?? '',
     url: raw.url ?? '',
-    comment: raw.comment ?? '',
+    // 客户端把 comment 直接塞进 innerHTML（waline.js 的 `Go=[innerHTML]`），
+    // 所以这里必须是渲染后的 HTML，不能是原始 Markdown —— 否则 `![](url)`
+    // 会原样显示成一串源码。官方 @waline/core 也在返回前做同一步
+    // （`if (services.markdown) result.comment = await services.markdown.render(...)`）。
+    comment: renderCommentMarkdown(raw.comment ?? ''),
+    // 编辑时要回填原文：客户端 `edit.value.orig = comment.orig`。
+    // 库里存的就是原始 Markdown，直接给出去即可。
+    orig: raw.comment ?? '',
     status: raw.status ?? '',
     like: Number(raw.like ?? 0),
     sticky: raw.sticky ? Number(raw.sticky) > 0 : false,
@@ -194,10 +202,21 @@ function toPublic(node: CommentNodeWithIp): CommentNode {
 // ==================== XSS 清洗 ====================
 
 /**
- * 评论内容 XSS 清洗。
- * 优先用 sanitize-html（若已安装），否则用兜底的白名单正则（只保留少量标签）。
- * 兜底方案不是真正的 HTML 解析器，对畸形标签可能漏过，但配合前端 markdown-it
- * 的默认安全策略 + 后台展示用 orig 原文，风险可控。
+ * 入库前的初步清洗（粗筛）。
+ *
+ * 注意：真正的内容安全边界在**读取时**——normalizeComment 会走
+ * renderCommentMarkdown() 的完整管线（remark → rehype-raw → rehype-sanitize 白名单），
+ * 白名单外的标签与属性在那里被彻底剥掉。这个函数只是入库前的粗筛，
+ * 顺手清掉最明显的向量，避免库里存着带 script 的原文。
+ *
+ * 为什么这里必须保持「对 Markdown 无损」：
+ * 库里存的是**原始 Markdown**（客户端提交的就是 Markdown，服务端读时才渲染）。
+ * 如果这里用 HTML 解析器去处理，`![x](url)`、`**粗**`、`a < b` 这类语法会被
+ * 改写或转义，用户写的格式就废了。所以只能做目标明确的删除，不能做标签重写。
+ *
+ * sanitize-html 分支保留但实际不可用：该包不在 apps/cms 的 dependencies 里
+ * （grep package.json 无此项），require 会走 catch 落到下面的正则分支。
+ * 将来若正式引入，注意它同样会改写 Markdown 文本，需要重新验证上面的前提。
  */
 function sanitizeComment(html: string): string {
   if (sanitizeHtml) {
@@ -227,7 +246,7 @@ function sanitizeComment(html: string): string {
       },
     })
   }
-  // 兜底：去掉所有 script/style/iframe/object 标签及事件属性
+  // 正则兜底：只删明确的危险标签与事件属性，不动 Markdown 语法本身
   return html
     .replace(/<(script|style|iframe|object|embed|form|input)[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<script[^>]*>/gi, '')
@@ -430,7 +449,6 @@ export async function createComment(
       const status = 'spam'
       return insertComment({
         comment: sanitized,
-        orig,
         nick: finalNick,
         mail: finalMail,
         link: link?.trim() || '',
@@ -450,7 +468,6 @@ export async function createComment(
 
   return insertComment({
     comment: sanitized,
-    orig,
     nick: finalNick,
     mail: finalMail,
     link: link?.trim() || '',
@@ -466,7 +483,6 @@ export async function createComment(
 
 async function insertComment(params: {
   comment: string
-  orig: string
   nick: string
   mail: string
   link: string
@@ -515,10 +531,9 @@ async function insertComment(params: {
 
   // 刚发出的评论也要带属地，否则作者自己看到的卡片比别人少一个徽章
   const addr = await lookupAddr(params.ip)
-  const out = normalizeComment(raw, addr)
-  // 把 orig 也带回去，前端编辑时要用
-  ;(out as ReturnType<typeof normalizeComment> & { orig?: string }).orig = params.orig
-  return out
+  // normalizeComment 会把 comment 渲染成 HTML、并把原始 Markdown 放进 orig，
+  // 所以这里不再手工补 orig。
+  return normalizeComment(raw, addr)
 }
 
 // ==================== 评论：点赞 ====================
