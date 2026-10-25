@@ -247,18 +247,33 @@ export async function listComments(options: {
   page: number
   pageSize: number
   sortBy: 'newest' | 'oldest' | 'hottest'
-}): Promise<{ count: number; data: ReturnType<typeof normalizeComment>[]; totalPages: number }> {
+}): Promise<{
+  count: number
+  data: ReturnType<typeof normalizeComment>[]
+  totalPages: number
+  page: number
+}> {
   const { path, page, pageSize, sortBy } = options
   const url = normalizeUrl(path)
 
   const tree = await withDb(async (client) => {
-    // 只返回 approved 状态的评论给前端
+    // 分页只作用在**根评论**上，回复整串跟着自己的根一起出现 —— 与官方 @waline/core 的
+    // comment.list 一致（它先 models.Comment.select(rootWhere) 取根，再按 rid IN (rootIds) 取回复）。
+    // 若把根和回复混在同一个 LIMIT 里分页，一页 10 条里出现 9 条回复时，
+    // 首屏只会渲染出 1 个根评论，其余回复的父节点根本不在本页，直接丢失。
+    const ROOT_WHERE = `url = $1 AND status = 'approved' AND rid IS NULL AND pid IS NULL`
     const countResult = await client.query(
       `SELECT COUNT(*) FROM ${table('comment')} WHERE url = $1 AND status = 'approved'`,
       [url],
     )
     const count = Number(countResult.rows[0].count)
-    const totalPages = Math.max(1, Math.ceil(count / pageSize))
+    const rootCountResult = await client.query(
+      `SELECT COUNT(*) FROM ${table('comment')} WHERE ${ROOT_WHERE}`,
+      [url],
+    )
+    const rootCount = Number(rootCountResult.rows[0].count)
+    // 官方：totalPages = ceil(rootCount / pageSize)。count 则是含回复的全量数。
+    const totalPages = Math.max(1, Math.ceil(rootCount / pageSize))
     const safePage = Math.min(Math.max(1, page), totalPages)
     const offset = (safePage - 1) * pageSize
 
@@ -268,16 +283,25 @@ export async function listComments(options: {
 
     const result = await client.query(
       `SELECT * FROM ${table('comment')}
-       WHERE url = $1 AND status = 'approved'
+       WHERE ${ROOT_WHERE}
        ORDER BY (sticky IS NOT NULL AND sticky > 0) DESC, ${orderBy}
        LIMIT $2 OFFSET $3`,
       [url, pageSize, offset],
     )
 
-    const rows = result.rows as RawComment[]
-    // 组装父子树：rid（根评论 id）相同的归到同一线程
-    const roots = rows.filter((r) => r.rid == null && r.pid == null)
-    const children = rows.filter((r) => r.rid != null || r.pid != null)
+    const roots = result.rows as RawComment[]
+    // 取这一页所有根的回复（不限页，回复属于根线程的一部分）
+    const rootIds = roots.map((r) => r.id)
+    const childrenResult = rootIds.length
+      ? await client.query(
+          `SELECT * FROM ${table('comment')}
+           WHERE url = $1 AND status = 'approved'
+             AND (rid = ANY($2::int[]) OR pid = ANY($2::int[]))
+           ORDER BY createdat ASC`,
+          [url, rootIds],
+        )
+      : { rows: [] as RawComment[] }
+    const children = childrenResult.rows as RawComment[]
 
     const nodes = roots.map((root) => {
       const node: CommentNodeWithIp = normalizeWithIp(root)
@@ -293,7 +317,7 @@ export async function listComments(options: {
       return node
     })
 
-    return { nodes, count, totalPages }
+    return { nodes, count, totalPages, page: safePage }
   })
 
   // 属地查询放在数据库连接归还之后，避免握着连接等外网接口
@@ -303,6 +327,10 @@ export async function listComments(options: {
     count: tree.count,
     data: tree.nodes.map(toPublic),
     totalPages: tree.totalPages,
+    // 回传给客户端的 page 必须是**实际生效**的页码：客户端用它判断
+    // 「还有没有下一页」（page < totalPages）。若原样回传请求值，
+    // 请求 page=99 时会以为自己在第 99 页，翻页按钮永远不会出现。
+    page: tree.page,
   }
 }
 

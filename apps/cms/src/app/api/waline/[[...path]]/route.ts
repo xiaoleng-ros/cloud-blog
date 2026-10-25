@@ -103,7 +103,23 @@ async function handle(request: Request): Promise<Response> {
       const pageSize = Math.min(100, Math.max(1, Number(params.get('pageSize') ?? 10) || 10))
       const sortBy = (params.get('sortBy') ?? 'newest') as 'newest' | 'oldest' | 'hottest'
       const result = await listComments({ path, page, pageSize, sortBy })
-      return ok(result.data, { count: result.count, totalPages: result.totalPages })
+      // ⚠️ 形状必须与官方 @waline/core 的 comment.list 返回值一致：**分页对象整体作为信封的 data**，
+      // 评论数组再嵌在这个对象的 data 里。官方源码：
+      //   return { page, totalPages: Math.ceil(rootCount / pageSize), pageSize, count: total, data }
+      //   → rest.js runCore(..., { json: true }) → jsonOrSuccess(data) → { errno: 0, data: <上面那个对象> }
+      //
+      // 而 @waline/client 的 getComment() 是 `.then(e => n(e, 'Get comment data').data)`，
+      // 只取信封的 data，组件再读 resp.count / resp.data / resp.totalPages。
+      // 若把 count/totalPages 平铺到信封外层（曾经的做法），resp 会是数组，
+      // 三个字段全 undefined → data.value.push(...undefined) 抛
+      // "t.data is not iterable"，整个评论区渲染中断。
+      return ok({
+        page: result.page,
+        totalPages: result.totalPages,
+        pageSize,
+        count: result.count,
+        data: result.data,
+      })
     }
 
     if (stripped === '/api/comment' && method === 'POST') {
