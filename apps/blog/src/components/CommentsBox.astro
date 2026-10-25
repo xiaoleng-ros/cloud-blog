@@ -15,12 +15,24 @@ import '@waline/client/meta';
   import { init, type WalineEmojiPresets, type WalineImageUploader } from '@waline/client';
 
   // BaseLayout 注入：env PUBLIC_WALINE_URL 优先，默认同域 /api/waline；空串 = 关闭评论
-  const getServer = () =>
-    document.querySelector('meta[name="waline-server"]')?.getAttribute('content') || '';
+  //
+  // 这里再兜一次绝对地址：Waline 客户端判断 serverURL 是否「已是 URL」用的是
+  // `gf = e => /^(?:https?:)?\/\//.test(e) ? e : `https://${e}``，
+  // 相对路径 `/api/waline` 不以 `//` 开头 → 被拼成 `https:///api/waline`
+  // → 浏览器把 host 解析成 `api` → ERR_NAME_NOT_RESOLVED，评论区整块加载失败。
+  // 模板侧已经补全，这里防御后续有人改成相对路径或换模板。
+  const getServer = () => {
+    const raw = document.querySelector('meta[name="waline-server"]')?.getAttribute('content') || '';
+    if (!raw) return '';
+    try {
+      return new URL(raw, location.href).href.replace(/\/+$/, '');
+    } catch {
+      return '';
+    }
+  };
 
   /**
    * 配图上传端点：由 serverURL 推导，保证和评论接口同源。
-   *   /api/waline              → /api/comment-image
    *   https://x.com/api/waline → https://x.com/api/comment-image
    * 不写死相对路径，是因为 PUBLIC_WALINE_URL 可能指向另一个域名。
    */

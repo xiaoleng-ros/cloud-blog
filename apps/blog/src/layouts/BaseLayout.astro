@@ -77,8 +77,22 @@ const normalizeCanonicalPath = (value: string): string => {
 const canonicalUrl = absoluteUrl(normalizeCanonicalPath(canonicalPath ?? Astro.url.pathname));
 const imageUrl = image ? absoluteUrl(image) : undefined;
 
-// 评论服务地址：构建期 env 注入（PUBLIC_WALINE_URL），默认同域 /api/waline；经 meta 标签传给客户端脚本
-const walineServer = import.meta.env.PUBLIC_WALINE_URL || '/api/waline';
+// 评论服务地址：构建期 env 注入（PUBLIC_WALINE_URL），默认同域 /api/waline；经 meta 标签传给客户端脚本。
+//
+// 必须传绝对地址：Waline 客户端会对 serverURL 做 `gf = e => /^(?:https?:)?\/\//.test(e) ? e : `https://${e}``,
+// 相对路径 `/api/waline` 不是以 `//` 开头，会被当成裸域名拼成 `https:///api/waline`
+// → 浏览器解析出的 host 是 `api` → ERR_NAME_NOT_RESOLVED。
+// 本地开发一直没暴露，是因为 .env 里写的是绝对地址 http://localhost:9527/api/waline。
+// 这里统一按站点 origin 补全，兼容相对路径与绝对地址两种写法。
+const walineServer = (() => {
+  const raw = import.meta.env.PUBLIC_WALINE_URL || '/api/waline';
+  if (!raw) return '';
+  try {
+    return new URL(raw, Astro.site ?? Astro.url).href.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+})();
 let walineOrigin = '';
 try {
   if (walineServer) walineOrigin = new URL(walineServer).origin;
