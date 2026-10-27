@@ -3276,8 +3276,12 @@ html[data-theme="dark"] .post-nav__mask {
   color: var(--brand);
 }
 
-/* 隐私政策入口：跟在版权行右侧，前面加一个小圆点当分隔（比再塞一个字符到
-   HTML 里干净，后台同步出来的 markup 也不必带分隔符）。 */
+/* 版权行右侧的固定入口（隐私政策 / 发展历程）：前面加一个小圆点当分隔（比再塞
+   一个字符到 HTML 里干净，后台同步出来的 markup 也不必带分隔符）。
+   两条链接共用这一套样式，所以类名按「法务/信息页」取，不绑在某一条上。
+   .site-footer__privacy 是改名前的旧类名：后台（apps/cms）与前台分开发版，
+   旧版后台注入的页脚底栏还在用它，保留同一条规则免得部署错峰时链接掉样式。 */
+.site-footer__legal,
 .site-footer__privacy {
   display: inline-flex;
   align-items: center;
@@ -3286,6 +3290,7 @@ html[data-theme="dark"] .post-nav__mask {
   transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
 
+.site-footer__legal::before,
 .site-footer__privacy::before {
   content: "";
   width: 3px;
@@ -3295,6 +3300,7 @@ html[data-theme="dark"] .post-nav__mask {
   opacity: 0.55;
 }
 
+.site-footer__legal:hover,
 .site-footer__privacy:hover {
   border-bottom-color: var(--brand);
 }

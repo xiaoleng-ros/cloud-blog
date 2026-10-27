@@ -691,15 +691,16 @@ function renderFooterInner(
 
 /**
  * 页脚底栏内容（锚点 Footer.astro 的 div[data-sync-block="footerBar"]）；
- * 声明文字字段已按用户要求删除，仅留版权行 + 隐私政策入口。
+ * 声明文字字段已按用户要求删除，仅留版权行 + 隐私政策 / 发展历程入口。
  *
- * ⚠️ 隐私政策链接是**固定**的（/privacy 是 Astro 静态页，不来自后台数据），
+ * ⚠️ 这两个链接都是**固定**的（/privacy、/timeline 都是 Astro 静态页，不来自后台数据），
  * 但底栏整块由同步覆盖，所以这里必须跟着 Footer.astro 一起输出，
- * 否则后台一同步这条链接就会消失。
+ * 否则后台一同步这两条链接就会消失。
  */
 function renderFooterBar(author: string, year: number): string {
   return `<span>© ${year} ${escapeHtml(author)}</span>
-    <a class="site-footer__privacy" href="/privacy">隐私政策</a>`
+    <a class="site-footer__legal" href="/privacy">隐私政策</a>
+    <a class="site-footer__legal" href="/timeline">发展历程</a>`
 }
 
 /** 文章详情头部内容（锚点 posts/[...slug].astro 的 header[data-sync-block="articleHeader"]）

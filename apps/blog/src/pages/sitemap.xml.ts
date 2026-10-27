@@ -107,6 +107,8 @@ export async function GET() {
     urlEntry('/search', { changefreq: 'never', priority: 0.2 }),
     // 隐私政策：合规声明页，几乎不变更，但需要能被检索到
     urlEntry('/privacy', { changefreq: 'yearly', priority: 0.3 }),
+    // 发展历程：会随每次留下记录而更新，权重与关于页齐平
+    urlEntry('/timeline', { changefreq: 'monthly', priority: 0.4 }),
   ];
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>

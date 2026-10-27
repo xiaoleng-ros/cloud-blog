@@ -1,0 +1,669 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { getSiteSettings } from '../lib/site-settings';
+
+// 作者名优先取后台站点设置（与页脚/隐私政策同口径）
+const settings = await getSiteSettings();
+const authorName = settings?.siteAuthor ?? '云岫';
+
+/**
+ * 发展历程：手写在这份数组里，没有后台字段、也没有自动从 git 生成。
+ *
+ * 为什么不做成自动生成：git 提交信息是写给自己的（「fix(部署): 修 xssmode」），
+ * 直接摆上页面读者看不懂；历程要的是「为什么这么做」，这层只有人能补。
+ * 加一条新记录 = 往对应年份的 items 里 push 一项，日期写 YYYY-MM-DD 与 M.DD 两种形态。
+ */
+type Milestone = {
+  /** 完整日期，同时用作 <time datetime> 与锚点 */
+  date: string;
+  /** 卡片上显示的短日期，如 08.09 */
+  label: string;
+  title: string;
+  text: string;
+  /** 便利贴配色变量名，留空按顺序轮换 */
+  tone?: 'yellow' | 'cyan' | 'pink' | 'green' | 'purple';
+};
+
+type Chapter = {
+  /** 锚点 id，与目录跳转共用 */
+  id: string;
+  /** 章节名，如 2026.08 */
+  label: string;
+  /** 这一段的主题词 */
+  tag: string;
+  intro: string;
+  items: Milestone[];
+};
+
+const chapters: Chapter[] = [
+  {
+    id: 'y-2608',
+    label: '2026.08',
+    tag: '破土',
+    intro: '先有一个能跑的站，再谈别的。',
+    items: [
+      {
+        date: '2026-08-09',
+        label: '08.09',
+        title: '仓库第一次提交',
+        text: '从 clay-blog（神烦老狗，MIT）起步 —— 一个手绘风的 Astro 个人博客模板。第一件事不是写文章，是把站名、图标、分享图这些「别人的东西」改成可配置的。',
+        tone: 'yellow',
+      },
+      {
+        date: '2026-08-11',
+        label: '08.11',
+        title: '升 Astro 7.2',
+        text: '顺手清掉 17 条依赖告警。后来每次大版本升级都沿用这个节奏：先升、再让类型检查把问题顶出来。',
+        tone: 'cyan',
+      },
+      {
+        date: '2026-08-24',
+        label: '08.24',
+        title: '换成手绘涂鸦手账风',
+        text: '米黄纸底、横向内页格线、便利贴色块、手写标题 —— 这套视觉从这天定下来，一直沿用到现在。',
+        tone: 'pink',
+      },
+    ],
+  },
+  {
+    id: 'y-2609',
+    label: '2026.09',
+    tag: '长出后台',
+    intro: '文章不该只躺在 Markdown 里，改一句话都得重新构建。',
+    items: [
+      {
+        date: '2026-08-31',
+        label: '08.31',
+        title: '接入 Payload CMS',
+        text: '文章、随笔、站点设置开始由后台提供，前台变成「取数 + 渲染」。同一天把后台收进子目录，并补上 PostgreSQL 支持。',
+        tone: 'green',
+      },
+      {
+        date: '2026-09-10',
+        label: '09.10',
+        title: '拆成两个应用',
+        text: 'apps/blog 与 apps/cms 各自带 package.json 与 lockfile，部署时又合成同一个 EdgeOne Makers 项目 —— 前后台同域名，一个项目管到底。',
+        tone: 'purple',
+      },
+      {
+        date: '2026-09-11',
+        label: '09.11',
+        title: '前台开始实时同步',
+        text: '后台改完，前台自己变。HTML 外壳强制 no-store，避免 CDN 缓存把新内容挡在门外；首次同步必须无条件套用，否则刷新会退回旧内容。',
+        tone: 'yellow',
+      },
+      {
+        date: '2026-09-20',
+        label: '09.20',
+        title: '首屏不再闪旧内容',
+        text: '构建期真正拿到后台数据，打开页面第一眼就是最新的，不再先闪一下旧快照。',
+        tone: 'cyan',
+      },
+      {
+        date: '2026-09-24',
+        label: '09.24',
+        title: '编辑器换 Vditor',
+        text: '支持图片拖拽粘贴直接上传，图片落到 Supabase Storage。同一天全面开启 TypeScript strict。',
+        tone: 'pink',
+      },
+      {
+        date: '2026-09-26',
+        label: '09.26',
+        title: '注入改用 parse5',
+        text: '后台注入正文时不再拿正则硬替换，改成按 DOM 定位 —— 少一类「正则匹配到一半」的翻车。',
+        tone: 'green',
+      },
+    ],
+  },
+  {
+    id: 'y-2610',
+    label: '2026.10',
+    tag: '补齐该有的东西',
+    intro: '后台、评论、搜索、版权、隐私政策 —— 一个真正的博客该有的，这个月陆续补齐。',
+    items: [
+      {
+        date: '2026-10-01',
+        label: '10.01',
+        title: '后台整体改成整页视图',
+        text: '站点设置、导航、回收站、草稿箱、分类树、标签双栏都换成自定义整页，不再挤在 Payload 默认弹层里。同时堵掉一条存储型 XSS 链。',
+        tone: 'purple',
+      },
+      {
+        date: '2026-10-02',
+        label: '10.02',
+        title: '后台换皮',
+        text: '侧栏、顶栏、多标签、命令面板与明暗双主题落地。写文章的地方自己也想待着。',
+        tone: 'yellow',
+      },
+      {
+        date: '2026-10-05',
+        label: '10.05',
+        title: '搜索、统计、标签墙',
+        text: '搜索命令面板、数据统计页、归档分页、标签墙一起上线；评论由 Waline 进程内接管，后台多了一个评论管理页。',
+        tone: 'cyan',
+      },
+      {
+        date: '2026-10-10',
+        label: '10.10',
+        title: '全站实时 + 定下 GPL-3.0',
+        text: '后台改内容前台即时生效，页面文案字段收编删除。README 交代清楚项目来源与致谢，整体转为 GPL-3.0 —— 因为页脚那张动物插画来自 GPL 项目。',
+        tone: 'pink',
+      },
+      {
+        date: '2026-10-12',
+        label: '10.12',
+        title: '线上事故：全站 500',
+        text: '连接串里写了 sslmode，pg 会用它覆盖显式传入的 ssl 配置，注入的 CA 证书随之失效，后台初始化失败、全站 500。同一天还把函数包从 208MB 裁到 119MB，才塞进 128MB 限额。',
+        tone: 'green',
+      },
+      {
+        date: '2026-10-18',
+        label: '10.18',
+        title: '升级与更新日志',
+        text: 'Payload 3.91 / Next 16.3.8 / React 19.3 / Astro 7.4 一起升；后台新增「更新日志」页，用 GitHub 贡献热力图把这条时间线也画了一遍。',
+        tone: 'purple',
+      },
+      {
+        date: '2026-10-21',
+        label: '10.21',
+        title: '自己写评论接口',
+        text: '换掉 @waline/vercel，改成一个轻量评论 API：配图直传对象存储、强制人工审核、过期评论自动清理。',
+        tone: 'yellow',
+      },
+      {
+        date: '2026-10-22',
+        label: '10.22',
+        title: '文章 URL 与图片',
+        text: '文章链接的分类段改用分类标识，旧链接 301 过去；图片在浏览器里先压缩再上传，绕开 EdgeOne 网关 6MB 的请求体硬上限。',
+        tone: 'cyan',
+      },
+      {
+        date: '2026-10-23',
+        label: '10.23',
+        title: '隐私政策与版权',
+        text: '隐私政策页落地，文章底部加上 CC BY-NC-SA 4.0 版权卡 —— 转载规则写在明面上，比事后解释省事。',
+        tone: 'pink',
+      },
+      {
+        date: '2026-10-24',
+        label: '10.24',
+        title: '上一篇 / 下一篇',
+        text: '改成封面大图横幅卡。翻页这件事，也可以顺手好看一点。',
+        tone: 'green',
+      },
+      {
+        date: '2026-10-25',
+        label: '10.25',
+        title: '评论区与安全加固',
+        text: '评论邮箱必填、邮箱头像、属地与浏览器徽章；同一轮把 XFF 伪造、CSRF、鉴权、配额这些口子一起收紧。',
+        tone: 'purple',
+      },
+      {
+        date: '2026-10-27',
+        label: '10.27',
+        title: '这一页上线',
+        text: '把上面这些事写成一页可以翻阅的记录 —— 你正在看的这一页，也是历程的一部分。',
+        tone: 'yellow',
+      },
+    ],
+  },
+];
+
+/** 篇幅小的事实条，跟关于页那三枚小标签同一套写法 */
+const facts = ['2026 年 8 月动工', '历时近 3 个月', '全站由 AI 开发'];
+
+/** 每条记录按顺序轮换便利贴色，作者没指定 tone 时兜底 */
+const TONES = ['yellow', 'cyan', 'pink', 'green', 'purple'] as const;
+const toneOf = (item: Milestone, index: number) => item.tone ?? TONES[index % TONES.length];
+---
+
+<BaseLayout
+  title="发展历程"
+  description={`${authorName}的博客发展历程：从 clay-blog 模板起步，到前后台双应用的 monorepo —— 视觉、后台、部署与评论系统是怎么一步步长出来的。`}
+  pageClass="content-page"
+>
+  <section class="timeline-page">
+    <header class="page-header">
+      <p class="eyebrow">Journey</p>
+      <h1>发展历程</h1>
+      <p>从一份手绘风模板，到「前台 + 后台」双应用的现在。记下每个阶段做了什么、为什么这么做。</p>
+      <p class="timeline-facts">
+        {facts.map((fact) => <span class="timeline-fact">{fact}</span>)}
+      </p>
+    </header>
+
+    {/* 开头这几句话：延续隐私政策页的写法，给没耐心的人一条捷径 */}
+    <div class="timeline-hints">
+      <p class="timeline-hints__title">先看这几句话</p>
+      <ul>
+        <li>起点是 2026 年 8 月的 <strong>clay-blog</strong> 模板，视觉基调在同月定下，之后再没换过。</li>
+        <li>2026 年 9 月长出后台：<strong>Payload CMS</strong> 成为唯一数据源，前台退化成「取数 + 渲染」。</li>
+        <li>2026 年 10 月补齐一个博客该有的东西：<strong>评论、搜索、统计、版权、隐私政策</strong>。</li>
+        <li>这个站<strong>全部由 AI 开发</strong>：需求是人提的，代码、部署、排错都在对话里完成。</li>
+      </ul>
+    </div>
+
+    <nav class="timeline-toc" aria-label="历程目录">
+      <p class="timeline-toc__title">目录</p>
+      <ol>
+        {chapters.map((chapter) => (
+          <li>
+            <a href={`#${chapter.id}`}>
+              <b>{chapter.label}</b>
+              <span>{chapter.tag}</span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+
+    {chapters.map((chapter) => (
+      <section class="timeline-chapter" id={chapter.id}>
+        <header class="timeline-chapter__head">
+          <h2 class="timeline-chapter__num">{chapter.label}</h2>
+          <span class="timeline-chapter__tag">{chapter.tag}</span>
+          <p class="timeline-chapter__intro">{chapter.intro}</p>
+        </header>
+
+        <ol class="timeline-list">
+          {chapter.items.map((item, index) => (
+            <li class="timeline-item" style={`--note-color: var(--sticky-${toneOf(item, index)})`}>
+              <div class="timeline-card">
+                <div class="timeline-card__top">
+                  <time class="timeline-card__date" datetime={item.date}>{item.label}</time>
+                  <h3 class="timeline-card__title">{item.title}</h3>
+                </div>
+                <p class="timeline-card__text">{item.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+
+    {/* 现状：三条并列的便签，说明「技术架构 / 部署与运维 / 内容定位」 */}
+    <section class="timeline-now" aria-labelledby="now-heading">
+      <div class="section__header">
+        <h2 id="now-heading">现在的样子</h2>
+      </div>
+
+      <div class="timeline-notes">
+        <div class="timeline-note" style="--note-color: var(--sticky-cyan)">
+          <span class="timeline-note__tape" aria-hidden="true"></span>
+          <strong>技术架构</strong>
+          <span>前台 Astro 7.4 静态站，构建期从后台 REST 取数；后台 Payload 3.91 + Next.js 16，Postgres 存内容。</span>
+          <span>同一个 EdgeOne Makers 项目承载前后台：<code>/</code> 是博客，<code>/admin</code> 与 <code>/api</code> 是后台。catch-all 路由在返回 HTML 前按最新数据注入区块，页面打开后再靠轮询与 SSE 局部更新。</span>
+        </div>
+
+        <div class="timeline-note" style="--note-color: var(--sticky-yellow)">
+          <span class="timeline-note__tape" aria-hidden="true"></span>
+          <strong>部署与运维</strong>
+          <span>Node 22.21.1；构建顺序是「装前台依赖 → astro build → next build → 复制产物」。</span>
+          <span>函数包上限 128MB，source map 与 CLI 工具链要裁掉；Supabase 根证书随仓库提交，连接串里禁止写 sslmode —— 这条是 10 月那次全站 500 换来的。</span>
+        </div>
+
+        <div class="timeline-note" style="--note-color: var(--sticky-green)">
+          <span class="timeline-note__tape" aria-hidden="true"></span>
+          <strong>内容定位</strong>
+          <span>剪辑、AI 与代码。写自己的创作、建站与踩坑记录，也写一些不成文章的随笔。</span>
+          <span>更新节奏不追日更，只保证一件事：发出来的东西，过半年自己回头看还认。</span>
+        </div>
+      </div>
+
+      <p class="timeline-end">—— 记录到此，后面继续发生。</p>
+    </section>
+  </section>
+</BaseLayout>
+
+<style>
+  /* 本页内容全部是静态模板输出，没有后台注入，所以用 scoped 样式即可。
+     类名统一以 .timeline- 开头，不与统计页 / 隐私政策的 .stats-* / .privacy-* 抢名字。 */
+  .timeline-page {
+    max-width: 48rem;
+    margin: 0 auto;
+  }
+
+  /* ---------- 页头事实条 ---------- */
+  .timeline-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1rem 0 0;
+  }
+
+  .timeline-fact {
+    padding: 0.24rem 0.62rem;
+    border: 1.5px solid var(--on-sticky-line);
+    border-radius: 11px 5px 13px 6px / 6px 13px 5px 11px;
+    background: var(--surface-muted);
+    color: var(--on-sticky);
+    font-size: 0.8rem;
+    transition: background var(--t-fast) var(--ease-out);
+  }
+
+  .timeline-fact:nth-child(3n + 1) { background: var(--sticky-cyan); }
+  .timeline-fact:nth-child(3n + 2) { background: var(--sticky-yellow); }
+  .timeline-fact:nth-child(3n) { background: var(--sticky-pink); }
+
+  /* ---------- 开头便签 ---------- */
+  .timeline-hints {
+    margin-bottom: 2rem;
+    padding: 1.1rem 1.25rem 1.2rem;
+    background: var(--sticky-yellow);
+    color: var(--on-sticky);
+    border: 2px solid var(--on-sticky-line);
+    border-radius: 14px 20px 12px 22px / 20px 12px 22px 14px;
+    box-shadow: 3px 4px 0 var(--shadow-sm);
+    transform: rotate(-0.25deg);
+  }
+
+  .timeline-hints__title {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-hand-cn);
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+  }
+
+  .timeline-hints ul {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+    line-height: 1.75;
+  }
+
+  .timeline-hints strong {
+    font-weight: 750;
+  }
+
+  /* ---------- 目录：年份横向排一行 ---------- */
+  .timeline-toc {
+    margin-bottom: 2.6rem;
+    padding: 1rem 1.25rem 1.15rem;
+    background: var(--surface-muted);
+    border: 1px dashed var(--edge);
+    border-radius: var(--radius);
+  }
+
+  .timeline-toc__title {
+    margin: 0 0 0.6rem;
+    color: var(--text-faint);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .timeline-toc ol {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .timeline-toc a {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.4rem 0.7rem;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px 14px 11px 13px / 13px 11px 14px 10px;
+    background: var(--surface);
+    transition: background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+  }
+
+  .timeline-toc a:hover {
+    background: var(--sticky-cyan);
+    color: var(--on-sticky);
+    transform: translateY(-1px);
+  }
+
+  .timeline-toc b {
+    font-family: var(--font-hand);
+    font-size: 1.02rem;
+    font-weight: 400;
+  }
+
+  .timeline-toc span {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  .timeline-toc a:hover span {
+    color: color-mix(in srgb, var(--on-sticky) 78%, var(--sticky-cyan));
+  }
+
+  /* ---------- 章节 ---------- */
+  .timeline-chapter {
+    margin-bottom: 2.6rem;
+    /* 从目录跳进来时标题别贴到 fixed 顶栏下面 */
+    scroll-margin-top: 6.5rem;
+  }
+
+  .timeline-chapter__head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    margin-bottom: 1.1rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 2px dashed var(--edge);
+  }
+
+  .timeline-chapter__num {
+    margin: 0;
+    font-family: var(--font-hand);
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+
+  .timeline-chapter__tag {
+    padding: 0.12rem 0.55rem;
+    border: 1.5px solid var(--on-sticky-line);
+    border-radius: 10px 4px 12px 5px / 5px 12px 4px 10px;
+    background: var(--sticky-cyan);
+    color: var(--on-sticky);
+    font-size: 0.78rem;
+    transform: rotate(-1.2deg);
+  }
+
+  .timeline-chapter__intro {
+    flex: 1 1 100%;
+    margin: 0.3rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+  }
+
+  /* ---------- 时间线本体 ---------- */
+  .timeline-list {
+    position: relative;
+    margin: 0;
+    padding: 0 0 0 1.7rem;
+    list-style: none;
+  }
+
+  /* 手绘虚线主轴：用重复的 linear-gradient 画出短划，比 border dashed 更接近手写 */
+  .timeline-list::before {
+    content: "";
+    position: absolute;
+    top: 0.7rem;
+    bottom: 0.2rem;
+    left: 0.32rem;
+    width: 2px;
+    background-image: linear-gradient(
+      to bottom,
+      var(--edge) 0,
+      var(--edge) 6px,
+      transparent 6px,
+      transparent 12px
+    );
+    background-size: 2px 12px;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 1rem;
+  }
+
+  /* 节点：一颗压在主轴线上的小便利贴圆点 */
+  .timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -1.72rem;
+    top: 0.95rem;
+    width: 0.72rem;
+    height: 0.72rem;
+    background: var(--note-color);
+    border: 1.5px solid var(--on-sticky-line);
+    border-radius: 50% 46% 54% 48%;
+    transform: rotate(-8deg);
+  }
+
+  .timeline-card {
+    padding: 0.85rem 1rem 0.95rem;
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    border-radius: 13px 18px 12px 19px / 18px 12px 19px 13px;
+    box-shadow: 2px 3px 0 var(--shadow-sm);
+    transition: box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+  }
+
+  /* 交错一点点角度，像手贴上去的卡片；角度极小，长文不会看歪 */
+  .timeline-item:nth-child(2n) .timeline-card { transform: rotate(0.35deg); }
+  .timeline-item:nth-child(3n) .timeline-card { transform: rotate(-0.4deg); }
+
+  .timeline-card:hover {
+    box-shadow: 3px 5px 0 var(--shadow);
+    transform: translateY(-1px);
+  }
+
+  .timeline-card__top {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.6rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .timeline-card__date {
+    flex: none;
+    padding: 0.02rem 0.45rem;
+    background: var(--note-color);
+    color: var(--on-sticky);
+    border: 1px solid var(--on-sticky-line);
+    border-radius: 8px 3px 9px 4px / 4px 9px 3px 8px;
+    font-family: var(--font-hand);
+    font-size: 0.86rem;
+  }
+
+  .timeline-card__title {
+    margin: 0;
+    font-family: var(--font-hand-cn);
+    font-size: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+
+  .timeline-card__text {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.8;
+  }
+
+  /* ---------- 现状：三张便签 ---------- */
+  .timeline-now {
+    margin-top: 3rem;
+  }
+
+  .timeline-notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 1rem;
+    margin-top: 1.2rem;
+  }
+
+  .timeline-note {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding: 1.05rem 1.1rem 1.15rem;
+    background: var(--note-color);
+    color: var(--on-sticky);
+    border: 1.5px solid var(--on-sticky-line);
+    border-radius: 12px 16px 13px 15px;
+    box-shadow: 2px 3px 0 var(--shadow-sm);
+    transform: rotate(-0.7deg);
+  }
+
+  .timeline-note:nth-child(2) { transform: rotate(0.5deg); }
+  .timeline-note:nth-child(3) { transform: rotate(-0.3deg); }
+
+  .timeline-note__tape {
+    position: absolute;
+    top: -0.55rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(-2deg);
+    width: 3.5rem;
+    height: 1rem;
+    background: var(--sticky-tape-bg);
+    border: 1px dashed var(--sticky-tape-line);
+  }
+
+  .timeline-note strong {
+    font-family: var(--font-hand-cn);
+    font-size: 1rem;
+    font-weight: 400;
+  }
+
+  /* 便签正文：胶带那一枚也是 <span>，这里排掉它 */
+  .timeline-note > span:not(.timeline-note__tape) {
+    font-size: 0.82rem;
+    line-height: 1.75;
+    /* 便签是纸：副文字同色降饱和，不换色相 */
+    color: color-mix(in srgb, var(--on-sticky) 78%, var(--note-color));
+  }
+
+  .timeline-note code {
+    padding: 0 0.25em;
+    background: var(--sticky-tag-bg);
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.92em;
+  }
+
+  .timeline-end {
+    margin-top: 1.6rem;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    text-align: right;
+  }
+
+  @media (max-width: 640px) {
+    .timeline-hints {
+      transform: none;
+    }
+
+    .timeline-list {
+      padding-left: 1.4rem;
+    }
+
+    .timeline-item::before {
+      left: -1.42rem;
+    }
+
+    .timeline-item:nth-child(2n) .timeline-card,
+    .timeline-item:nth-child(3n) .timeline-card,
+    .timeline-note,
+    .timeline-note:nth-child(2),
+    .timeline-note:nth-child(3) {
+      transform: none;
+    }
+  }
+</style>

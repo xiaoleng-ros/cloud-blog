@@ -614,6 +614,7 @@ const COUNTABLE_STATIC_PATHS = new Set([
   '/stats',
   '/search',
   '/privacy',
+  '/timeline',
 ])
 const COUNTABLE_DYNAMIC_PATTERNS = [
   /^\/posts\/[^/]+\/\d+$/, // 文章详情：/posts/{分类标识}/{数字 ID}
