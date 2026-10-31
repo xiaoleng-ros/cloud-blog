@@ -1,5 +1,92 @@
 {
-  "buildCommand": "rm -rf .next/cache && npm ci --prefix ../blog && npm ci --prefix . && npm run build --prefix ../blog && npm run build && node scripts/copy-blog-to-public.mjs && node scripts/ensure-supabase-ca.mjs && rm -rf .next/cache .next/dev && find .next -name \"*.map\" -type f -delete && rm -rf .next/standalone/apps/blog && find .next -xtype l -delete",
+  "buildCommand": "rm -rf .next/cache && npm ci --prefix ../blog && npm ci --prefix . && npm run build --prefix ../blog && node scripts/optimize-site-icons.mjs && npm run build && node scripts/copy-blog-to-public.mjs && node scripts/ensure-supabase-ca.mjs && rm -rf .next/cache .next/dev && find .next -name \"*.map\" -type f -delete && rm -rf .next/standalone/apps/blog && find .next -xtype l -delete",
   "outputDirectory": ".next",
-  "nodeVersion": "22.21.1"
+  "nodeVersion": "22.21.1",
+  "headers": [
+    {
+      "source": "/_astro/*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/avatars/*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, s-maxage=2592000"
+        }
+      ]
+    },
+    {
+      "source": "/images/*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, s-maxage=2592000"
+        }
+      ]
+    },
+    {
+      "source": "/share/*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, s-maxage=2592000"
+        }
+      ]
+    },
+    {
+      "source": "/covers/*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, s-maxage=2592000"
+        }
+      ]
+    },
+    {
+      "source": "/rss.xml",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
+      ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
+      ]
+    },
+    {
+      "source": "/site.webmanifest",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/robots.txt",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
+      ]
+    }
+  ]
 }

@@ -55,9 +55,13 @@ export const markdownPreviewCss = `
   --radius: 13px;
   --radius-lg: 16px;
   --page-glow: none;
-  /* 手写标题字体：马善政楷体为主，站酷快乐体/系统楷体兜底 */
-  --font-hand: "Ma Shan Zheng", "ZCOOL KuaiLe", "KaiTi", "STKaiti", "Kaiti SC", "楷体", cursive;
-  --font-hand-cn: "ZCOOL KuaiLe", "KaiTi", "STKaiti", "Kaiti SC", "楷体", cursive;
+  /* 手写标题字体：只用系统楷体族（不再依赖 Google Fonts 的 webfont）。
+     曾经的 "Ma Shan Zheng" / "ZCOOL KuaiLe" 需从 fonts.googleapis.com 拉一条
+     阻塞渲染的 CSS（实测 215KB / 185 个 unicode-range 子集），首屏开销远大于收益。
+     系统楷体在 Windows（楷体/KaiTi）、macOS（Kaiti SC/STKaiti）、
+     Android（多数机型回退到默认黑体，故保留 cursive 兜底）都能用。 */
+  --font-hand: "KaiTi", "STKaiti", "Kaiti SC", "楷体", "FangSong", "STFangsong", cursive;
+  --font-hand-cn: "KaiTi", "STKaiti", "Kaiti SC", "楷体", "FangSong", "STFangsong", cursive;
   /* 玻璃拟态保留为「手账纸片」质感，不再使用高光扫掠 */
   --glass-tint: rgba(255, 253, 246, 0.92);
   --glass-sheen: linear-gradient(
@@ -3278,8 +3282,12 @@ body.is-dragging-floating {
   color: var(--brand);
 }
 
-/* 隐私政策入口：跟在版权行右侧，前面加一个小圆点当分隔（比再塞一个字符到
-   HTML 里干净，后台同步出来的 markup 也不必带分隔符）。 */
+/* 版权行右侧的固定入口（隐私政策 / 发展历程）：前面加一个小圆点当分隔（比再塞
+   一个字符到 HTML 里干净，后台同步出来的 markup 也不必带分隔符）。
+   两条链接共用这一套样式，所以类名按「法务/信息页」取，不绑在某一条上。
+   .site-footer__privacy 是改名前的旧类名：后台（apps/cms）与前台分开发版，
+   旧版后台注入的页脚底栏还在用它，保留同一条规则免得部署错峰时链接掉样式。 */
+.site-footer__legal,
 .site-footer__privacy {
   display: inline-flex;
   align-items: center;
@@ -3288,6 +3296,7 @@ body.is-dragging-floating {
   transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
 
+.site-footer__legal::before,
 .site-footer__privacy::before {
   content: "";
   width: 3px;
@@ -3297,6 +3306,7 @@ body.is-dragging-floating {
   opacity: 0.55;
 }
 
+.site-footer__legal:hover,
 .site-footer__privacy:hover {
   border-bottom-color: var(--brand);
 }

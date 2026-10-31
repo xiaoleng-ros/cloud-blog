@@ -21,6 +21,7 @@ import {
   site,
   sortPosts,
 } from '../../lib/posts';
+import { supabaseImageTransform } from 'cloud-blog/shared/post-utils';
 
 export async function getStaticPaths() {
   const posts = sortPosts(await getCollection('posts'));
@@ -68,7 +69,7 @@ const adjacentCards = [
   { direction: 'next' as const, label: '下一篇', emptyLabel: '已经是最新一篇了', post: newer },
 ].map((card) => ({
   ...card,
-  cover: card.post ? getPostCover(card.post) : undefined,
+  cover: card.post ? supabaseImageTransform(getPostCover(card.post), { width: 400, quality: 72 }) : undefined,
   category: card.post ? getPostCategory(card.post) : undefined,
 }));
 const tableOfContents = headings.filter((heading) => heading.depth >= 2 && heading.depth <= 3);

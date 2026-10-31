@@ -3,7 +3,6 @@ import Icon from './Icon.astro';
 import { site, toShanghaiParts } from '../lib/posts';
 import { getFooter, getSiteSettings } from '../lib/site-settings';
 import { hasIcon } from 'cloud-blog/shared/icon-paths';
-import { safeHref } from 'cloud-blog/shared/html-safety';
 import { OFFLINE_ICP } from 'cloud-blog/shared/site-defaults';
 
 // 构建年份仅作为无 JS 环境的静态兜底；按全仓统一的 Asia/Shanghai 定格（与 formatDate 同口径）
@@ -13,8 +12,10 @@ const buildYear = toShanghaiParts(new Date())?.year ?? String(new Date().getFull
 const settings = await getSiteSettings();
 const author = settings?.siteAuthor ?? site.author;
 
-// 页脚头像：后台「网站配置 → 网站图标」优先，留空/不合法用站点默认头像
-const avatarSrc = safeHref(settings?.siteIcon, '/avatars/avatar.png');
+// 页脚头像：用构建期生成的 80×80 WebP 小图（optimize-site-icons.mjs 产物），
+// 显示尺寸 40×40（2x 高清屏刚好）。不直接引用后台 siteIcon 原图
+// （实测 1306×1205 / 2.38MB PNG，显示 40×40 也要下整张原图）。
+const avatarSrc = '/avatars/avatar-80.webp';
 
 // 页脚副标题/链接/群组：以后台站点设置为准，后台留空前台就不出这一项
 const footer = await getFooter();
@@ -33,7 +34,7 @@ const icp = settings === null ? OFFLINE_ICP : (settings.siteIcp?.trim() ?? '');
       纯装饰，不参与无障碍树。 */}
   <div class="site-footer__pets" aria-hidden="true">
     <img
-      src="/images/footer-animals.png"
+      src="/images/footer-animals.webp"
       alt=""
       width="1948"
       height="236"

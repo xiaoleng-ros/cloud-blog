@@ -98,6 +98,7 @@ import {
   getArchiveTotalPages,
   parseArchivePage,
   toShanghaiParts,
+  supabaseImageTransform,
 } from 'cloud-blog/shared/post-utils'
 
 // 站点默认值（后台 SiteSettings 缺失时兜底）。原 site.config.json 已移除，统一在此维护。
@@ -523,7 +524,8 @@ function renderHeroCard(
 function renderHeroPicks(picks: MdEntry[]): string {
   if (picks.length === 0) return ''
   const first = picks[0]
-  const cover = getPostCover(first)
+  // hero 大图是 LCP 元素（fetchpriority=high）：Supabase 原图 → 800px webp 变换（实测 286KB→29KB）
+  const cover = supabaseImageTransform(getPostCover(first), { width: 800, quality: 72 })
   const category = getPostCategory(first)
   const date = toDate(first.data.date)
   const thumb = cover
@@ -531,7 +533,8 @@ function renderHeroPicks(picks: MdEntry[]): string {
     : `<span class="pick-hero__thumb pick__thumb--fallback" style="--h:${coverHue(String(first.data.title))}"></span>`
 
   const side = picks.slice(1, 5).map((post) => {
-    const c = getPostCover(post)
+    // 侧栏小图显示 132px：400px webp 足够（2x 高清屏）
+    const c = supabaseImageTransform(getPostCover(post), { width: 400, quality: 72 })
     const d = toDate(post.data.date)
     const t = c
       ? `<span class="pick-side__thumb"><img src="${escapeAttr(c)}" alt="${escapeAttr(post.data.coverAlt ?? '')}" loading="lazy" referrerpolicy="no-referrer" /></span>`
@@ -584,9 +587,13 @@ function icpOf(settings: SyncData['settings'] | null | undefined): string {
   return settings?.siteIcp?.trim() ?? ''
 }
 
-/** 页脚头像：后台「网站图标」优先，留空/不合法用站点默认头像（与 Footer.astro 一致） */
-function avatarOf(settings: SyncData['settings'] | null | undefined): string {
-  return safeHref(settings?.siteIcon, '/avatars/avatar.png')
+/**
+ * 页脚头像 / favicon：统一用构建期生成的小尺寸产物（optimize-site-icons.mjs），
+ * 不引用后台 siteIcon 原图（实测 2.38MB PNG，会把首屏优化打穿）。
+ * 与 Footer.astro / BaseLayout.astro 的静态侧保持同一口径；后台改图后需重新部署。
+ */
+function avatarOf(_settings: SyncData['settings'] | null | undefined): string {
+  return '/avatars/avatar-80.webp'
 }
 
 /**
@@ -817,7 +824,8 @@ function renderAdjacentCard(direction: 'prev' | 'next', post: MdEntry | undefine
 </span>`
   }
 
-  const cover = getPostCover(post)
+  // 相邻文章封面缩略图（显示 ~72px）：400px webp 变换
+  const cover = supabaseImageTransform(getPostCover(post), { width: 400, quality: 72 })
   const category = getPostCategory(post)
   const thumb = cover
     ? `<img class="post-nav__cover" src="${escapeAttr(cover)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`

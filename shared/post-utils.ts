@@ -150,6 +150,42 @@ export const getPostTags = <T extends PostEntry>(post: T): string[] =>
 export const getPostCover = <T extends PostEntry>(post: T) =>
   getVal(post, 'cover');
 
+/**
+ * Supabase Storage 图片的边缘变换 URL（P0-2 提速）。
+ *
+ * 背景：文章封面存 Supabase Storage，`/storage/v1/object/public/...` 返回原图
+ * （实测 hero 图 1701×976 / 286KB PNG）。Supabase 提供 `/storage/v1/render/image/public/`
+ * 变换端点（width/quality/format），实测同一张图 `?width=800&quality=72&format=webp`
+ * 只有 29KB（−90%），且带 CDN 缓存（cf-cache-status: HIT）。**format 仅 webp 可用，
+ * format=png 返回 400**。
+ *
+ * 匹配两种线上真实形状（与 supabase-storage.ts 的 REF_IN_URL_RE 同口径）：
+ *   - https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
+ *   - https://<ref>.storage.supabase.co/storage/v1/object/public/<bucket>/<path>
+ * 已带查询串（签名/已有变换）或非 Supabase 的外链原样返回，绝不改写。
+ */
+const SUPABASE_OBJECT_URL_RE =
+  /^(https:\/\/[a-z0-9]{20}\.storage\.supabase\.co|https:\/\/[a-z0-9]{20}\.supabase\.co)\/storage\/v1\/object\/public\/(.+)$/i;
+
+export function supabaseImageTransform(
+  url: string | undefined,
+  options: { width?: number; quality?: number } = {},
+): string | undefined {
+  if (!url) return url;
+  const m = SUPABASE_OBJECT_URL_RE.exec(url);
+  if (!m) return url; // 非 Supabase object URL：外链/相对路径原样返回
+  // 已带查询串（签名 URL / 已是变换地址）不改写，避免把参数拼坏
+  if (url.includes('?')) return url;
+  const [, origin, path] = m;
+  const params = new URLSearchParams();
+  if (options.width) params.set('width', String(options.width));
+  if (options.quality) params.set('quality', String(options.quality));
+  params.set('format', 'webp');
+  // Supabase render 端点的形状是 /storage/v1/render/image/public/<bucket>/<path>，
+  // 注意 object/public 要整段换成 render/image/public（不是追加）。
+  return `${origin}/storage/v1/render/image/public/${path}?${params.toString()}`;
+}
+
 /** 文章阅读时长估算（中日韩字符 1 字 + 英文 1 词 ≈ 350 单位/分钟） */
 export const getReadingMinutes = <T extends PostEntry>(post: T): number => {
   const body = post.body ?? '';

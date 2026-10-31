@@ -8,7 +8,6 @@ import { defaultSchema } from 'rehype-sanitize';
 import { getMdSanitizeLists } from 'cloud-blog/shared/md-sanitize-schema.mjs';
 import { absoluteUrl, site } from '../lib/posts';
 import { getSiteSettings } from '../lib/site-settings';
-import { safeHref } from 'cloud-blog/shared/html-safety';
 import '../styles/global.css';
 
 // 客户端兜底净化的白名单与净化器共用同一份派生（shared/md-sanitize-schema），构建期序列化为 JSON
@@ -45,8 +44,12 @@ const defaultInfo = {
   author: settings?.siteAuthor ?? site.author,
 };
 
-// 站点图标（浏览器标签页/收藏夹）：后台「网站配置 → 网站图标」优先，留空用默认头像
-const siteIcon = safeHref(settings?.siteIcon, '/avatars/avatar.png');
+// 站点图标（浏览器标签页/收藏夹）：引用构建期生成的小尺寸变体
+// （apps/cms/scripts/optimize-site-icons.mjs 产物，随 dist/ 一起部署）。
+// 不直接引用后台原始大图：settings.siteIcon 实测是 1306×1205 / 2.38MB PNG，
+// 被 <head> 引用两次 + 页脚头像一次，首屏要多下 2MB+。图标本就是固定视觉，
+// 换图频率极低，用构建产物即可；后台改图后需要重新部署一次。
+const siteIcon = '/avatars/favicon-32.png';
 
 const {
   title = defaultInfo.name,
@@ -166,18 +169,16 @@ const routeMotion = {
     <meta id="theme-color" name="theme-color" content="#fbf7ed" />
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" type="image/png" href={siteIcon} />
-    <link rel="apple-touch-icon" href={siteIcon} />
+    <link rel="apple-touch-icon" href="/avatars/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     {walineServer && <meta name="waline-server" content={walineServer} />}
     {walineOrigin && <link rel="preconnect" href={walineOrigin} crossorigin />}
     <link rel="preconnect" href="https://weavatar.com" />
     <link rel="preconnect" href="https://q1.qlogo.cn" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=ZCOOL+KuaiLe&display=swap"
-    />
+    {/* 手写体不再引 Google Fonts：那条外链是阻塞渲染的第三方请求，
+        实测 CSS 215KB / 185 个 unicode-range 子集（还要再拉字体分片），
+        换来的是「标题用马善政体」的观感。字体栈已回退到系统楷体
+        （见 global.css --font-hand / --font-hand-cn），首屏省掉一个第三方域名。 */}
     <title>{pageTitle}</title>
     <link rel="canonical" href={canonicalUrl} />
     {noindex && <meta name="robots" content="noindex, follow" />}
@@ -1090,22 +1091,14 @@ const routeMotion = {
           return true;
         };
 
-        // 运行时字段（图标 / 歌单等非 DOM 区块）：服务端在响应里带最新值，这里按需刷进 head 与组件属性。
-        // - icon：后台「网站图标」→ favicon / apple-touch 两个 link（外壳里的 href 是构建快照）
+        // 运行时字段（歌单等非 DOM 区块）：服务端在响应里带最新值，这里按需刷进组件属性。
+        // - icon 的运行时刷新已停用：favicon 改用构建期小尺寸产物（optimize-site-icons.mjs），
+        //   后台原始 siteIcon 是 2MB+ 大图，运行时换回去会把首屏优化打穿；
+        //   后台改图标后重新部署即可生效。
         // - playlist：后台「歌单 ID」；null 表示未配置，退回外壳里的 baked 值（env 兜底在构建期已解析）
         const applyRuntime = (runtime) => {
           if (!runtime || typeof runtime !== 'object') return false;
           let changed = false;
-
-          const icon = typeof runtime.icon === 'string' ? runtime.icon : '';
-          if (icon) {
-            document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]').forEach((link) => {
-              if (link.getAttribute('href') !== icon) {
-                link.setAttribute('href', icon);
-                changed = true;
-              }
-            });
-          }
 
           const player = document.querySelector('[data-music-player]');
           if (player) {

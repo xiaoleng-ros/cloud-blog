@@ -1925,7 +1925,9 @@ const playlistHref = `https://music.163.com/#/playlist?id=${encodeURIComponent(p
   }
 </style>
 
-<script is:inline>
+<script>
+  // @ts-nocheck —— 这段播放器逻辑是从 is:inline 原样抽出来的纯 JS（无类型标注），
+  // 交给 Astro 打包成外链模块以缩小 HTML 体积；保持原样、不做类型迁移。
   (() => {
     const formatTime = (seconds) => {
       if (!Number.isFinite(seconds) || seconds < 0) return '0:00';

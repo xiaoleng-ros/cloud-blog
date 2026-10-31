@@ -16,6 +16,7 @@ import {
   sortPosts,
   sortPostsByDate,
 } from '../lib/posts';
+import { supabaseImageTransform } from 'cloud-blog/shared/post-utils';
 
 const posts = sortPosts(await getCollection('posts'));
 const featuredPosts = posts.filter((post) => (post.data.sticky ?? 0) > 0);
@@ -102,7 +103,7 @@ const coverHue = (value: string) => {
                 {getPostCover(heroPicks[0]) ? (
                   <span class="pick-hero__thumb">
                     <img
-                      src={getPostCover(heroPicks[0])}
+                      src={supabaseImageTransform(getPostCover(heroPicks[0]), { width: 800, quality: 72 })}
                       alt={heroPicks[0].data.coverAlt ?? ''}
                       width="800"
                       height="400"
@@ -136,7 +137,7 @@ const coverHue = (value: string) => {
                       <a class="pick-side__item" href={getPostPath(post)}>
                         {getPostCover(post) ? (
                           <span class="pick-side__thumb">
-                            <img src={getPostCover(post)} alt={post.data.coverAlt ?? ''} width="400" height="200" loading="lazy" referrerpolicy="no-referrer" />
+                            <img src={supabaseImageTransform(getPostCover(post), { width: 400, quality: 72 })} alt={post.data.coverAlt ?? ''} width="400" height="200" loading="lazy" referrerpolicy="no-referrer" />
                           </span>
                         ) : (
                           <span

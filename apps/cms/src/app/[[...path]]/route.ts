@@ -3,6 +3,7 @@ import { join, extname, resolve, sep } from 'node:path'
 import { NextResponse } from 'next/server'
 import { renderBlocksForPathname, resolveLegacyPostPath } from '../../lib/blog-render'
 import { injectSyncBlocks } from '../../lib/html-inject'
+import { createHtmlResponse } from '../../lib/html-compress'
 
 // 每个 HTML 响应都要按最新后台数据渲染区块，必须走运行时（不能在构建期预渲染）
 export const dynamic = 'force-dynamic'
@@ -209,11 +210,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 async function renderShellWithData(
   html: string,
   pathname: string,
-): Promise<{ html: string; title: string | null; notFound: boolean }> {
+): Promise<{ html: string; title: string | null; notFound: boolean; version: string | null }> {
   try {
     const timeout = injectWarmedUp ? WARM_INJECT_TIMEOUT_MS : COLD_INJECT_TIMEOUT_MS
     const result = await withTimeout(renderBlocksForPathname(pathname), timeout)
-    if (!result) return { html, title: null, notFound: false }
+    if (!result) return { html, title: null, notFound: false, version: null }
     injectWarmedUp = true
 
     const blocks: Record<string, string> = {}
@@ -222,17 +223,18 @@ async function renderShellWithData(
       if (typeof value === 'string') blocks[id] = value
     }
     if (Object.keys(blocks).length === 0) {
-      return { html, title: result.title ?? null, notFound: result.notFound }
+      return { html, title: result.title ?? null, notFound: result.notFound, version: result.version ?? null }
     }
 
     return {
       html: injectSyncBlocks(html, blocks, result.version, result.title).html,
       title: result.title ?? null,
       notFound: result.notFound,
+      version: result.version ?? null,
     }
   } catch (err) {
     console.error('[blog-html] 注入后台数据失败，返回静态外壳:', err)
-    return { html, title: null, notFound: false }
+    return { html, title: null, notFound: false, version: null }
   }
 }
 
@@ -447,14 +449,11 @@ export async function GET(
   if (htmlPath) {
     // 同上：外壳路径运行时才确定，禁止 turbopack 据此做整项目追踪（见 walkUpFor 注释）
     const shell = readFileSync(/* turbopackIgnore: true */ htmlPath, 'utf-8')
-    const { html } = await renderShellWithData(shell, pathname)
-    return new NextResponse(html, {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        // HTML 外壳禁止缓存：数据虽是响应时注入的，但 CDN/浏览器一旦缓存外壳，
-        // 后台改动就会延迟可见。
-        'Cache-Control': 'no-store',
-      },
+    const { html, version } = await renderShellWithData(shell, pathname)
+    // 「禁止缓存」的注释仍然成立：CDN/浏览器一旦缓存外壳，后台改动就会延迟可见。
+    // 压缩只影响传输体积，不改变这一点（见 lib/html-compress.ts）。
+    return createHtmlResponse(html, request, {
+      cacheKey: version ? `${pathname}@${version}` : pathname,
     })
   }
 
@@ -468,11 +467,8 @@ export async function GET(
       // 别拿模板拼出半成品页面
       if (!injected.notFound) {
         const html = rewriteTemplateHead(injected.html, shape.pathname, pathname, injected.title)
-        return new NextResponse(html, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-          },
+        return createHtmlResponse(html, request, {
+          cacheKey: injected.version ? `${pathname}@${injected.version}` : pathname,
         })
       }
     } catch (err) {
@@ -484,10 +480,7 @@ export async function GET(
   const htmlDir = resolveHtmlDir()
   const notFoundPath = htmlDir ? join(htmlDir, '404.html') : null
   if (notFoundPath && existsSync(notFoundPath)) {
-    return new NextResponse(readFileSync(notFoundPath, 'utf-8'), {
-      status: 404,
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-    })
+    return createHtmlResponse(readFileSync(notFoundPath, 'utf-8'), request, { status: 404 })
   }
 
   return new NextResponse('Not Found', { status: 404 })
