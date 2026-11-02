@@ -131,6 +131,16 @@ const normalize = (raw: RawAdminComment): WalineComment => {
 
 const POSTS_PATH_PREFIX = '/posts'
 
+/**
+ * 「后台可管理」的评论范围：文章详情页 + 友链页。
+ *
+ * 友链页（/friends）挂的是同一个 Waline 组件，评论落在同一张 wl_comment 表里，
+ * 只是 url 不是 /posts/*。若这里只认 /posts，那些留言在后台「评论管理」里永远看不到；
+ * 而 COMMENT_AUDIT=true 时新留言默认是 waiting —— 等于永久待审、永远不显示，
+ * 作者还以为评论区坏了。
+ */
+const MANAGED_PATH_PREFIXES = [POSTS_PATH_PREFIX, '/friends']
+
 function isPostComment(url: string): boolean {
   if (!url) return false
   let pathname = url
@@ -139,7 +149,9 @@ function isPostComment(url: string): boolean {
   } catch {
     /* 解析失败按原串 */
   }
-  return pathname === POSTS_PATH_PREFIX || pathname.startsWith(`${POSTS_PATH_PREFIX}/`)
+  return MANAGED_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  )
 }
 
 /**

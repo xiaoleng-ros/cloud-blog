@@ -52,6 +52,8 @@ import {
 import { siteAge } from 'cloud-blog/shared/site-age'
 // 站点统计聚合（stats 页卡片/标签数用）：与前台同一份实现
 import { buildSiteStats } from 'cloud-blog/shared/site-stats'
+// 友链卡片配色：与前台 friends.astro 共用同一份散列（同站名同色，两条链路不漂移）
+import { friendColorOf } from 'cloud-blog/shared/friend-colors'
 // 图标唯一一张表：与 Astro 的 Icon.astro 同一份，品牌图形带官方色
 import {
   BRAND_ICONS,
@@ -65,6 +67,7 @@ import {
 const mdSanitizeSchema = buildMdSanitizeSchema(defaultSchema)
 
 import {
+  type FriendEntry,
   type MdEntry,
   type ProjectEntry,
   getSyncData,
@@ -591,9 +594,15 @@ function icpOf(settings: SyncData['settings'] | null | undefined): string {
  * 页脚头像 / favicon：统一用构建期生成的小尺寸产物（optimize-site-icons.mjs），
  * 不引用后台 siteIcon 原图（实测 2.38MB PNG，会把首屏优化打穿）。
  * 与 Footer.astro / BaseLayout.astro 的静态侧保持同一口径；后台改图后需重新部署。
+ *
+ * ⚠️ 那些产物在 `apps/blog/dist/avatars/`，只有 `astro build` 之后才存在。
+ * 开发环境没有 dist，返回写死路径就是裂图 —— dev 下回退后台「网站图标」（数据库真图），
+ * 让本地也能看到自己的头像。
  */
-function avatarOf(_settings: SyncData['settings'] | null | undefined): string {
-  return '/avatars/avatar-80.webp'
+function avatarOf(settings: SyncData['settings'] | null | undefined): string {
+  if (process.env.NODE_ENV === 'production') return '/avatars/avatar-80.webp'
+  const icon = String(settings?.siteIcon ?? '').trim()
+  return icon ? safeHref(icon, '/avatars/avatar.png') : '/avatars/avatar.png'
 }
 
 /**
@@ -1313,6 +1322,84 @@ function renderAboutProjects(projects: ProjectEntry[]): string {
 }
 
 // ---------------------------------------------------------------------------
+// 友链（/friends）
+// ---------------------------------------------------------------------------
+
+/** 卡片右上角的「活跃信号」小图标（与 friends.astro 的 SIGNAL_ICON 逐字一致） */
+const FRIEND_SIGNAL_ICON =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="3" y="13" width="3.4" height="7.6" rx="1.2"/><rect x="9.3" y="9" width="3.4" height="11.6" rx="1.2"/><rect x="15.6" y="4.4" width="3.4" height="16.2" rx="1.2"/></svg>';
+
+/** 空态里那颗心（与 friends.astro 用同一个 Icon name，路径取自共享图标表） */
+const FRIEND_EMPTY_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconInnerMarkup('heart')}</svg>`;
+
+/** 单张友链项（结构与 friends.astro 保持一致，class 名一一对应） */
+function renderFriendCard(friend: FriendEntry): string {
+  // 两条渲染链路都再过一次协议白名单：后台校验只覆盖新写入的数据，
+  // 早期手工灌库的记录可能是任意字符串
+  const href = safeHref(friend.url, '#')
+  const avatar = friend.avatar ? safeHref(friend.avatar, '') : ''
+  const initial = Array.from(friend.name.trim())[0] ?? '?'
+  // 首字常驻 + 图片叠加：头像链接失效时 onerror 把 img 摘掉，露出的是首字而不是裂图
+  const avatarInner =
+    `<span class="friend-item__initial" aria-hidden="true">${escapeHtml(initial)}</span>` +
+    (avatar
+      ? `<img src="${escapeAttr(avatar)}" alt="" width="52" height="52" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()" />`
+      : '')
+  const memo = friend.description
+    ? `<span class="friend-item__memo">${escapeHtml(friend.description)}</span>`
+    : ''
+  // 卡片配色与前台共用同一份散列：同一站名在两条链路上必须同色，
+  // 否则后台改一次友链，页面上的卡片会集体换色
+  const color = friendColorOf(friend.name)
+
+  return `<li class="friend-item" style="--card-bg:${escapeAttr(color.bg)};--card-fg:${escapeAttr(color.fg)}">
+  <a class="friend-item__link" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer"${friend.note ? ` title="${escapeAttr(friend.note)}"` : ''}>
+    <span class="friend-item__avatar">${avatarInner}</span>
+    <span class="friend-item__text">
+      <span class="friend-item__name">${escapeHtml(friend.name)}</span>${memo}
+    </span>
+    <span class="friend-item__mark" aria-hidden="true">${FRIEND_SIGNAL_ICON}</span>
+  </a>
+</li>`
+}
+
+/**
+ * 友链列表区块：所有友链平铺成一个网格，不按 group 分区。
+ *
+ * 与 friends.astro 保持同一套结构（ul.friend-items > li.friend-item），
+ * 站长不需要分组 —— 后台的 group 字段仍保留，但前台不再据此切区块，
+ * 所以不会出现「佬们 / 朋友们」这类分组标题。
+ */
+function renderFriends(friends: FriendEntry[]): string {
+  if (friends.length === 0) {
+    return `<div class="friend-empty">
+  <span class="friend-empty__icon" aria-hidden="true">${FRIEND_EMPTY_ICON}</span>
+  <p class="friend-empty__title">还没有友链</p>
+  <p class="friend-empty__hint">想交换的话，在下面留言，或者发邮件给我。</p>
+</div>`
+  }
+
+  // 不分组：所有友链平铺成一个网格，与 friends.astro 同结构。
+  // group 字段仍留在后台（将来真想分区再启用），但前台不再按它切区块。
+  return `<ul class="friend-items">${friends.map((item) => renderFriendCard(item)).join('')}</ul>`
+}
+
+/** /friends 页区块 */
+async function friendsBlocks(ctx: SyncData): Promise<Record<string, string | null>> {
+  const settings = ctx.settings
+  const siteName = settings?.siteName ?? site.name
+
+  return {
+    brandName: siteName,
+    navLinks: renderNavLinks(ctx.nav, '/friends'),
+    ...footerBlocks(settings),
+    friendsList: renderFriends(ctx.friends),
+    // 页头计数：后台增删友链后无需重建静态外壳也能更新
+    friendsCount: `共 ${ctx.friends.length} 位邻居`,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 各页面 blocks 组装
 // ---------------------------------------------------------------------------
 
@@ -1320,6 +1407,8 @@ interface SyncData {
   posts: MdEntry[]
   notes: MdEntry[]
   projects: ProjectEntry[]
+  /** 友链（仅 status=published），/friends 页平铺展示，不分组 */
+  friends: FriendEntry[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string }>
   /** Media 集合 url → alt 映射，用于正文图片 alt 补齐 */
@@ -1973,6 +2062,7 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
     posts: snapshot.posts,
     notes: snapshot.notes,
     projects: snapshot.projects,
+    friends: snapshot.friends,
     settings: snapshot.settings,
     nav: snapshot.nav,
     mediaAltMap: snapshot.mediaAltMap,
@@ -2004,6 +2094,9 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
   } else if (path === '/about/') {
     blocks = await aboutBlocks(ctx)
     title = `关于 - ${siteName}`
+  } else if (path === '/friends/') {
+    blocks = await friendsBlocks(ctx)
+    title = `友链 - ${siteName}`
   } else if (path === '/stats/') {
     blocks = await statsBlocks(ctx)
     title = `数据统计 - ${siteName}`

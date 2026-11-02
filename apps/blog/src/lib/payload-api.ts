@@ -388,6 +388,62 @@ export async function fetchNavItems(): Promise<Array<{ href: string; label: stri
   }
 }
 
+/** Payload friends 集合的 API 形状 */
+interface ApiFriend {
+  id: number;
+  name: string;
+  url: string;
+  description?: string | null;
+  avatar?: string | null;
+  group?: string | null;
+  groupDescription?: string | null;
+  note?: string | null;
+  sortOrder?: number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  status: string;
+}
+
+/** 友链条目（/friends 页）。用 type 而非 interface：理由同 ProjectEntry（要能当 Record 传给 parseData） */
+export type FriendEntry = {
+  id: string;
+  name: string;
+  url: string;
+  description?: string;
+  avatar?: string;
+  group: string;
+  groupDescription?: string;
+  note?: string;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** 拉取已通过的友链（按 sortOrder 升序） */
+export async function fetchFriends(): Promise<FriendEntry[]> {
+  const { docs } = await fetchJson<PayloadListResponse<ApiFriend>>(
+    '/api/friends?limit=0&sort=sortOrder&depth=0',
+  );
+
+  return docs
+    // 后台 access 已过滤，这里再挡一次：匿名 Access-Control 配错时不会把待审内容带上线
+    .filter((doc) => doc.status === 'published')
+    .map((doc) => ({
+      id: String(doc.id),
+      name: String(doc.name ?? ''),
+      // 站外地址：协议白名单兜底，非法值退化成惰性 '#'（与 projects 的 href 同策略）
+      url: safeHref(doc.url, '#'),
+      description: doc.description ?? undefined,
+      avatar: doc.avatar ? safeHref(doc.avatar, '') || undefined : undefined,
+      group: doc.group?.trim() || '朋友们',
+      groupDescription: doc.groupDescription ?? undefined,
+      note: doc.note ?? undefined,
+      sortOrder: Number(doc.sortOrder ?? 0),
+      createdAt: doc.createdAt ?? undefined,
+      updatedAt: doc.updatedAt ?? undefined,
+    }));
+}
+
 /** 拉取项目列表（关于页项目区，按 sortOrder 升序） */
 export async function fetchProjects(): Promise<ProjectEntry[]> {
   const { docs } = await fetchJson<PayloadListResponse<ApiProject>>(

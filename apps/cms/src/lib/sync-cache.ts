@@ -28,6 +28,8 @@ export interface SyncSnapshot {
   posts: any[]
   notes: any[]
   projects: any[]
+  /** 友链（已通过），/friends 页按 group 聚合渲染 */
+  friends: any[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string }>
   navUpdatedAt?: string

@@ -47,6 +47,8 @@ const STATIC_SYNC_PATHS = new Set([
   '/notes',
   '/archive',
   '/about',
+  // 友链页：列表与页头计数都由后台数据决定
+  '/friends',
   // 标签墙 / 统计页有同步区块（标签计数、概览卡、逐年列表）
   '/tags',
   '/stats',

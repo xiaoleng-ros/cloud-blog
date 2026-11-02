@@ -71,6 +71,13 @@ const paths: Record<string, React.ReactNode> = {
       <circle cx="8.5" cy="9" r="1.4" />
     </>
   ),
+  friends: (
+    <>
+      <path d="M9.6 14.4l4.8-4.8" />
+      <path d="M8.2 11.6l-2 2a3.6 3.6 0 105.1 5.1l2-2" />
+      <path d="M15.8 12.4l2-2a3.6 3.6 0 10-5.1-5.1l-2 2" />
+    </>
+  ),
   media: (
     <>
       <rect x="3.5" y="5" width="17" height="14" rx="2" />

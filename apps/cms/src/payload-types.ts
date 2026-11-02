@@ -73,6 +73,7 @@ export interface Config {
     tags: Tag;
     media: Media;
     projects: Project;
+    friends: Friend;
     users: User;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -87,6 +88,7 @@ export interface Config {
     tags: TagsSelect<false> | TagsSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     projects: ProjectsSelect<false> | ProjectsSelect<true>;
+    friends: FriendsSelect<false> | FriendsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -146,7 +148,7 @@ export interface Post {
    */
   cover?: string | null;
   /**
-   * 仅能选择系统里已有的分类，URL 由「分类名 + 文章 ID」自动拼接
+   * 仅能选择系统里已有的分类。URL 由「分类标识 + 文章 ID」自动拼接（分类未填标识时回退分类名）
    */
   categories: number | Category;
   tags?: (number | Tag)[] | null;
@@ -179,7 +181,7 @@ export interface Category {
   id: number;
   name: string;
   /**
-   * 仅用于导入脚本等内部标识；前台文章 URL 用的是「分类名称」，不是这一项。
+   * 用于前台文章 URL 的分类段，例如填 daily → /posts/daily/46。留空则回退使用「分类名称」。
    */
   slug?: string | null;
   /**
@@ -289,6 +291,69 @@ export interface Project {
   createdAt: string;
 }
 /**
+ * 友链卡片。前台 /friends 把所有「已通过」的友链平铺成卡片墙（不分组），按排序值升序展示。
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "friends".
+ */
+export interface Friend {
+  id: number;
+  /**
+   * 卡片上显示的名字，如「纸鹿摸鱼处」。
+   */
+  name: string;
+  /**
+   * 必须是 http(s) 开头的完整地址。唯一约束：同一个地址不能重复添加。
+   */
+  url: string;
+  /**
+   * 卡片正面显示的副标题，建议 30 字以内，超过会被 CSS 截断。
+   */
+  description?: string | null;
+  /**
+   * 外链图片地址（建议方形，200×200 以上）。留空时前台用站点名首字兜底。
+   */
+  avatar?: string | null;
+  /**
+   * ⚠️ 当前前台**不分组**：所有友链平铺成一个网格，这个字段暂时不生效。保留它是为了将来想分区时不用改数据。
+   */
+  group: string;
+  /**
+   * ⚠️ 当前前台不分组，此字段暂不生效（原因同上）。
+   */
+  groupDescription?: string | null;
+  /**
+   * 卡片悬停时显示的私货，如「我是看着这位的视频搭起来的第一个博客」。
+   */
+  note?: string | null;
+  /**
+   * 数字越小越靠前。同组内按这个值升序排列。
+   */
+  sortOrder?: number | null;
+  /**
+   * 只有「已通过」会出现在前台。
+   */
+  status: 'pending' | 'published' | 'rejected' | 'hidden';
+  /**
+   * 访客经申请接口提交的会自动标记为「访客申请」，方便筛出待审队列。
+   */
+  source: 'manual' | 'apply';
+  /**
+   * 仅后台可见，前台任何接口都不会返回。对方站点失联时联系用。
+   */
+  email?: string | null;
+  /**
+   * 访客提交时填的留言，仅后台可见。
+   */
+  message?: string | null;
+  /**
+   * 申请接口自动记录，用于识别刷单/同源重复提交。
+   */
+  submitIp?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
@@ -374,6 +439,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'projects';
         value: number | Project;
+      } | null)
+    | ({
+        relationTo: 'friends';
+        value: number | Friend;
       } | null)
     | ({
         relationTo: 'users';
@@ -521,6 +590,27 @@ export interface ProjectsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "friends_select".
+ */
+export interface FriendsSelect<T extends boolean = true> {
+  name?: T;
+  url?: T;
+  description?: T;
+  avatar?: T;
+  group?: T;
+  groupDescription?: T;
+  note?: T;
+  sortOrder?: T;
+  status?: T;
+  source?: T;
+  email?: T;
+  message?: T;
+  submitIp?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
@@ -606,6 +696,10 @@ export interface SiteSetting {
   neteasePlaylistId?: string | null;
   siteDescription?: string | null;
   /**
+   * 对外展示的**正式**地址（如 https://blog.iceuu.icu）。友链页「我的博客信息」直接展示它 —— 那里是给别人抄的，不能拿构建环境的 SITE_URL（本地会是 localhost）。留空则回退环境变量 SITE_URL。
+   */
+  siteUrl?: string | null;
+  /**
    * 用作浏览器标签页图标与页脚头像；留空则用站点默认头像。
    */
   siteIcon?: string | null;
@@ -666,6 +760,7 @@ export interface SiteSettingsSelect<T extends boolean = true> {
   githubRepo?: T;
   neteasePlaylistId?: T;
   siteDescription?: T;
+  siteUrl?: T;
   siteIcon?: T;
   siteIcp?: T;
   siteCreatedAt?: T;

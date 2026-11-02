@@ -1,0 +1,863 @@
+---
+import { getCollection } from 'astro:content';
+import { friendColorOf } from 'cloud-blog/shared/friend-colors';
+import CommentsBox from '../components/CommentsBox.astro';
+import Icon from '../components/Icon.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE_DEFAULTS } from '../lib/site-defaults';
+import { getSiteSettings } from '../lib/site-settings';
+
+/**
+ * 友链页
+ *
+ * 排版参照 blog.quenan.cn/link：
+ *   1. 分组标题是超大的浅色手写体（近乎水印），描述紧随其下居中；
+ *   2. 友链项只保留「圆形头像 + 站名（+ 一行灰色小字）」，没有卡片边框与底色；
+ *   3. 底部是「我的博客信息 / 申请友链」两个标签页，信息表逐行带复制按钮。
+ *
+ * 三条链路必须结构一致，否则同步一次就变形：
+ *   1. 本文件（构建期产物）；
+ *   2. apps/cms/src/lib/blog-render.tsx 的 renderFriends（运行时注入）；
+ *   3. 上面两者 class 名一一对应，本页 <style> 提供的样式才吃得上。
+ */
+
+const all = await getCollection('friends');
+// loader 写入顺序来自后台 sortOrder，但 getCollection 不保证顺序，这里显式再排一次
+const friends = [...all].sort((a, b) => (a.data.sortOrder ?? 0) - (b.data.sortOrder ?? 0));
+
+
+/** 头像缺失时的首字兜底（用 Array.from 而不是 [0]：避免把 emoji 劈成半个代理对） */
+const initialOf = (name: string) => Array.from(name.trim())[0] ?? '?';
+
+// ---- 我的站点信息：给来交换的人抄 ----
+const settings = await getSiteSettings();
+const siteName = settings?.siteName ?? SITE_DEFAULTS.siteName;
+const siteAuthor = settings?.siteAuthor ?? SITE_DEFAULTS.siteAuthor;
+const siteDescription = settings?.siteDescription ?? SITE_DEFAULTS.siteDescription;
+// SITE_URL 由 astro.config 经 vite.define 注入，构建期缺失会直接报错，这里不会拿到 undefined
+/**
+ * 对外展示的正式地址：优先读后台「站点设置 → 站点网址」。
+ *
+ * 这里**不能**直接用 import.meta.env.SITE_URL 当主来源 —— 那是构建环境地址，
+ * 本地开发下就是 http://localhost:3000，拿去交换友链没有任何意义。
+ * env 只作兜底（后台没填时）。
+ */
+const siteUrl = (settings?.siteUrl ?? '').trim() || import.meta.env.SITE_URL || SITE_DEFAULTS.siteUrl;
+
+/**
+ * 头像：优先用后台上传的 siteIcon（真实图片，Supabase Storage 地址）。
+ *
+ * 原先写死 `/avatars/avatar-80.webp` 是错的方向 —— 那是构建产物
+ * （apps/cms/scripts/optimize-site-icons.mjs 生成），dev 下根本不存在，
+ * 页面上就是一张裂图。
+ */
+const siteAvatar = (settings?.siteIcon ?? '').trim() || `${siteUrl}/avatars/avatar.png`;
+
+/**
+ * 信息表：字段名 + 值。逐行渲染成「标签列 / 值 / 复制按钮」三栏。
+ * 复制按钮的图标用内联 SVG（icon-paths 里没有 copy，为一个按钮去改共享图标表不划算）。
+ */
+const infoRows = [
+  { label: '博主', value: siteAuthor },
+  { label: '标题', value: siteName },
+  { label: '介绍', value: siteDescription },
+  { label: '网址', value: siteUrl },
+  { label: '头像', value: siteAvatar },
+];
+
+const COPY_ICON =
+  '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M15 5.6A2.6 2.6 0 0 0 12.4 3H6.6A3.6 3.6 0 0 0 3 6.6v5.8A2.6 2.6 0 0 0 5.6 15"/></svg>';
+
+/** 卡片右上角的「活跃信号」小图标（参考站同位置的那三根柱） */
+const SIGNAL_ICON =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="3" y="13" width="3.4" height="7.6" rx="1.2"/><rect x="9.3" y="9" width="3.4" height="11.6" rx="1.2"/><rect x="15.6" y="4.4" width="3.4" height="16.2" rx="1.2"/></svg>';
+
+/** 站长的联系邮箱（申请方式之一，另可在评论区留言） */
+const APPLY_EMAIL = 'iceuucloud@yeah.net';
+
+/** 友链信息的参考格式：放在代码块里，右上角一键复制 */
+const SAMPLE_CODE = `export default {
+  title: '博客名称',
+  desc: '博客描述',
+  link: '博客地址',
+  avatar: '个人头像',
+} satisfies Friend`;
+
+const countText = `共 ${friends.length} 位邻居`;
+---
+
+<BaseLayout
+  title="友链"
+  description={`${siteAuthor}的友链：一路互相帮忙的独立博客与它们的近况。`}
+  pageClass="content-page friends-page"
+>
+  <section class="friends-page">
+    <!-- 页头刻意做小：分组标题才是这一页的视觉主角，页头只承担语义上的 h1 -->
+    <header class="friends-hero">
+      <h1 class="friends-hero__title">友链</h1>
+      <p class="friends-hero__count" data-sync-block="friendsCount">{countText}</p>
+    </header>
+
+    <!-- 友链列表：容器无条件渲染，空态由容器内文案承担 -->
+    <div class="friends-list" data-sync-block="friendsList">
+      {friends.length === 0 ? (
+        <div class="friend-empty">
+          <span class="friend-empty__icon" aria-hidden="true">
+            <Icon name="heart" size={22} />
+          </span>
+          <p class="friend-empty__title">还没有友链</p>
+          <p class="friend-empty__hint">想交换的话，在下面留言，或者发邮件给我。</p>
+        </div>
+      ) : (
+        /* 不分组：所有友链平铺成一个网格。
+           group 字段仍保留在后台（将来真想分区再启用），但前台不再按它切区块，
+           所以不会出现「佬们 / 朋友们」这类标题。 */
+        <ul class="friend-items">
+          {friends.map((friend) => (
+            <li
+              class="friend-item"
+              style={(() => {
+                const c = friendColorOf(friend.data.name);
+                return `--card-bg:${c.bg};--card-fg:${c.fg}`;
+              })()}
+            >
+              <a
+                class="friend-item__link"
+                href={friend.data.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={friend.data.note ?? undefined}
+              >
+                <span class="friend-item__avatar">
+                  {/* 首字常驻在头像圈里当兜底：没填头像、或头像链接失效时，
+                      露出来的就是它，而不是一个裂图图标 */}
+                  <span class="friend-item__initial" aria-hidden="true">{initialOf(friend.data.name)}</span>
+                  {friend.data.avatar && (
+                    <img
+                      src={friend.data.avatar}
+                      alt=""
+                      width="52"
+                      height="52"
+                      loading="lazy"
+                      decoding="async"
+                      referrerpolicy="no-referrer"
+                      onerror="this.remove()"
+                    />
+                  )}
+                </span>
+                <span class="friend-item__text">
+                  <span class="friend-item__name">{friend.data.name}</span>
+                  {friend.data.description && (
+                    <span class="friend-item__memo">{friend.data.description}</span>
+                  )}
+                </span>
+                <span class="friend-item__mark" aria-hidden="true">
+                  <Fragment set:html={SIGNAL_ICON} />
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+
+    <!-- 底部标签页：我的博客信息 / 申请友链 -->
+    <div class="friend-panel" data-friend-panel>
+      <div class="friend-panel__tabs" role="tablist" aria-label="友链信息与申请">
+        <button
+          class="friend-tab"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          data-tab="info"
+          aria-controls="friend-panel-info"
+        >
+          我的博客信息
+        </button>
+        <button
+          class="friend-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-tab="apply"
+          aria-controls="friend-panel-apply"
+        >
+          申请友链
+        </button>
+      </div>
+
+      <!-- 面板一：我的博客信息（默认显示） -->
+      <div class="friend-panel__body" id="friend-panel-info" data-panel="info" role="tabpanel">
+        <div class="info-brand">
+          <img src={siteAvatar} alt="" width="40" height="40" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+          <span class="info-brand__name">{siteName}</span>
+        </div>
+
+        <dl class="info-table">
+          {infoRows.map((row) => (
+            <div class="info-row">
+              <dt class="info-row__label">{row.label}</dt>
+              <dd class="info-row__value" title={row.value}>{row.value}</dd>
+              <button
+                class="info-row__copy"
+                type="button"
+                data-copy={row.value}
+                aria-label={`复制${row.label}`}
+              >
+                <Fragment set:html={COPY_ICON} />
+              </button>
+            </div>
+          ))}
+        </dl>
+        <p class="info-hint">把上面几行加到你的友链页，再来这边登记就好。</p>
+      </div>
+
+      <!-- 面板二：申请说明 + 表单 -->
+      <div class="friend-panel__body" id="friend-panel-apply" data-panel="apply" role="tabpanel" hidden>
+        <ul class="friend-req">
+          <li>
+            <p class="friend-req__lead">
+              <span class="friend-req__title">申请要求</span>：原则上与多数独立博客的友链要求一致
+            </p>
+            <ul class="friend-req__sub">
+              <li>能够长期更新维护</li>
+              <li>遵守法律法规，不涉及违法违规内容</li>
+              <li>友链秉着相互的原则</li>
+            </ul>
+          </li>
+          <li>
+            <p class="friend-req__lead">
+              <span class="friend-req__title">申请方式</span>：在评论区留言，或发送邮件到
+              <a href={`mailto:${APPLY_EMAIL}`}>{APPLY_EMAIL}</a>
+            </p>
+            <ul class="friend-req__sub">
+              <li>标题注明「友链申请：你的昵称」</li>
+              <li>以任意形式附上友链信息：</li>
+            </ul>
+            <div class="friend-code">
+              <button class="friend-code__copy" type="button" data-copy={SAMPLE_CODE} aria-label="复制友链信息格式">
+                复制
+              </button>
+              <pre><code>{SAMPLE_CODE}</code></pre>
+            </div>
+          </li>
+          <li>
+            <p class="friend-req__lead">
+              <span class="friend-req__title">信息可能会被适当修改</span>，以保证展示效果
+            </p>
+          </li>
+        </ul>
+
+      </div>
+    </div>
+
+    <!-- 评论区：与文章页共用同一个 Waline 组件，path 由 location.pathname 自动取 /friends，
+         所以这里的留言和文章评论存在同一张表里、走同一套审核（后台「评论管理」能一起审）。
+         不加标题：Waline 组件自带「评论 N」表头，再套一层「评论区」会重复。 -->
+    <div class="friend-comments">
+      <CommentsBox />
+    </div>
+  </section>
+</BaseLayout>
+
+<script>
+  /**
+   * 三个交互都在这一处：标签页切换、逐行复制、申请表单提交。
+   *
+   * 绑定走 astro:page-load：本站用 ClientRouter 做视图过渡，脚本只在首次加载时执行一次，
+   * 从别的页面点进来时 DOM 是新的，必须重新绑定。
+   */
+  type FriendsWindow = Window & { __blogFriendPageBound?: boolean };
+  const w = window as FriendsWindow;
+
+  const bindTabs = () => {
+    const root = document.querySelector<HTMLElement>('[data-friend-panel]');
+    if (!root || root.dataset.bound === '1') return;
+    root.dataset.bound = '1';
+
+    const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-tab]'));
+    const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-panel]'));
+    const select = (key: string) => {
+      for (const tab of tabs) tab.setAttribute('aria-selected', tab.dataset.tab === key ? 'true' : 'false');
+      for (const panel of panels) panel.hidden = panel.dataset.panel !== key;
+    };
+    for (const tab of tabs) tab.addEventListener('click', () => select(tab.dataset.tab ?? 'info'));
+  };
+
+  const bindCopy = () => {
+    for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
+      if (button.dataset.bound === '1') continue;
+      button.dataset.bound = '1';
+      button.addEventListener('click', async () => {
+        const value = button.dataset.copy ?? '';
+        let ok = true;
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {
+          // 非安全上下文（http 局域网）下 clipboard 不可用，用临时 textarea 兜底
+          try {
+            const area = document.createElement('textarea');
+            area.value = value;
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.select();
+            ok = document.execCommand('copy');
+            document.body.removeChild(area);
+          } catch {
+            ok = false;
+          }
+        }
+        button.dataset.copied = ok ? '1' : '0';
+        // 纯文字按钮（代码块的「复制」）顺手把文案换掉；图标按钮不能换，会破坏 SVG
+        if (button.classList.contains('friend-code__copy')) {
+          const original = button.dataset.label ?? button.textContent ?? '复制';
+          button.dataset.label = original;
+          button.textContent = ok ? '已复制' : '复制失败';
+          window.setTimeout(() => {
+            button.textContent = original;
+          }, 1400);
+        }
+        window.setTimeout(() => {
+          delete button.dataset.copied;
+        }, 1400);
+      });
+    }
+  };
+
+
+  const init = () => {
+    bindTabs();
+    bindCopy();
+  };
+
+  if (!w.__blogFriendPageBound) {
+    w.__blogFriendPageBound = true;
+    document.addEventListener('astro:page-load', init);
+  }
+  if (document.readyState !== 'loading') init();
+</script>
+
+<style is:global>
+  /* 全局（非 scoped）：列表由后台注入，注入的 DOM 没有 data-astro-cid-* 属性，
+     scoped 选择器匹配不上，整片会退化成裸文本。前缀统一 .friend* / .info*，
+     都是本页独有，全局化不会串味。 */
+
+  body.friends-page main {
+    width: min(100% - 2.5rem, 72rem);
+  }
+
+  .friends-page {
+    max-width: none;
+  }
+
+  /* ---------- 页头：只留一行小标题，不与分组的大水印抢视觉 ---------- */
+  .friends-hero {
+    margin-bottom: 3rem;
+    text-align: center;
+  }
+
+  .friends-hero__title {
+    display: inline-block;
+    margin: 0;
+    font-family: var(--font-hand);
+    font-weight: 400;
+    font-size: 1.7rem;
+    letter-spacing: 0.16em;
+    color: var(--text-muted);
+  }
+
+  .friends-hero__count {
+    margin: 0.3rem 0 0;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+  }
+
+  /* ---------- 友链卡片墙：一卡一色 ---------- */
+  /* 配色由 shared/friend-colors 按站名散列决定，通过 --card-bg / --card-fg 传进来，
+     所以这里只管排版，不写死任何颜色。 */
+  .friend-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
+    gap: 0.85rem;
+    margin: 2.2rem 0 0;
+    padding: 0;
+    list-style: none;
+    text-align: left;
+  }
+
+  .friend-item {
+    min-width: 0;
+  }
+
+  .friend-item__link {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.8rem;
+    /* 右侧多留一点，给右上角的信号图标腾地方 */
+    padding: 0.95rem 1.5rem 0.95rem 0.95rem;
+    border-radius: 12px;
+    background: var(--card-bg);
+    color: var(--card-fg);
+    text-decoration: none;
+    /* 阴影里掺一点卡片色，比纯灰投影更贴 */
+    box-shadow: 0 7px 16px -10px color-mix(in srgb, var(--card-bg) 70%, #2b2620);
+    transition: transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) var(--ease-out);
+  }
+
+  .friend-item__link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 22px -10px color-mix(in srgb, var(--card-bg) 80%, #2b2620);
+  }
+
+  .friend-item__avatar {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    /* 头像底用一层半透明前景色，图片带透明区也能透出卡片底色 */
+    background: color-mix(in srgb, var(--card-fg) 18%, transparent);
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-fg) 22%, transparent);
+  }
+
+  /* 首字铺满整个圈：它一直在，图片盖在上面。
+     图片加载失败时 onerror 会把它 remove，露出的就是首字。 */
+  .friend-item__initial {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-hand);
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--card-fg);
+  }
+
+  .friend-item__avatar img {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .friend-item__text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    min-width: 0;
+  }
+
+  .friend-item__name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 卡片上的描述：单行省略，颜色压在卡片前景色上 */
+  .friend-item__memo {
+    color: color-mix(in srgb, var(--card-fg) 76%, transparent);
+    font-size: 0.76rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 右上角的信号图标：纯装饰 */
+  .friend-item__mark {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.6rem;
+    display: inline-flex;
+    opacity: 0.45;
+    color: var(--card-fg);
+    transition: opacity var(--t-fast) var(--ease-out);
+  }
+
+  .friend-item__link:hover .friend-item__mark {
+    opacity: 0.8;
+  }
+
+  /* 空态：一块虚线留白，不写成「错误/没有内容」那种灰扑扑的提示 */
+  .friend-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 1.6rem 0 2.6rem;
+    padding: 2.8rem 1.5rem;
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    text-align: center;
+  }
+
+  .friend-empty__icon {
+    display: inline-flex;
+    color: color-mix(in srgb, var(--brand) 55%, transparent);
+  }
+
+  .friend-empty__title {
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-hand);
+    font-size: 1.25rem;
+    letter-spacing: 0.06em;
+  }
+
+  .friend-empty__hint {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 0.82rem;
+  }
+
+  /* ---------- 底部标签页 ---------- */
+  .friend-panel {
+    margin-top: 1rem;
+    padding-top: 2.2rem;
+    border-top: 1px dashed var(--hairline);
+  }
+
+  .friend-panel__tabs {
+    display: flex;
+    justify-content: center;
+    gap: 2.4rem;
+    margin-bottom: 1.8rem;
+  }
+
+  .friend-tab {
+    position: relative;
+    padding: 0 0 0.5rem;
+    border: 0;
+    background: none;
+    color: var(--text-faint);
+    font: inherit;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease-out);
+  }
+
+  .friend-tab::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--brand);
+    opacity: 0;
+    transform: scaleX(0.4);
+    transition: opacity var(--t-fast) var(--ease-out), transform var(--t-base) var(--ease-out);
+  }
+
+  .friend-tab:hover {
+    color: var(--text);
+  }
+
+  .friend-tab[aria-selected="true"] {
+    color: var(--text);
+  }
+
+  .friend-tab[aria-selected="true"]::after {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  .friend-panel__body {
+    max-width: 34rem;
+    margin: 0 auto;
+  }
+
+  .friend-panel__body[hidden] {
+    display: none;
+  }
+
+  /* ---------- 我的博客信息 ---------- */
+  .info-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    margin-bottom: 1.35rem;
+  }
+
+  .info-brand img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .info-brand__name {
+    font-family: var(--font-hand);
+    font-size: 1.12rem;
+    letter-spacing: 0.04em;
+  }
+
+  .info-table {
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .info-row {
+    display: grid;
+    grid-template-columns: 4.6rem minmax(0, 1fr) auto;
+    align-items: stretch;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .info-row:last-child {
+    border-bottom: 0;
+  }
+
+  .info-row__label {
+    display: flex;
+    align-items: center;
+    padding: 0.62rem 0.9rem;
+    background: var(--surface-muted);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+  }
+
+  .info-row__value {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+    padding: 0.62rem 0.9rem;
+    font-size: 0.86rem;
+    /* 长 URL 不撑破表格 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .info-row__copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    border: 0;
+    border-left: 1px solid var(--hairline);
+    background: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+  }
+
+  .info-row__copy:hover {
+    color: var(--brand);
+    background: var(--brand-soft);
+  }
+
+  /* 复制成功：图标短暂变成对勾色（用 color 而不是换图标，省一次 DOM 操作） */
+  .info-row__copy[data-copied="1"] {
+    color: #2f7d4f;
+  }
+
+  .info-row__copy[data-copied="0"] {
+    color: var(--brand);
+  }
+
+  .info-hint {
+    margin: 1rem 0 0;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.8rem;
+  }
+
+  /* ---------- 申请说明 ---------- */
+  /* 一级实心圆点（申请要求 / 申请方式 / 备注），二级空心圆（子条目），与参考站的缩进层级一致 */
+  .friend-req {
+    margin: 0 0 1.3rem;
+    padding-left: 1.15rem;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    line-height: 1.9;
+  }
+
+  .friend-req > li {
+    margin-bottom: 0.85rem;
+  }
+
+  .friend-req > li:last-child {
+    margin-bottom: 0;
+  }
+
+  .friend-req > li::marker {
+    color: var(--brand);
+  }
+
+  .friend-req__lead {
+    margin: 0;
+  }
+
+  .friend-req__title {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .friend-req__lead a {
+    color: var(--brand);
+    text-decoration: none;
+    border-bottom: 1px dashed color-mix(in srgb, var(--brand) 55%, transparent);
+    overflow-wrap: anywhere;
+  }
+
+  .friend-req__lead a:hover {
+    border-bottom-style: solid;
+  }
+
+  .friend-req__sub {
+    margin: 0.2rem 0 0;
+    padding-left: 1.15rem;
+    list-style: circle;
+    color: var(--text-faint);
+    line-height: 1.8;
+  }
+
+  .friend-req__sub li::marker {
+    color: color-mix(in srgb, var(--text-faint) 75%, transparent);
+  }
+
+  /* ---------- 友链信息示例代码块 ---------- */
+  .friend-code {
+    position: relative;
+    margin-top: 0.65rem;
+    border-radius: var(--radius-sm);
+    background: var(--code-bg);
+    overflow: hidden;
+  }
+
+  .friend-code pre {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    color: var(--code-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+    font-size: 0.78rem;
+    line-height: 1.8;
+    /* 代码块内的行首缩进要保留，但不能让长行把容器撑破 */
+    white-space: pre;
+  }
+
+  .friend-code code {
+    font: inherit;
+    color: inherit;
+    background: none;
+    padding: 0;
+  }
+
+  .friend-code__copy {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.5rem;
+    padding: 0.1rem 0.45rem;
+    border: 1px solid color-mix(in srgb, var(--code-text) 28%, transparent);
+    border-radius: 6px;
+    background: transparent;
+    color: color-mix(in srgb, var(--code-text) 62%, transparent);
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+  }
+
+  .friend-code__copy:hover {
+    color: var(--code-text);
+    border-color: color-mix(in srgb, var(--code-text) 70%, transparent);
+  }
+
+  .friend-code__copy[data-copied="1"] {
+    color: #6ecf95;
+    border-color: #6ecf95;
+  }
+
+
+  [data-theme="dark"] .info-row__copy[data-copied="1"] {
+    color: #6ecf95;
+  }
+
+  /* ---------- 评论区 ---------- */
+  /* Waline 官方组件的 .cbox 在文章页是左对齐 + 自带顶部分隔线。
+     这里居中，并去掉它自己的边框/上边距 —— 外层的 .friend-comments 已经画了虚线分隔。
+     不设小标题：组件自己就有「评论 N」表头，再加一层「评论区」是重复的。 */
+  .friend-comments {
+    margin-top: 3.8rem;
+    padding-top: 2.2rem;
+    border-top: 1px dashed var(--hairline);
+  }
+
+  .friend-comments .cbox {
+    width: min(100%, 42rem);
+    margin: 0 auto;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width: 720px) {
+    body.friends-page main {
+      width: min(100% - 1.6rem, 72rem);
+    }
+
+    .friends-hero {
+      margin-bottom: 2.4rem;
+    }
+
+    /* 手机两列：16.5rem 的 minmax 在 375px 屏上只会排一列，太浪费纵向空间 */
+    .friend-items {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.15rem 0.9rem;
+      margin-top: 1.6rem;
+    }
+
+    .friend-item__text {
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+
+    .friend-panel__tabs {
+      gap: 1.8rem;
+    }
+
+    .info-row {
+      grid-template-columns: 3.9rem minmax(0, 1fr) auto;
+    }
+
+    .info-row__label {
+      padding: 0.58rem 0.7rem;
+    }
+
+    .info-row__value {
+      padding: 0.58rem 0.7rem;
+      font-size: 0.82rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .friend-item__link:hover .friend-item__avatar {
+      transform: none;
+    }
+  }
+</style>

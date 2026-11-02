@@ -22,7 +22,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
-import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchSiteSettings, fetchSyncDigest, type MdEntry } from './payload-api';
+import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchFriends, fetchSiteSettings, fetchSyncDigest, type MdEntry } from './payload-api';
 import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs';
 
 /**
@@ -48,6 +48,7 @@ const DIGEST_KEYS = {
   settings: 'digest-settings',
   nav: 'digest-nav',
   projects: 'digest-projects',
+  friends: 'digest-friends',
   mediaAlt: 'digest-media-alt',
 } as const
 
@@ -58,6 +59,7 @@ const STAMP_KEYS = {
   settings: 'stamp-settings',
   nav: 'stamp-nav',
   projects: 'stamp-projects',
+  friends: 'stamp-friends',
   media: 'stamp-media',
 } as const
 type StampSource = keyof typeof STAMP_KEYS
@@ -524,6 +526,47 @@ export const payloadProjectsLoader: Loader = {
   },
 };
 
+/**
+ * 友链加载器：API 优先。
+ *
+ * 没有本地 markdown 兜底（友链是纯后台数据），后台不可用时**保留上一轮结果**而不是清空 ——
+ * 与 projects 同策略：构建期后台抖一下不该让整页友链消失。
+ */
+export const payloadFriendsLoader: Loader = {
+  name: 'payload-friends-loader',
+  async load(ctx) {
+    const stamps = await peekStamps();
+    try {
+      const entries = await fetchFriends();
+      ctx.logger.info(`[payload-loader] 友链：从后台 API 载入 ${entries.length} 条`);
+
+      // 先全部 parse 完再整体重建仓库（同 pollFriends）：
+      // dev 的 content store 会持久化到 .astro/，**只 set 不 delete 的话，
+      // 后台删掉的友链会永远残留在本地快照里** —— 表现为「后台已经没有这条，
+      // 前台重启后还在」（2026-11-02 实测踩到）。
+      // 先 parse 再 clear+set，避免中间空窗期读到空仓库。
+      const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = [];
+      for (const entry of entries) {
+        try {
+          parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) });
+        } catch (error) {
+          ctx.logger.warn(`[payload-loader] 友链数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+        }
+      }
+      ctx.store.clear();
+      for (const { id, data } of parsed) ctx.store.set({ id, data });
+
+      ctx.meta.set(DIGEST_KEYS.friends, ctx.generateDigest(JSON.stringify(entries)));
+      commitStamps(ctx, stamps, ['friends']);
+    } catch (error) {
+      // 后台不可用时保留上一轮数据：构建期抖一下不该让整页友链消失
+      ctx.logger.warn(`[payload-loader] 友链后台不可用（${(error as Error).message}），保留上一轮数据`);
+    }
+
+    schedulePolling(ctx, '友链', pollFriends);
+  },
+};
+
 /** touch 刷新信号文件，通知 dev 集成广播浏览器整页刷新 */
 function touchSyncMarker() {
   try {
@@ -666,8 +709,7 @@ async function pollNotes(ctx: LoaderContext): Promise<boolean> {
   return contentChanged || mediaAltChanged;
 }
 
-/** 轮询项目：指纹有变化时清空并重新写入，仅当正文真的变了才触发刷新 */
-async function pollProjects(ctx: LoaderContext): Promise<boolean> {
+/** 轮询项目：指纹有变化时清空并重新写入，仅当正文真的变了才触发刷新 */async function pollProjects(ctx: LoaderContext): Promise<boolean> {
   const digests = await peekStamps();
   if (!stampDiffers(ctx, digests, 'projects')) return false;
   const entries = await fetchProjects();
@@ -690,5 +732,30 @@ async function pollProjects(ctx: LoaderContext): Promise<boolean> {
   }
   ctx.meta.set(DIGEST_KEYS.projects, nextDigest);
   commitStamps(ctx, digests, ['projects']);
+  return contentChanged;
+}
+
+/** 轮询友链：指纹有变化时整体重建，仅当实际内容变了才触发刷新 */
+async function pollFriends(ctx: LoaderContext): Promise<boolean> {
+  const digests = await peekStamps();
+  if (!stampDiffers(ctx, digests, 'friends')) return false;
+  const entries = await fetchFriends();
+  const nextDigest = ctx.generateDigest(JSON.stringify(entries));
+  const contentChanged = ctx.meta.get(DIGEST_KEYS.friends) !== nextDigest;
+  // 同 pollProjects：先 parse 完再 clear+set，避免中间空窗期读到空仓库
+  const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = [];
+  for (const entry of entries) {
+    try {
+      parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) });
+    } catch (error) {
+      ctx.logger.warn(`[payload-loader] 友链数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+    }
+  }
+  ctx.store.clear();
+  for (const { id, data } of parsed) {
+    ctx.store.set({ id, data });
+  }
+  ctx.meta.set(DIGEST_KEYS.friends, nextDigest);
+  commitStamps(ctx, digests, ['friends']);
   return contentChanged;
 }

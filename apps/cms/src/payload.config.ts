@@ -13,6 +13,7 @@ import { randomBytes } from 'crypto'
 import sharp from 'sharp'
 
 import { Categories } from './collections/Categories'
+import { Friends } from './collections/Friends'
 import { Media } from './collections/Media'
 import { Notes } from './collections/Notes'
 import { Posts } from './collections/Posts'
@@ -559,8 +560,8 @@ export default buildConfig({
     fallbackLanguage: 'zh',
     supportedLanguages: { zh },
   },
-  // 数据模型：文章、随笔、分类、标签、图片、用户 + 站点设置/导航管理单例
-  collections: [Posts, Notes, Categories, Tags, Media, Projects, Users],
+  // 数据模型：文章、随笔、分类、标签、图片、项目、友链、用户 + 站点设置/导航管理单例
+  collections: [Posts, Notes, Categories, Tags, Media, Projects, Friends, Users],
   globals: [SiteSettings, Navigation],
   // 富文本编辑器
   editor: lexicalEditor(),

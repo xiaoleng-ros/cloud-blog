@@ -2,7 +2,7 @@ import { defineCollection } from 'astro:content';
 // `z` 从 astro:content 导入已废弃（Astro 7 移除），改为直连 astro/zod（同源 zod v4）
 import { z } from 'astro/zod';
 import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils';
-import { payloadNotesLoader, payloadPostsLoader, payloadProjectsLoader } from './lib/payload-loader';
+import { payloadNotesLoader, payloadPostsLoader, payloadProjectsLoader, payloadFriendsLoader } from './lib/payload-loader';
 
 const stringList = z.preprocess((value) => {
   if (value === undefined || value === null) {
@@ -71,4 +71,24 @@ const projects = defineCollection({
     .loose(),
 });
 
-export const collections = { posts, notes, projects };
+const friends = defineCollection({
+  loader: payloadFriendsLoader,
+  schema: z
+    .object({
+      name: z.string(),
+      /** 站外地址，payload-api 已过协议白名单（非法值会退化成 '#'） */
+      url: z.string(),
+      description: z.string().optional(),
+      avatar: z.string().optional(),
+      /** 分组名；后台留空时归一为「朋友们」 */
+      group: z.string().default('朋友们'),
+      groupDescription: z.string().optional(),
+      note: z.string().optional(),
+      sortOrder: z.coerce.number().default(0),
+      createdAt: z.string().optional(),
+      updatedAt: z.string().optional(),
+    })
+    .loose(),
+});
+
+export const collections = { posts, notes, projects, friends };

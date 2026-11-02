@@ -57,6 +57,26 @@ export interface ProjectEntry {
   updatedAt?: string
 }
 
+/**
+ * 友链条目（/friends 页，来自 friends 集合）
+ *
+ * 只带前台展示需要的字段：email / message / submitIp 属于运营信息，
+ * 一律不进同步快照 —— 快照会被匿名接口 /api/blog-sync 整体序列化下发。
+ */
+export interface FriendEntry {
+  id: string
+  name: string
+  url: string
+  description?: string
+  avatar?: string
+  group: string
+  groupDescription?: string
+  note?: string
+  sortOrder: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 /** 把浅关系字段（分类/标签）归一为名称字符串列表。
  * 数字 id（未展开的关联，status 非 published 时被 Payload 回退为裸数字）
  * 整条丢弃，避免渲染出 "123" 假标签 —— 与前台 payload-api.namesOf 同口径 */
@@ -336,6 +356,50 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
   }))
 }
 
+/**
+ * 拉取全部「已通过」的友链（按 sortOrder 升序）。
+ *
+ * 与 fetchProjects 同一套口径：status=published 才出现在前台。
+ * 注意排序只需一维 —— 前台按 group 聚合时保留首次出现顺序，
+ * 组内顺序即这里的 sortOrder 顺序，与后台列表看到的顺序一致。
+ */
+export async function fetchFriends(): Promise<FriendEntry[]> {
+  const payload = await getDb()
+  const { docs } = await payload.find({
+    collection: 'friends',
+    limit: 0,
+    sort: 'sortOrder',
+    depth: 0,
+    where: { status: { equals: 'published' } },
+    select: {
+      name: true,
+      url: true,
+      description: true,
+      avatar: true,
+      group: true,
+      groupDescription: true,
+      note: true,
+      sortOrder: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  })
+
+  return docs.map((doc: any) => ({
+    id: String(doc.id),
+    name: String(doc.name ?? ''),
+    url: String(doc.url ?? ''),
+    description: doc.description ?? undefined,
+    avatar: doc.avatar ?? undefined,
+    group: String(doc.group ?? '朋友们'),
+    groupDescription: doc.groupDescription ?? undefined,
+    note: doc.note ?? undefined,
+    sortOrder: Number(doc.sortOrder ?? 0),
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  }))
+}
+
 /** 站点设置（SiteSettings Global 单例，扁平字段）；不可用时返回 null */
 export async function getSiteSettingsData(): Promise<Record<string, any> | null> {
   try {
@@ -376,6 +440,7 @@ const DEFAULT_NAV = [
   { href: '/', label: '首页' },
   { href: '/notes', label: '随笔' },
   { href: '/archive', label: '归档' },
+  { href: '/friends', label: '友链' },
   { href: '/about', label: '关于' },
 ]
 
@@ -390,6 +455,7 @@ export interface FetchAllResult {
   posts: MdEntry[]
   notes: MdEntry[]
   projects: ProjectEntry[]
+  friends: FriendEntry[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string }>
   navUpdatedAt?: string
@@ -401,16 +467,17 @@ export interface FetchAllResult {
 }
 
 /**
- * 一次性并行拉取全部前台所需数据（6 次查询，覆盖文章/随笔/项目/站点设置/导航/Media alt）
+ * 一次性并行拉取全部前台所需数据（7 次查询，覆盖文章/随笔/项目/友链/站点设置/导航/Media alt）
  *
- * 拉取顺序：先并行拉齐 6 份数据，再用 mediaAltMap 回填每篇文章/随笔的 coverAlt。
+ * 拉取顺序：先并行拉齐 7 份数据，再用 mediaAltMap 回填每篇文章/随笔的 coverAlt。
  * 这样 coverAlt 与正文图片 alt 共用同一份数据源，避免二次查询。
  */
 export async function fetchAllData(): Promise<FetchAllResult> {
-  const [postsRaw, notesRaw, projects, settings, navGlobal, media] = await Promise.all([
+  const [postsRaw, notesRaw, projects, friends, settings, navGlobal, media] = await Promise.all([
     fetchPosts(),
     fetchNotes(),
     fetchProjects(),
+    fetchFriends(),
     getSiteSettingsData(),
     getNavGlobal(),
     fetchMediaAltMap(),
@@ -437,6 +504,7 @@ export async function fetchAllData(): Promise<FetchAllResult> {
     posts,
     notes,
     projects,
+    friends,
     settings,
     nav,
     navUpdatedAt: navGlobal?.updatedAt,
@@ -472,6 +540,7 @@ export function computeSourceDigests(data: FetchAllResult): Record<string, strin
     posts: stampOf(data.posts, data.posts.length),
     notes: stampOf(data.notes, data.notes.length),
     projects: stampOf(data.projects, data.projects.length),
+    friends: stampOf(data.friends, data.friends.length),
     settings: `${maxStamp([data.settings?.updatedAt]) ?? 0}`,
     nav: `${maxStamp([data.navUpdatedAt]) ?? 0}`,
     media: `${data.mediaCount}:${maxStamp([data.mediaUpdatedAt]) ?? 0}`,
@@ -485,13 +554,14 @@ export function computeVersion(data: FetchAllResult): string {
     ...data.posts.map((p) => p.updatedAt),
     ...data.notes.map((n) => n.updatedAt),
     ...data.projects.map((p) => p.updatedAt),
+    ...data.friends.map((f) => f.updatedAt),
     data.settings?.updatedAt,
     data.navUpdatedAt,
     data.mediaUpdatedAt,
   ])
   // 无任何文档时退回当前时间，保持「每次不同」的旧行为
   const stamp = max === undefined ? Date.now() : max
-  return `${stamp}:${digests.posts}|${digests.notes}|${digests.projects}|${digests.settings}|${digests.nav}|${digests.media}`
+  return `${stamp}:${digests.posts}|${digests.notes}|${digests.projects}|${digests.friends}|${digests.settings}|${digests.nav}|${digests.media}`
 }
 
 /**
@@ -532,6 +602,7 @@ async function buildSyncSnapshot(): Promise<SyncSnapshot> {
     posts: data.posts,
     notes: data.notes,
     projects: data.projects,
+    friends: data.friends,
     settings: data.settings,
     nav: data.nav,
     navUpdatedAt: data.navUpdatedAt,
@@ -576,10 +647,11 @@ const digestStamp = (count: number, updatedAt?: string): string =>
 async function fetchSyncProbe(): Promise<SyncProbe> {
   const payload = await getDb()
   const publishedWhere = { status: { equals: 'published' } }
-  const [posts, notes, projects, media, settings, navGlobal] = await Promise.all([
+  const [posts, notes, projects, friends, media, settings, navGlobal] = await Promise.all([
     payload.find({ collection: 'posts', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
     payload.find({ collection: 'notes', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
     payload.find({ collection: 'projects', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
+    payload.find({ collection: 'friends', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
     // Media 直接复用 fetchMediaAltMap：只查 url/alt/updatedAt 三个小列（无正文类大字段），
     // 且「配了 alt 的条数 + 全表最大 updatedAt」口径与快照路径逐字一致 ——
     // url 是 upload 集合的读时派生列，SQL where 无法精确复现其语义，
@@ -593,6 +665,7 @@ async function fetchSyncProbe(): Promise<SyncProbe> {
     posts: digestStamp(posts.totalDocs, posts.docs[0]?.updatedAt),
     notes: digestStamp(notes.totalDocs, notes.docs[0]?.updatedAt),
     projects: digestStamp(projects.totalDocs, projects.docs[0]?.updatedAt),
+    friends: digestStamp(friends.totalDocs, friends.docs[0]?.updatedAt),
     settings: `${maxStamp([(settings as { updatedAt?: string })?.updatedAt]) ?? 0}`,
     nav: `${maxStamp([(navGlobal as { updatedAt?: string })?.updatedAt]) ?? 0}`,
     media: digestStamp(media.count, media.updatedAt),
@@ -603,12 +676,13 @@ async function fetchSyncProbe(): Promise<SyncProbe> {
     posts.docs[0]?.updatedAt,
     notes.docs[0]?.updatedAt,
     projects.docs[0]?.updatedAt,
+    friends.docs[0]?.updatedAt,
     (settings as { updatedAt?: string })?.updatedAt,
     (navGlobal as { updatedAt?: string })?.updatedAt,
     media.updatedAt,
   ])
   const stamp = max === undefined ? Date.now() : max
-  const version = `${stamp}:${digests.posts}|${digests.notes}|${digests.projects}|${digests.settings}|${digests.nav}|${digests.media}`
+  const version = `${stamp}:${digests.posts}|${digests.notes}|${digests.projects}|${digests.friends}|${digests.settings}|${digests.nav}|${digests.media}`
   return { version, digests }
 }
 

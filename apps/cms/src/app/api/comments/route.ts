@@ -47,8 +47,20 @@ async function postTitles(payload: Payload, rows: WalineCommentNode[]): Promise<
   }
   collect(rows)
 
+  // 友链页的留言不属于任何文章，直接给个固定标题，别让审核台显示裸路径 /friends
+  const map: Record<string, string> = {}
+  for (const url of urls) {
+    let pathname = url
+    try {
+      pathname = new URL(url, 'http://local').pathname
+    } catch {
+      /* 解析失败的按原串比对 */
+    }
+    if (pathname === '/friends') map[url] = '友链'
+  }
+
   const ids = [...new Set([...urls].map(postIdFromUrl).filter((id): id is string => id !== null))]
-  if (!ids.length) return {}
+  if (!ids.length) return map
 
   // overrideAccess：审核台要看得到草稿/回收站里文章的标题，否则那些文章的评论只能显示路径
   const { docs } = await payload.find({
@@ -62,7 +74,6 @@ async function postTitles(payload: Payload, rows: WalineCommentNode[]): Promise<
   })
   const titleById = new Map(docs.map((doc) => [String(doc.id), (doc as { title?: string }).title ?? '']))
 
-  const map: Record<string, string> = {}
   for (const url of urls) {
     const id = postIdFromUrl(url)
     const title = id ? titleById.get(id) : undefined

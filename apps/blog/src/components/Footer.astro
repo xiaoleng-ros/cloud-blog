@@ -1,5 +1,7 @@
 ---
 import Icon from './Icon.astro';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { site, toShanghaiParts } from '../lib/posts';
 import { getFooter, getSiteSettings } from '../lib/site-settings';
 import { hasIcon } from 'cloud-blog/shared/icon-paths';
@@ -12,10 +14,18 @@ const buildYear = toShanghaiParts(new Date())?.year ?? String(new Date().getFull
 const settings = await getSiteSettings();
 const author = settings?.siteAuthor ?? site.author;
 
-// 页脚头像：用构建期生成的 80×80 WebP 小图（optimize-site-icons.mjs 产物），
-// 显示尺寸 40×40（2x 高清屏刚好）。不直接引用后台 siteIcon 原图
-// （实测 1306×1205 / 2.38MB PNG，显示 40×40 也要下整张原图）。
-const avatarSrc = '/avatars/avatar-80.webp';
+// 页脚头像：生产用构建期生成的 80×80 WebP 小图（optimize-site-icons.mjs 产物，
+// 显示 40×40，2x 屏刚好），不直接引用后台 siteIcon 原图
+// （实测 1306×1205 / 2.38MB PNG，显示 40×40 也要下整张）。
+//
+// ⚠️ 那个产物在 dist/avatars/ 下，是 `astro build` 之后才有的；dev 没有 dist，
+// 写死 /avatars/avatar-80.webp 就一定是裂图。所以三级回退：
+//   构建产物 → 后台「网站图标」（数据库真图）→ public/avatars/avatar.png
+const optimizedAvatar = fileURLToPath(new URL('../../dist/avatars/avatar-80.webp', import.meta.url));
+const useBuiltAvatar = !import.meta.env.DEV && existsSync(optimizedAvatar);
+const avatarSrc = useBuiltAvatar
+  ? '/avatars/avatar-80.webp'
+  : settings?.siteIcon?.trim() || '/avatars/avatar.png';
 
 // 页脚副标题/链接/群组：以后台站点设置为准，后台留空前台就不出这一项
 const footer = await getFooter();

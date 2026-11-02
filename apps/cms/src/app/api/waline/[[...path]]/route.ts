@@ -16,6 +16,8 @@ import {
 } from '../../../../lib/waline-server'
 import { scheduleLazyGc } from '../../../../lib/comment-image-gc'
 import { lookupAddr as prefetchAddr } from '../../../../lib/comment-identity'
+// 跨端口 CORS：本地开发前台 3000/4321 ↔ 后台 9527 时，浏览器的拦截面（见 lib/cors）
+import { preflightResponse, withCors } from '../../../../lib/cors'
 // IP 解析统一走 lib/client-ip：XFF 是追加式头部，取首段等于取攻击者自己填的值。
 // 实测确认 EdgeOne 原样透传客户端发来的 XFF（伪造 `1.2.3.4, 203.0.113.9` 后库里存的就是
 // `1.2.3.4`），所以必须从右往左取第一个合法 IP，否则换一个头就是一个新限流桶。
@@ -80,7 +82,7 @@ function fail(err: unknown): Response {
   return Response.json({ errno: 500, errmsg: '评论服务内部错误' }, { status: 500 })
 }
 
-async function handle(request: Request): Promise<Response> {
+async function handleCore(request: Request): Promise<Response> {
   const url = new URL(request.url)
   // 剥掉 /api/waline 前缀，得到 Waline 原生路径
   const stripped = url.pathname.replace(/^\/api\/waline/, '') || '/'
@@ -243,6 +245,18 @@ async function handle(request: Request): Promise<Response> {
   } catch (err) {
     return fail(err)
   }
+}
+
+/**
+ * 对外入口：先处理预检，再给真实响应补 CORS 头。
+ *
+ * 生产同域时这些头是多余的（浏览器不会跨站请求），开发跨端口时是**必需**的 ——
+ * 少了它，Waline 客户端在浏览器里会被 CORS 拦掉，页面表现为评论区永远空白/加载中，
+ * 而 curl 打接口却是 200（2026-11-02 踩过）。
+ */
+async function handle(request: Request): Promise<Response> {
+  if (request.method.toUpperCase() === 'OPTIONS') return preflightResponse(request)
+  return withCors(request, await handleCore(request))
 }
 
 export const GET = handle

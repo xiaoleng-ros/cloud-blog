@@ -98,6 +98,7 @@ export async function getNavItems(): Promise<Array<{ href: string; label: string
       { href: '/', label: '首页' },
       { href: '/notes', label: '随笔' },
       { href: '/archive', label: '归档' },
+      { href: '/friends', label: '友链' },
       { href: '/about', label: '关于' },
     ];
   }
