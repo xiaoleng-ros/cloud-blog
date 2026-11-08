@@ -200,6 +200,56 @@ export default defineConfig({
     define: {
       'import.meta.env.SITE_URL': JSON.stringify(SITE),
     },
+    resolve: {
+      alias: {
+        // picomatch 是 CJS 包，Vite 8 ModuleRunner 内联它会触发
+        // "require is not defined"，把 dev server app 创建搞挂、所有请求挂起。
+        // 用 createRequire 包装的 ESM shim 替换原包导入（见 src/lib/picomatch-shim.mjs）。
+        picomatch: path.resolve(process.cwd(), 'src/lib/picomatch-shim.mjs'),
+      },
+    },
+    plugins: [
+      // Vite 8 ModuleRunner 会把非 external 的 node_modules 依赖内联到 ESM 沙箱执行，
+      // CJS 入口里的 require 直接报 "require is not defined"（先 picomatch 后 yaml …）。
+      // 这里通过 configEnvironment 把已知 CJS 包追加到 resolve.external，让 Node 原生加载。
+      {
+        name: 'cjs-externalize',
+        configEnvironment(name, options) {
+          if (name === 'client') return;
+          const cjsPkgs = ['yaml', 'gray-matter', 'js-yaml', 'argparse', 'entities', 'mdast-util-to-string', 'micromark', 'decode-named-character-reference'];
+          const external = Array.isArray(options.resolve?.external) ? options.resolve.external : [];
+          const noExternal = options.resolve?.noExternal;
+          // 只追加那些没被 noExternal 明确包含的 CJS 包
+          const filtered = cjsPkgs.filter((p) => {
+            if (Array.isArray(noExternal)) return !noExternal.some((n) => typeof n === 'string' && (n === p || n.includes('*')));
+            return noExternal !== true;
+          });
+          return { resolve: { external: [...external, ...filtered] } };
+        },
+      },
+      // 沙箱环境下，浏览器断开 HTTP / WebSocket 连接时 Node socket 会发出未处理的
+      // 'error' 事件（ECONNRESET），导致整个 Astro dev server 进程崩溃退出。
+      // 给 dev server 的每个 socket 绑一个 noop error listener，把连接重置降级为静默丢弃。
+      {
+        name: 'socket-error-swallower',
+        configureServer(server) {
+          const httpServer = server.httpServer;
+          if (!httpServer) return;
+          httpServer.on('connection', (socket) => {
+            socket.on('error', () => {
+              // 连接被对端重置（浏览器关闭/刷新/网络中断），忽略即可，不要让进程崩溃
+            });
+          });
+          // Vite HMR WebSocket 服务器的 socket 也要兜底
+          if (server.ws && server.ws.wsServer) {
+            server.ws.wsServer.on('connection', (ws, req) => {
+              const socket = req.socket;
+              if (socket) socket.on('error', () => {});
+            });
+          }
+        },
+      },
+    ],
   },
 });
 
