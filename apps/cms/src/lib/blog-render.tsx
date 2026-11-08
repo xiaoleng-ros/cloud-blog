@@ -589,6 +589,33 @@ function renderNavLinks(
     .join('')
 }
 
+/**
+ * 「更多」下拉面板条目（Nav.astro 中 .site-more__grid 的内容）。
+ *
+ * 与 Nav.astro 静态渲染逐字对齐，否则同步注入一次面板结构就变：
+ *  - 有 href → 渲染 <a>，外链加 target/rel，图标缺失时给占位 span
+ *  - 无 href → 渲染不可点的 is-disabled 占位（后台先填标题、页面后建的情形）
+ */
+function renderMorePanel(
+  items: Array<{ href: string; label: string; icon?: string; external?: boolean }>,
+): string {
+  return items
+    .map((item) => {
+      const icon = item.icon && hasIcon(item.icon) ? iconSvg(item.icon, 20) : ''
+      const iconBlock = icon
+        ? `<span class="site-more__icon" aria-hidden="true">${icon}</span>`
+        : '<span class="site-more__icon site-more__icon--placeholder" aria-hidden="true"></span>'
+
+      if (!item.href) {
+        return `<li><span class="site-more__item is-disabled" aria-disabled="true">${iconBlock}<span class="site-more__label">${escapeHtml(item.label)}</span></span></li>`
+      }
+
+      const ext = item.external ? ' target="_blank" rel="noopener noreferrer"' : ''
+      return `<li><a class="site-more__item" href="${escapeAttr(safeHref(item.href, '#'))}" data-more-link${ext}>${iconBlock}<span class="site-more__label">${escapeHtml(item.label)}</span></a></li>`
+    })
+    .join('')
+}
+
 /** ICP 备案号：后台留空则整块不渲染（与 Footer.astro 的守卫一致） */
 function icpOf(settings: SyncData['settings'] | null | undefined): string {
   return settings?.siteIcp?.trim() ?? ''
@@ -1396,6 +1423,7 @@ async function friendsBlocks(ctx: SyncData): Promise<Record<string, string | nul
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/friends'),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     friendsList: renderFriends(ctx.friends),
     // 页头计数：后台增删友链后无需重建静态外壳也能更新
@@ -1415,6 +1443,8 @@ interface SyncData {
   friends: FriendEntry[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string; external?: boolean }>
+  /** 「更多」下拉面板条目（后台「导航管理」→ 更多面板 Tab 配置） */
+  morePanel: Array<{ href: string; label: string; icon?: string; external?: boolean }>
   /** Media 集合 url → alt 映射，用于正文图片 alt 补齐 */
   mediaAltMap: Map<string, string>
   version: string
@@ -1441,6 +1471,7 @@ async function homeBlocks(ctx: SyncData): Promise<Record<string, string | null>>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/'),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     heroCard: renderHeroCard(hero, socials),
     heroPicks: renderHeroPicks(heroPicks),
@@ -1482,6 +1513,7 @@ async function postBlocks(ctx: SyncData, pathname: string): Promise<Record<strin
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     // 标题保持原始文本（未转义）：客户端直接赋给 document.title，
     // 服务端注入 <title> 时再统一做一次 HTML 转义。
@@ -1543,6 +1575,7 @@ async function archiveBlocks(ctx: SyncData, path: string): Promise<Record<string
     brandName: siteName,
     // 导航高亮按当前分页路径判定，否则在第 2 页会丢掉「归档」高亮
     navLinks: renderNavLinks(ctx.nav, pagePath),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     archiveHeader: renderArchiveHeader(posts.length, page, totalPages),
     archiveSummary: renderArchiveSummary(getCategories(posts), getTags(posts)),
@@ -1560,6 +1593,7 @@ async function notesBlocks(ctx: SyncData): Promise<Record<string, string | null>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/notes'),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     notesFeed: feed,
     notesAside: aside,
@@ -1584,6 +1618,7 @@ async function termBlocks(
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, pathname),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     termTitle: escapeHtml(term),
     termSwitcher: renderTermSwitcher(terms, term, kind),
@@ -1622,6 +1657,7 @@ async function tagsIndexBlocks(ctx: SyncData): Promise<Record<string, string | n
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/tags'),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     tagsHeader: `<div class="tags-hero__top">
     <p class="eyebrow">Tags</p>
@@ -1792,6 +1828,7 @@ async function statsBlocks(ctx: SyncData): Promise<Record<string, string | null>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/stats'),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     statsCards: [
       card('blue', 'archive', String(stats.postCount), '文章统计'),
@@ -1821,6 +1858,7 @@ async function aboutBlocks(ctx: SyncData): Promise<Record<string, string | null>
   return {
     brandName: siteName,
     navLinks: renderNavLinks(ctx.nav, '/about'),
+    morePanel: renderMorePanel(ctx.morePanel),
     ...footerBlocks(settings),
     aboutProfile: renderAboutProfile(about, postCount, firstYear),
     aboutSkills: renderAboutSkills(about.skills),
@@ -2069,6 +2107,7 @@ export async function renderBlocksForPathname(pathname: string): Promise<{
     friends: snapshot.friends,
     settings: snapshot.settings,
     nav: snapshot.nav,
+    morePanel: snapshot.morePanel,
     mediaAltMap: snapshot.mediaAltMap,
     version,
   }

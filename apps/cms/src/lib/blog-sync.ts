@@ -16,7 +16,7 @@ import config from '@payload-config'
 import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils'
 import { normalizeSiteHref } from 'cloud-blog/shared/free-text-lines'
 import { isExternalHref } from 'cloud-blog/shared/site-pages'
-import { getSnapshot, setSnapshot, getProbe, setProbe, type SyncSnapshot, type SyncProbe } from './sync-cache'
+import { getSnapshot, setSnapshot, getProbe, setProbe, getMutationSeq, type SyncSnapshot, type SyncProbe } from './sync-cache'
 
 // getPayload 实例进程内缓存（避免每次请求重建数据库连接）
 export type PayloadDb = Awaited<ReturnType<typeof getPayload>>
@@ -412,9 +412,25 @@ export async function getSiteSettingsData(): Promise<Record<string, any> | null>
   }
 }
 
+/** 「更多」面板条目（同步用，与前台 payload-api 的 MorePanelItem 同构） */
+export interface MorePanelEntry {
+  label: string
+  href: string
+  icon?: string
+  external: boolean
+}
+
 /** 导航全局原始数据（保留 updatedAt 供版本号计算）；后台不可用时返回 null */
 export async function getNavGlobal(): Promise<{
   topNav?: Array<{ label?: string; href?: string; sort?: number | null; visible?: boolean | null }> | null
+  morePanel?: Array<{
+    label?: string
+    href?: string
+    icon?: string | null
+    external?: boolean | null
+    sort?: number | null
+    visible?: boolean | null
+  }> | null
   updatedAt?: string | null
 } | null> {
   try {
@@ -433,6 +449,16 @@ const DEFAULT_NAV: Array<{ href: string; label: string; external: boolean }> = [
   { href: '/archive', label: '归档', external: false },
   { href: '/friends', label: '友链', external: false },
   { href: '/about', label: '关于', external: false },
+]
+
+/**
+ * 后台不可用时的兜底「更多」面板（与前台 site-settings.getMorePanelItems 的离线兜底一致）。
+ * 注意 GitHub 这里写的是通用地址：只有后台挂了才走这条，正常情况读库里配置的仓库地址。
+ */
+const DEFAULT_MORE_PANEL: MorePanelEntry[] = [
+  { label: '统计', href: '/stats', icon: 'spark', external: false },
+  { label: '标签墙', href: '/tags', icon: 'tag', external: false },
+  { label: 'GitHub', href: 'https://github.com', icon: 'github', external: true },
 ]
 
 /**
@@ -462,6 +488,35 @@ export async function getNavData(): Promise<Array<{ href: string; label: string;
   return items.length > 0 ? items.filter((item) => item.href && item.label) : DEFAULT_NAV
 }
 
+/**
+ * 从 morePanel 数组提取可见条目。
+ *
+ * 与 parseTopNav 同一套口径：过滤 visible === false、label 空、按 sort 升序。
+ * 但 href 允许为空 —— 页面还没建时后台可以先只填标题，前台渲染成不可点占位；
+ * 所以这里不按 href 过滤（与前台 payload-api.fetchMorePanelItems 一致）。
+ */
+function parseMorePanel(
+  items?: Array<{
+    label?: string
+    href?: string
+    icon?: string | null
+    external?: boolean | null
+    sort?: number | null
+    visible?: boolean | null
+  }> | null,
+): MorePanelEntry[] {
+  if (!Array.isArray(items)) return []
+  return items
+    .filter((i) => i.visible !== false && i.label?.trim())
+    .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
+    .map((i) => ({
+      label: i.label!.trim(),
+      href: normalizeSiteHref((i.href ?? '').trim()),
+      icon: i.icon?.trim() || undefined,
+      external: i.external === true,
+    }))
+}
+
 export interface FetchAllResult {
   posts: MdEntry[]
   notes: MdEntry[]
@@ -469,6 +524,8 @@ export interface FetchAllResult {
   friends: FriendEntry[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string; external: boolean }>
+  /** 「更多」下拉面板条目；后台不可用时为默认三项 */
+  morePanel: MorePanelEntry[]
   navUpdatedAt?: string | null
   /** Media 集合的 url → alt 映射（Markdown 正文图片补 alt 用） */
   mediaAltMap: Map<string, string>
@@ -511,6 +568,9 @@ export async function fetchAllData(): Promise<FetchAllResult> {
 
   const items = parseTopNav(navGlobal?.topNav)
   const nav = items.length > 0 ? items.filter((item) => item.href && item.label) : DEFAULT_NAV
+  // null = 查询失败（后台不可用）→ 兜底三项，避免面板空掉；
+  // [] = 查询成功但后台清空 → 原样返回空数组，尊重「填了才显示」。
+  const morePanel = navGlobal === null ? DEFAULT_MORE_PANEL : parseMorePanel(navGlobal.morePanel)
   return {
     posts,
     notes,
@@ -518,6 +578,7 @@ export async function fetchAllData(): Promise<FetchAllResult> {
     friends,
     settings,
     nav,
+    morePanel,
     navUpdatedAt: navGlobal?.updatedAt,
     mediaAltMap,
     mediaCount: media.count,
@@ -547,13 +608,17 @@ function maxStamp(stamps: Array<string | number | undefined | null>): number | u
 export function computeSourceDigests(data: FetchAllResult): Record<string, string> {
   const stampOf = (docs: Array<{ updatedAt?: string }>, count: number) =>
     `${count}:${maxStamp(docs.map((d) => d.updatedAt)) ?? 0}`
+  // 两个全局的指纹后缀变更序号：Payload 在「只改 array 字段」时不更新主行 updated_at
+  // （见 sync-cache.ts 的 SyncCacheState.mutationSeq 注释），只靠 updatedAt 会让
+  // 导航/设置的改动指纹恒定不变。各用自己那一路的序号，发文章不会推动这两路。
+  const seq = getMutationSeq()
   return {
     posts: stampOf(data.posts, data.posts.length),
     notes: stampOf(data.notes, data.notes.length),
     projects: stampOf(data.projects, data.projects.length),
     friends: stampOf(data.friends, data.friends.length),
-    settings: `${maxStamp([data.settings?.updatedAt]) ?? 0}`,
-    nav: `${maxStamp([data.navUpdatedAt]) ?? 0}`,
+    settings: `${maxStamp([data.settings?.updatedAt]) ?? 0}:${seq.settings}`,
+    nav: `${maxStamp([data.navUpdatedAt]) ?? 0}:${seq.nav}`,
     media: `${data.mediaCount}:${maxStamp([data.mediaUpdatedAt]) ?? 0}`,
   }
 }
@@ -616,6 +681,7 @@ async function buildSyncSnapshot(): Promise<SyncSnapshot> {
     friends: data.friends,
     settings: data.settings,
     nav: data.nav,
+    morePanel: data.morePanel,
     navUpdatedAt: data.navUpdatedAt,
     mediaAltMap: data.mediaAltMap,
     // 随快照一起缓存：?digest=1 命中缓存时零重算，直接回给前台
@@ -672,13 +738,16 @@ async function fetchSyncProbe(): Promise<SyncProbe> {
     payload.findGlobal({ slug: 'navigation', select: { updatedAt: true } }),
   ])
 
+  const seq = getMutationSeq()
   const digests = {
     posts: digestStamp(posts.totalDocs, posts.docs[0]?.updatedAt),
     notes: digestStamp(notes.totalDocs, notes.docs[0]?.updatedAt),
     projects: digestStamp(projects.totalDocs, projects.docs[0]?.updatedAt),
     friends: digestStamp(friends.totalDocs, friends.docs[0]?.updatedAt),
-    settings: `${maxStamp([(settings as { updatedAt?: string })?.updatedAt]) ?? 0}`,
-    nav: `${maxStamp([(navGlobal as { updatedAt?: string })?.updatedAt]) ?? 0}`,
+    // 与 computeSourceDigests 逐字同构：末尾追加该源的变更序号，补上「只改 array 字段时
+    // updated_at 不更新」导致的指纹不变（详见 computeSourceDigests 与 sync-cache.ts）。
+    settings: `${maxStamp([(settings as { updatedAt?: string })?.updatedAt]) ?? 0}:${seq.settings}`,
+    nav: `${maxStamp([(navGlobal as { updatedAt?: string })?.updatedAt]) ?? 0}:${seq.nav}`,
     media: digestStamp(media.count, media.updatedAt),
   }
 

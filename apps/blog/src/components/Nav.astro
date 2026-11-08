@@ -78,7 +78,10 @@ const moreItemsWithIcon = moreItems.map((item) => ({
           <Icon name="chevron-down" size={13} class="site-nav__more-caret" />
         </button>
         <div class="site-more" id="site-more-panel" data-more-panel hidden>
-          <ul class="site-more__grid">
+          {/* 面板内容挂 data-sync-block：后台改「导航管理 → 更多面板」后
+              由 BaseLayout 的轮询把新 HTML 换进来，无需重新构建部署。
+              ul 本身是 grid 容器，锚点必须落在它身上（外面再包 div 会破版）。 */}
+          <ul class="site-more__grid" data-sync-block="morePanel">
             {moreItemsWithIcon.map((item) =>
               item.href ? (
                 <li>

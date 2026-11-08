@@ -32,6 +32,8 @@ export interface SyncSnapshot {
   friends: any[]
   settings: Record<string, any> | null
   nav: Array<{ href: string; label: string; external: boolean }>
+  /** 「更多」下拉面板条目；与 nav 同源（navigation global），供 morePanel 区块同步 */
+  morePanel: Array<{ href: string; label: string; icon?: string; external: boolean }>
   navUpdatedAt?: string | null
   /** Media 集合 url → alt 映射，Markdown 正文图片补 alt 用 */
   mediaAltMap: Map<string, string>
@@ -88,6 +90,30 @@ interface SyncCacheState {
   cacheWriteBypassUntil: number
   /** 轻量探测缓存：与快照同源同失效，挂在同一份全局状态上，invalidateAll 时一并清掉 */
   probeCache: { probe: SyncProbe; ts: number } | null
+  /**
+   * 变更序号：按数据源分别计数，由 blog-sync 编进对应那一路的指纹与版本号。
+   *
+   * 为什么不能只靠 updatedAt：Payload 的 upsertRow 在「只改 array 字段」时不写主行
+   * （`hasMainRowData` 判定把「只剩 updatedAt/createdAt」视为无主行数据，
+   * 见 @payloadcms/drizzle/dist/upsertRow/index.js），于是 navigation.updated_at
+   * 在只增删改 topNav/morePanel 时**保持不变**；site-settings 的 socials/footerGroups/
+   * skills/aboutParagraphs 等 array 字段同理。版本号若只由 updatedAt 拼成，
+   * 这类改动会让版本号恒定不变 → 区块缓存永不失效 → 前台永远显示旧内容。
+   * 序号在钩子里自增，等于把「确实发生过一次写入」编码进版本号。
+   *
+   * 分源计数的理由：单一计数器会让「发一篇文章」也改掉 settings/nav 的指纹，
+   * 前台于是白拉一次设置与导航。分开后每路指纹只被自己的写入推动。
+   */
+  mutationSeq: MutationCounters
+}
+
+/** 数据源分类：决定哪一路指纹要变 */
+export type MutationSource = 'collections' | 'settings' | 'nav'
+
+export interface MutationCounters {
+  collections: number
+  settings: number
+  nav: number
 }
 
 const STATE_KEY = '__cloudBlogSyncCacheState'
@@ -102,6 +128,7 @@ function createState(): SyncCacheState {
     sweepGeneration: 0,
     cacheWriteBypassUntil: 0,
     probeCache: null,
+    mutationSeq: { collections: 0, settings: 0, nav: 0 },
   }
 }
 
@@ -156,14 +183,31 @@ export function setBlock(pathname: string, block: CachedBlock): void {
   blockCache.set(pathname, block)
 }
 
-/** 清除所有缓存（快照 + 区块 + 探测）。afterChange/afterDelete 钩子调用 */
-export function invalidateAll(): void {
+/**
+ * 清除所有缓存（快照 + 区块 + 探测）。afterChange/afterDelete 钩子调用。
+ *
+ * `source` 决定哪一路变更序号自增：缓存一律全清（数据互相牵连，宁可多查），
+ * 但指纹只让真正变更的那一路变，避免「发文章导致前台白拉设置与导航」。
+ * 不传则视为集合变更（兼容尚未补 source 的调用点）。
+ */
+export function invalidateAll(source: MutationSource = 'collections'): void {
   blockCache.clear()
   state.snapshotCache = null
   state.probeCache = null
+  // 变更序号自增：把「发生过一次写入」编进版本号，补上 updatedAt 在
+  // 「只改 array 字段」时不更新的缺口（详见 SyncCacheState.mutationSeq 的注释）。
+  state.mutationSeq[source] += 1
   // 钩子先于事务提交触发：接下来 1.5s 内禁止把（可能仍是提交前旧数据的）重建结果写回缓存，
   // 读请求不阻塞、只是不缓存，跨过提交窗口后恢复正常缓存。
   state.cacheWriteBypassUntil = Math.max(state.cacheWriteBypassUntil, Date.now() + 1_500)
+}
+
+/**
+ * 当前各源变更序号副本。blog-sync 计算数据版本号时把它拼进去，
+ * 保证「只改 array 字段、updatedAt 没变」的写入也能让前台判定为有新版本。
+ */
+export function getMutationSeq(): MutationCounters {
+  return { ...state.mutationSeq }
 }
 
 // --- 轻量探测缓存 ---
@@ -287,10 +331,29 @@ export function ensureSseSweepLoop(): void {
 
 /**
  * 数据变更钩子：清缓存 + 广播 SSE update。
- * 挂在 posts/notes/projects 集合与 site-settings/navigation 全局的 afterChange/afterDelete。
+ * 挂在 posts/notes/projects 等集合与 site-settings/navigation 全局的 afterChange/afterDelete。
  * 仅做内存操作，不阻塞写入。
+ *
+ * source 由 Payload 传入的钩子参数推断（集合钩子带 `collection`，全局钩子带 `global`），
+ * 因此各 collection/global 配置文件里的 `[syncInvalidateHook]` 写法无需改动。
  */
-export async function syncInvalidateHook(): Promise<void> {
-  invalidateAll()
+export async function syncInvalidateHook(
+  args?: SyncInvalidateHookArgs,
+): Promise<void> {
+  invalidateAll(guessMutationSource(args))
   broadcastSse('update', { at: Date.now() })
+}
+
+/** 钩子参数里我们只关心这两个（集合钩子 / 全局钩子各带一个） */
+export interface SyncInvalidateHookArgs {
+  collection?: { slug?: string } | null
+  global?: { slug?: string } | null
+}
+
+/** 从钩子参数推断数据源：navigation → nav，site-settings → settings，其余视为集合 */
+export function guessMutationSource(args?: SyncInvalidateHookArgs): MutationSource {
+  const slug = args?.global?.slug
+  if (slug === 'navigation') return 'nav'
+  if (slug === 'site-settings') return 'settings'
+  return 'collections'
 }
