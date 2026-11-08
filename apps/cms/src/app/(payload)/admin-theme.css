@@ -5917,6 +5917,24 @@ section.template-minimal.login .feishu-login-icon {
   min-height: 110px;
 }
 
+/* 热力图空态里的「立即重试」：做成内联文字按钮，不占额外一行 */
+.changelog__retry {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.changelog__retry:hover {
+  color: var(--accent-text);
+}
+
 .changelog__empty-icon {
   color: var(--theme-elevation-350);
   display: inline-flex;

@@ -48,6 +48,15 @@ type ChangelogData = {
 
 const CACHE_PREFIX = 'wb-changelog:v2'
 const CACHE_TTL_MS = 5 * 60 * 1000
+/**
+ * 贡献热力图缺失时的重试间隔。
+ *
+ * 接口层已对失败结果只做 30 秒负缓存，但前端这一层原本会把
+ * 「contributions: null」也完整写进 sessionStorage 并复用 5 分钟 ——
+ * 等于绕过接口的短 TTL，让空白期被放大到最长 5 分钟。
+ * 命中这种残缺缓存时不再直接渲染，而是隔一会儿静默重拉一次。
+ */
+const CONTRIB_RETRY_MS = 30 * 1000
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const cacheKey = (year: number) => `${CACHE_PREFIX}:${year}`
@@ -137,10 +146,14 @@ export function ChangelogViewInner() {
   const [error, setError] = useState<string | null>(null)
   const [yearOpen, setYearOpen] = useState(false)
   const yearRef = useRef<HTMLDivElement>(null)
+  /** 贡献热力图补拉已用次数（上限 3 次，避免上游真挂时无限轮询烧 GitHub 匿名配额） */
+  const contribRetryRef = useRef(0)
 
   const loadData = useCallback(
-    async (targetYear: number, force = false) => {
-      // 先查缓存：命中则直接渲染，不发请求
+    async (targetYear: number, force = false, keepOnError = false) => {
+      // 先查缓存：命中则直接渲染，不发请求。
+      // 注意：命中「贡献热力图缺失」的残缺缓存时也照样渲染（提交记录是好的，
+      // 立刻显示比白屏强），补拉由下方 effect 按 30 秒节奏静默进行。
       if (!force) {
         const cached = readCache(targetYear)
         if (cached) {
@@ -168,7 +181,9 @@ export function ChangelogViewInner() {
         setData(normalized)
       } catch (err) {
         setError(err instanceof Error ? err.message : '加载失败')
-        setData(null)
+        // keepOnError：后台静默补拉时不能清空已有数据 ——
+        // 补拉本来就是为了补热力图，失败却把已经正常的「仓库提交记录」一起清掉是倒退。
+        if (!keepOnError) setData(null)
       } finally {
         setLoading(false)
       }
@@ -179,6 +194,22 @@ export function ChangelogViewInner() {
   useEffect(() => {
     void loadData(year)
   }, [year, loadData])
+
+  // 贡献热力图缺失时静默补拉：接口层对失败只做 30 秒负缓存，这里跟着 30 秒重试，
+  // 让「暂无贡献数据」最多停留半分钟，而不是整个 sessionStorage 的 5 分钟。
+  // 只补拉有限次（3 次）：GitHub 真挂了的话，无限轮询既没意义也白烧 60 次/小时的匿名配额。
+  useEffect(() => {
+    if (!data || data.contributions) {
+      contribRetryRef.current = 0
+      return
+    }
+    if (contribRetryRef.current >= 3) return
+    const timer = setTimeout(() => {
+      contribRetryRef.current += 1
+      void loadData(year, true, true)
+    }, CONTRIB_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [data, year, loadData])
 
   // 下拉：点外面或按 Esc 收起
   useEffect(() => {
@@ -318,7 +349,19 @@ export function ChangelogViewInner() {
                 <path d="M3.5 9.5h17M8.5 3v3M15.5 3v3" />
               </svg>
             </span>
-            暂无贡献数据（接口未返回，稍后重试）
+            <span>
+              贡献数据暂未取到，正在自动重试…
+              <button
+                type="button"
+                className="changelog__retry"
+                onClick={() => {
+                  contribRetryRef.current = 0
+                  void loadData(year, true, true)
+                }}
+              >
+                立即重试
+              </button>
+            </span>
           </div>
         )}
       </section>

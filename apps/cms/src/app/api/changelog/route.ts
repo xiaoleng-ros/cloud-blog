@@ -43,6 +43,26 @@ const PER_PAGE = 100
  */
 const MAX_COMMITS_PER_GROUP = 500
 const CACHE_TTL_MS = 5 * 60 * 1000
+/**
+ * 贡献热力图抓取失败时的缓存时长（负缓存）。
+ *
+ * 为什么要单独设一个很短的 TTL：贡献数据是「抓 GitHub 页面 HTML 再解析」，
+ * 偶发超时/被限流很正常（实测同一条链接手抓 1.1 秒成功，线上却偶尔空）。
+ * 如果失败结果也按 5 分钟缓存，一次抖动就会让热力图空整整 5 分钟 ——
+ * 用户看到的就是「暂无贡献数据」，而接口明明几秒后就能拿到数据。
+ * 30 秒足够挡住并发重试的洪峰，又不至于让页面长时间空着。
+ */
+const CONTRIB_FAILED_TTL_MS = 30 * 1000
+/** 贡献数据抓取失败时的重试次数（1 次重试即可覆盖绝大多数网络抖动） */
+const CONTRIB_FETCH_RETRIES = 1
+/**
+ * 贡献页单次抓取超时。
+ *
+ * 实测正常 1.1 秒返回 223 KB；这里给 8 秒已经是网络很差的余量。
+ * 不能像提交列表那样给 20 秒 —— 一旦带上上面的重试，最坏耗时就是
+ * 「超时 × (1 + 重试次数)」，20 秒会直接把整个接口拖到 40 秒以上。
+ */
+const CONTRIB_FETCH_TIMEOUT_MS = 8 * 1000
 
 type RepoCommit = { sha: string; date: string; message: string; url: string }
 type GroupResult = {
@@ -68,8 +88,8 @@ type Payload = {
   groups: GroupResult[]
 }
 
-/** 进程内缓存：key = year */
-const cache = new Map<number, { at: number; data: Payload }>()
+/** 进程内缓存：key = year；ttl 逐条记，贡献抓取失败的那次只缓存 30 秒 */
+const cache = new Map<number, { at: number; ttl: number; data: Payload }>()
 
 /**
  * 正在进行中的上游请求：key = year。
@@ -139,7 +159,7 @@ async function loadContributionsFromGitHub(year: number): Promise<Payload['contr
   const url =
     `https://github.com/users/${GITHUB_USER}/contributions` +
     `?from=${year}-01-01&to=${year}-12-31`
-  const html = await fetchText(url, { accept: 'text/html' }, 20000)
+  const html = await fetchText(url, { accept: 'text/html' }, CONTRIB_FETCH_TIMEOUT_MS)
   const chunks = html.split(/<td\b/).slice(1)
   const days: ContributionDay[] = []
   for (const chunk of chunks) {
@@ -186,13 +206,22 @@ async function loadContributionsFromMirror(year: number): Promise<Payload['contr
 /**
  * 贡献热力图：先试官方页，失败再试镜像。
  * 两个源都失败才返回 null（前端显示"接口未返回"占位）。
+ *
+ * 为什么带重试：抓的是 GitHub 页面的 HTML，偶发超时/瞬时 429 很常见。
+ * 失败后立刻再试一次（官方 → 官方 → 镜像），能把绝大多数抖动吃掉；
+ * 仍然失败才返回 null，此时上层会用短 TTL 缓存，下一轮很快就能重来。
  */
 async function loadContributions(year: number): Promise<Payload['contributions']> {
-  try {
-    const primary = await loadContributionsFromGitHub(year)
-    if (primary) return primary
-  } catch (err) {
-    console.warn('[changelog] GitHub 贡献日历抓取失败，转备用源：', (err as Error).message)
+  for (let attempt = 0; attempt <= CONTRIB_FETCH_RETRIES; attempt += 1) {
+    try {
+      const primary = await loadContributionsFromGitHub(year)
+      if (primary) return primary
+    } catch (err) {
+      console.warn(
+        `[changelog] GitHub 贡献日历抓取失败（第 ${attempt + 1} 次），稍后重试或转备用源：`,
+        (err as Error).message,
+      )
+    }
   }
   try {
     return await loadContributionsFromMirror(year)
@@ -247,7 +276,7 @@ export async function GET(request: Request) {
     : now.getFullYear()
 
   const hit = cache.get(year)
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
+  if (hit && Date.now() - hit.at < hit.ttl) {
     return NextResponse.json(hit.data, { headers: { 'x-changelog-cache': 'hit' } })
   }
 
@@ -262,7 +291,13 @@ export async function GET(request: Request) {
   const task = (async () => {
     const [contributions, ...groups] = await Promise.all([loadContributions(year), ...GROUPS.map(loadGroup)])
     const data: Payload = { user: GITHUB_USER, repo: REPO, year, fetchedAt: new Date().toISOString(), contributions, groups }
-    cache.set(year, { at: Date.now(), data })
+    // 贡献抓取失败时只缓存 30 秒：否则一次网络抖动会让热力图空满 5 分钟，
+    // 而这段时间里接口其实已经能正常返回数据了。
+    cache.set(year, {
+      at: Date.now(),
+      ttl: contributions ? CACHE_TTL_MS : CONTRIB_FAILED_TTL_MS,
+      data,
+    })
     return data
   })()
 
