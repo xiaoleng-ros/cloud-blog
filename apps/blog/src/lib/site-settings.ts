@@ -8,7 +8,7 @@
  * 以免 CMS 宕机把站点清空。
  * 模块级缓存：整个构建/开发过程只请求一次后台。
  */
-import { fetchNavItems, fetchSiteSettings } from './payload-api';
+import { fetchNavItems, fetchMorePanelItems, fetchSiteSettings, type MorePanelItem, type NavLinkItem } from './payload-api';
 import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines';
 import {
   footerIconFor,
@@ -41,6 +41,8 @@ export interface SiteSettingsData {
   footerGroups?: string;
   /** 页脚：ICP 备案号 */
   siteIcp?: string;
+  /** 网站配置：对外展示的正式站点地址（友链页「我的博客信息」用，留空回退 SITE_URL） */
+  siteUrl?: string;
   /** 网站配置：网站图标（用作浏览器标签页图标与页脚头像，留空用默认头像） */
   siteIcon?: string;
   /** 网站配置：网站创建时间（YYYY-MM-DD 文本，站点运行时间从这里算） */
@@ -91,7 +93,7 @@ export async function getSiteSince(): Promise<string> {
  * - 后台不可用（fetchNavItems 返回 null，如 CMS 宕机）→ 默认四项兜底，保证宕机时导航仍在
  * - 后台可用但导航被清空（[]）→ 前台导航整块隐藏（与「后台填了才显示」规则一致）
  * - 后台填了条目 → 原样使用（每条 href/label 非空才进导航） */
-export async function getNavItems(): Promise<Array<{ href: string; label: string }> | null> {
+export async function getNavItems(): Promise<NavLinkItem[] | null> {
   const items = await fetchNavItems();
   if (items === null) {
     return [
@@ -105,6 +107,26 @@ export async function getNavItems(): Promise<Array<{ href: string; label: string
   return items.length > 0
     ? items.filter((item) => item.href && item.label)
     : null;
+}
+
+/**
+ * 「更多」面板条目：后台「导航管理」Global 的 morePanel 数组优先。
+ * 区分两种情况：
+ * - 后台不可用（fetchMorePanelItems 返回 null）→ 返回默认三项（统计/标签墙/GitHub），保证宕机时面板仍有内容
+ * - 后台可用但面板被清空（[]）→ 返回空数组，前台「更多」按钮仍展示但面板为空
+ * 为什么后台清空时不隐藏「更多」按钮：它还承载搜索/主题切换之外的次要入口占位，
+ * 真要彻底隐藏可以在前台模板里判断，这里只负责数据。
+ */
+export async function getMorePanelItems(): Promise<MorePanelItem[]> {
+  const items = await fetchMorePanelItems();
+  if (items === null) {
+    return [
+      { label: '统计', href: '/stats', icon: 'spark' },
+      { label: '标签墙', href: '/tags', icon: 'tag' },
+      { label: 'GitHub', href: 'https://github.com', icon: 'github', external: true },
+    ];
+  }
+  return items;
 }
 
 /**

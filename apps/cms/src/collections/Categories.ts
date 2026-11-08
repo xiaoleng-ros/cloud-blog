@@ -128,22 +128,6 @@ export const Categories: CollectionConfig = {
       },
     },
     {
-      name: 'nodeType',
-      type: 'select',
-      required: true,
-      defaultValue: 'category',
-      label: '节点类型',
-      options: [
-        { label: '分类（归档文章）', value: 'category' },
-        { label: '页面（站内页面）', value: 'page' },
-        { label: '导航（外链跳转）', value: 'nav' },
-      ],
-      admin: {
-        position: 'sidebar',
-        description: '仅「分类」且前台可见的节点会出现在写文章/写随笔的分类下拉；页面/导航是层级标记，前台暂不消费。',
-      },
-    },
-    {
       name: 'parent',
       type: 'relationship',
       relationTo: 'categories',

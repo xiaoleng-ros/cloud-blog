@@ -14,7 +14,8 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils'
-import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines'
+import { normalizeSiteHref } from 'cloud-blog/shared/free-text-lines'
+import { isExternalHref } from 'cloud-blog/shared/site-pages'
 import { getSnapshot, setSnapshot, getProbe, setProbe, type SyncSnapshot, type SyncProbe } from './sync-cache'
 
 // getPayload 实例进程内缓存（避免每次请求重建数据库连接）
@@ -411,43 +412,53 @@ export async function getSiteSettingsData(): Promise<Record<string, any> | null>
   }
 }
 
-/**
- * 把后台「每行一条 「文字 链接」」的导航文本解析为结构化数组。
- * 与前台共享同一份解析器（shared/free-text-lines）：按「最后一个空格」切分，
- * 名称在前、链接在后。前台导航 Global 与本函数共用，避免两边口径漂移。
- */
-function parseNavLines(text?: string | null): Array<{ href: string; label: string }> {
-  if (!text) return []
-  // parseFreeTextLines 内部已用 normalizeSiteHref 去掉站内路径的尾斜杠
-  // （EdgeOne CDN 会把带尾斜杠的 URL 308 跳走，跳转头的 UTF-8 乱码会让中文路径 404）。
-  return parseFreeTextLines(String(text), '#', false)
-    .filter((i) => i.href !== '#')
-    .map((i) => ({ href: i.href, label: i.name }))
-}
-
 /** 导航全局原始数据（保留 updatedAt 供版本号计算）；后台不可用时返回 null */
-export async function getNavGlobal(): Promise<{ navItems?: string | null; updatedAt?: string } | null> {
+export async function getNavGlobal(): Promise<{
+  topNav?: Array<{ label?: string; href?: string; sort?: number | null; visible?: boolean | null }> | null
+  updatedAt?: string | null
+} | null> {
   try {
     const payload = await getDb()
     const global = await payload.findGlobal({ slug: 'navigation' })
-    return (global ?? null) as { navItems?: string | null; updatedAt?: string } | null
+    return global ?? null
   } catch {
     return null
   }
 }
 
-const DEFAULT_NAV = [
-  { href: '/', label: '首页' },
-  { href: '/notes', label: '随笔' },
-  { href: '/archive', label: '归档' },
-  { href: '/friends', label: '友链' },
-  { href: '/about', label: '关于' },
+/** 后台不可用时的兜底导航（全部站内，无外链） */
+const DEFAULT_NAV: Array<{ href: string; label: string; external: boolean }> = [
+  { href: '/', label: '首页', external: false },
+  { href: '/notes', label: '随笔', external: false },
+  { href: '/archive', label: '归档', external: false },
+  { href: '/friends', label: '友链', external: false },
+  { href: '/about', label: '关于', external: false },
 ]
 
+/**
+ * 从 topNav 数组提取可见的导航项。
+ *
+ * external 由 href 形态推导而非读库：topNav 表没有 external 列，
+ * 凡是完整 URL / mailto: / tel: 都按外链处理，前台注入的链接据此加 target="_blank"。
+ */
+function parseTopNav(
+  items?: Array<{ label?: string; href?: string; sort?: number | null; visible?: boolean | null }> | null,
+): Array<{ href: string; label: string; external: boolean }> {
+  if (!Array.isArray(items)) return []
+  return items
+    .filter((i) => i.visible !== false && i.label?.trim() && i.href?.trim())
+    .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
+    .map((i) => ({
+      href: normalizeSiteHref(i.href!.trim()),
+      label: i.label!.trim(),
+      external: isExternalHref(i.href!),
+    }))
+}
+
 /** 导航项（Navigation Global 单例）；后台不可用或为空时回退默认四项 */
-export async function getNavData(): Promise<Array<{ href: string; label: string }>> {
+export async function getNavData(): Promise<Array<{ href: string; label: string; external: boolean }>> {
   const global = await getNavGlobal()
-  const items = parseNavLines(global?.navItems)
+  const items = parseTopNav(global?.topNav)
   return items.length > 0 ? items.filter((item) => item.href && item.label) : DEFAULT_NAV
 }
 
@@ -457,8 +468,8 @@ export interface FetchAllResult {
   projects: ProjectEntry[]
   friends: FriendEntry[]
   settings: Record<string, any> | null
-  nav: Array<{ href: string; label: string }>
-  navUpdatedAt?: string
+  nav: Array<{ href: string; label: string; external: boolean }>
+  navUpdatedAt?: string | null
   /** Media 集合的 url → alt 映射（Markdown 正文图片补 alt 用） */
   mediaAltMap: Map<string, string>
   /** 配了 alt 的图片条数，与 mediaUpdatedAt 一起构成 Media 的变更指纹 */
@@ -498,7 +509,7 @@ export async function fetchAllData(): Promise<FetchAllResult> {
   const posts = withCoverAlt(postsRaw)
   const notes = withCoverAlt(notesRaw)
 
-  const items = parseNavLines(navGlobal?.navItems)
+  const items = parseTopNav(navGlobal?.topNav)
   const nav = items.length > 0 ? items.filter((item) => item.href && item.label) : DEFAULT_NAV
   return {
     posts,

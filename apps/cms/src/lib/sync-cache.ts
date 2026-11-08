@@ -31,8 +31,8 @@ export interface SyncSnapshot {
   /** 友链（已通过），/friends 页按 group 聚合渲染 */
   friends: any[]
   settings: Record<string, any> | null
-  nav: Array<{ href: string; label: string }>
-  navUpdatedAt?: string
+  nav: Array<{ href: string; label: string; external: boolean }>
+  navUpdatedAt?: string | null
   /** Media 集合 url → alt 映射，Markdown 正文图片补 alt 用 */
   mediaAltMap: Map<string, string>
   /** 各数据源的「条数:最大 updatedAt」，供 /api/blog-sync?digest=1 轻量探测 */

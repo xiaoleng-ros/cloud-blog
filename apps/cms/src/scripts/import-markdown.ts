@@ -281,20 +281,33 @@ async function main() {
     })
 
     // 导航已拆分到「导航管理」(navigation) Global
+    // 新版使用结构化数组 topNav / morePanel，不再是 textarea。
+    // 仅当后台为空时写入默认值，避免覆盖用户已配置的导航。
     const navGlobal = await payload.findGlobal({ slug: 'navigation' })
-    // navItems 应为 textarea 纯文本（每行「文字 链接」）。
-    // 兼容两处脏数据：①存成对象数组后序列化的 JSON（含 { 或 "）；②空值。
-    // 只要不是合法纯文本就统一覆盖为默认导航，保证前台 parseNavLines 能解析。
-    const rawNav = navGlobal?.navItems
-    const navIsPlainText =
-      typeof rawNav === 'string' && !rawNav.includes('{') && !rawNav.includes('"') && rawNav.trim()
-    const navItems = navIsPlainText
-      ? rawNav
-      : ['首页 /', '随笔 /notes/', '归档 /archive/', '关于 /about/'].join('\n')
-    await payload.updateGlobal({
-      slug: 'navigation',
-      data: { navItems },
-    })
+    const hasTopNav = Array.isArray(navGlobal?.topNav) && navGlobal.topNav.length > 0
+    const hasMorePanel = Array.isArray(navGlobal?.morePanel) && navGlobal.morePanel.length > 0
+    if (!hasTopNav || !hasMorePanel) {
+      await payload.updateGlobal({
+        slug: 'navigation',
+        data: {
+          ...(hasTopNav ? {} : {
+            topNav: [
+              { label: '首页', href: '/', sort: 0, visible: true },
+              { label: '随笔', href: '/notes', sort: 1, visible: true },
+              { label: '归档', href: '/archive', sort: 2, visible: true },
+              { label: '关于', href: '/about', sort: 3, visible: true },
+            ],
+          }),
+          ...(hasMorePanel ? {} : {
+            morePanel: [
+              { label: '统计', href: '/stats', icon: 'spark', sort: 0, visible: true },
+              { label: '标签墙', href: '/tags', icon: 'tag', sort: 1, visible: true },
+              { label: 'GitHub', href: 'https://github.com', icon: 'github', external: true, sort: 2, visible: true },
+            ],
+          }),
+        },
+      })
+    }
 
     // ---- 页脚（均已拆到站点设置 Global，仅当为空时写入默认值，避免覆盖后台改动） ----
     const footerSubtitle =

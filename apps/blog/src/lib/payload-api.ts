@@ -15,7 +15,8 @@ import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { safeHref } from 'cloud-blog/shared/html-safety';
 import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils';
-import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines';
+import { normalizeSiteHref } from 'cloud-blog/shared/free-text-lines';
+import { isExternalHref } from 'cloud-blog/shared/site-pages';
 
 /**
  * 后台地址解析优先级：
@@ -56,6 +57,7 @@ function fetchJson<T>(path: string, timeoutMs = 30000): Promise<T> {
         let raw = '';
         res.setEncoding('utf8');
         res.on('data', (chunk) => (raw += chunk));
+        res.on('error', (error) => reject(error));
         res.on('end', () => {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
@@ -71,6 +73,10 @@ function fetchJson<T>(path: string, timeoutMs = 30000): Promise<T> {
     );
     req.on('timeout', () => req.destroy(new Error(`Payload API 请求超时: ${path}`)));
     req.on('error', (error) => reject(error));
+    // 保险：响应阶段 socket 可能在 req/res 之外发出 error，直接监听底层 socket
+    req.once('socket', (socket) => {
+      socket.on('error', (error) => reject(error));
+    });
   });
 }
 
@@ -369,20 +375,82 @@ export async function fetchSiteSettings(): Promise<Record<string, any> | null> {
   }
 }
 
+/** 「更多」面板条目（来自后台「导航管理」Global 的 morePanel 数组） */
+export interface MorePanelItem {
+  label: string;
+  href: string;
+  icon?: string;
+  external?: boolean;
+}
+
+/** 顶部导航项：比更多面板少 icon，但同样带 external（决定是否新标签打开） */
+export interface NavLinkItem {
+  label: string;
+  href: string;
+  external?: boolean;
+}
+
+/** 后台 navigation Global 的 API 形状（结构化数组，替代旧 textarea 方案） */
+interface NavigationGlobal {
+  topNav?: Array<{
+    label?: string;
+    href?: string;
+    sort?: number;
+    visible?: boolean;
+  }> | null;
+  morePanel?: Array<{
+    label?: string;
+    href?: string;
+    icon?: string;
+    external?: boolean;
+    sort?: number;
+    visible?: boolean;
+  }> | null;
+}
+
 /**
- * 导航项（来自后台「导航管理」Global 单例）；不可用时返回 null。
- * 行格式「文字 链接」共用 shared/free-text-lines 解析器（与社交/页脚同一套，M4）。
+ * 顶部导航项（来自后台「导航管理」Global 的 topNav 数组）；不可用时返回 null。
+ * 仅保留 visible !== false 且 label/href 都非空的条目，按 sort 升序。
+ *
+ * external 由 href 形态推导而非读库：topNav 表没有 external 列，
+ * 而后台弹窗已经用「站内页面 / 外部链接」二选一管住了录入，
+ * 凡是完整 URL / mailto: / tel: 一律按外链处理（前台新标签打开）。
  */
-export async function fetchNavItems(): Promise<Array<{ href: string; label: string }> | null> {
+export async function fetchNavItems(): Promise<NavLinkItem[] | null> {
   try {
-    const data = await fetchJson<{ navItems?: string | null }>('/api/globals/navigation');
-    // 导航条目必须有链接：allowEmptyHref=false，惰性 '#' 不出现。
-    // parseFreeTextLines 内部已用 normalizeSiteHref 去掉站内路径的尾斜杠
-    // （EdgeOne CDN 会把带尾斜杠的 URL 308 跳走，跳转头的 UTF-8 乱码会让中文路径 404）。
-    return parseFreeTextLines(data?.navItems, '#', false).map((i) => ({
-      href: i.href,
-      label: i.name,
-    }));
+    const data = await fetchJson<NavigationGlobal>('/api/globals/navigation');
+    const items = (data?.topNav ?? [])
+      .filter((i) => i.visible !== false && i.label?.trim() && i.href?.trim())
+      .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
+      .map((i) => ({
+        href: normalizeSiteHref(i.href!.trim()),
+        label: i.label!.trim(),
+        external: isExternalHref(i.href!),
+      }));
+    return items;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 「更多」面板条目（来自后台「导航管理」Global 的 morePanel 数组）；不可用时返回 null。
+ * 仅保留 visible !== false 且 label 非空的条目，按 sort 升序。
+ * icon 仅在 shared/icon-paths 中存在时保留，避免前台渲染未知图标。
+ */
+export async function fetchMorePanelItems(): Promise<MorePanelItem[] | null> {
+  try {
+    const data = await fetchJson<NavigationGlobal>('/api/globals/navigation');
+    const items = (data?.morePanel ?? [])
+      .filter((i) => i.visible !== false && i.label?.trim())
+      .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
+      .map((i) => ({
+        label: i.label!.trim(),
+        href: normalizeSiteHref((i.href ?? '').trim()),
+        icon: i.icon?.trim() || undefined,
+        external: i.external === true,
+      }));
+    return items;
   } catch {
     return null;
   }

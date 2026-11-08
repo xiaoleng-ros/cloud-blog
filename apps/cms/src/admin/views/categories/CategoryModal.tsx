@@ -14,14 +14,6 @@ export const parentIdOf = (d: CategoryDoc): number | null => {
   return typeof d.parent === 'object' ? Number(d.parent.id) : Number(d.parent)
 }
 
-const NODE_TYPES = [
-  { value: 'category', label: '分类', hint: '归档文章' },
-  { value: 'page', label: '页面', hint: '站内页面' },
-  { value: 'nav', label: '导航', hint: '外链跳转' },
-] as const
-
-type NodeType = (typeof NODE_TYPES)[number]['value']
-
 /** 把全量分类拍平成「树形顺序 + 深度」列表，供上级分类下拉；excludeId 子树整体剔除 */
 export function flattenWithDepth(docs: CategoryDoc[], excludeId?: number) {
   const byId = new Map(docs.map((d) => [d.id, d]))
@@ -65,7 +57,6 @@ export function CategoryModal({
   const [parent, setParent] = useState<string>(initial && parentIdOf(initial) != null ? String(parentIdOf(initial)) : '')
   const [sort, setSort] = useState<string>(String(initial?.sort ?? 0))
   const [visible, setVisible] = useState<boolean>(initial?.visible !== false)
-  const [nodeType, setNodeType] = useState<NodeType>(initial?.nodeType ?? 'category')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -84,7 +75,6 @@ export function CategoryModal({
     const payload = {
       name: name.trim(),
       slug: slug.trim() || null,
-      nodeType,
       parent: parent ? Number(parent) : null,
       sort: Number(sort) || 0,
       visible,
@@ -112,7 +102,7 @@ export function CategoryModal({
           </span>
           <div>
             <h3>{mode === 'create' ? '新建分类' : '编辑分类'}</h3>
-            <p>支持多级分类、页面与导航模式，用于组织文章与站点菜单</p>
+            <p>用于组织文章归档，支持多级分类层级</p>
           </div>
           <button type="button" className="cat__modal-close" onClick={onClose} aria-label="关闭">
             ✕
@@ -194,27 +184,6 @@ export function CategoryModal({
               >
                 隐藏
               </button>
-            </div>
-          </div>
-
-          <div className="cat__field">
-            <span className="cat__label">
-              节点类型 <i>（可选）</i>
-            </span>
-            <div className="cat__types" role="radiogroup" aria-label="节点类型">
-              {NODE_TYPES.map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={nodeType === t.value}
-                  className={`cat__type-card${nodeType === t.value ? ' cat__type-card--active' : ''}`}
-                  onClick={() => setNodeType(t.value)}
-                >
-                  <b>{t.label}</b>
-                  <i>{t.hint}</i>
-                </button>
-              ))}
             </div>
           </div>
 

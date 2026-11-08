@@ -1,7 +1,8 @@
 ---
 import Icon from './Icon.astro';
 import { SITE_DEFAULTS } from '../lib/site-defaults';
-import { getNavItems, getSiteSettings, getSocials } from '../lib/site-settings';
+import { getNavItems, getMorePanelItems, getSiteSettings } from '../lib/site-settings';
+import { hasIcon } from 'cloud-blog/shared/icon-paths';
 
 // 尾斜杠统一处理，避免跨文档视图切换时被主机 301 跳转
 const pathname = Astro.url.pathname.endsWith('/')
@@ -17,40 +18,16 @@ const brandName = settings?.siteName ?? SITE_DEFAULTS.siteName;
 const navItems = await getNavItems();
 
 /**
- * 「更多」面板条目。
- *
- * href 留空表示页面还没建，渲染成不可点的占位；
- * 有 href 的会渲染成链接并在新标签打开。
- *
- * GitHub 地址按三级回退取：
- *   1. 社交链接里的 github 条目（明确配置了就以它为准）
- *   2. 站点设置的「GitHub 用户名」拼个人主页（与页脚 GitHub 指向同一处）
- *   3. 站点设置的「GitHub 仓库地址」
- * 三者都空才算「页面未建」，渲染成不可点占位。
- *
- * 为什么不能只看社交链接：socials 是「填了才显示」的纯文本字段，漏填 github 时
- * 这里会拿到空串，条目静默降级成不可点的 span —— 看起来像按钮，点了没反应。
- * 用 githubUser 兜住，后台只填了一处也能点得动。
+ * 「更多」面板条目：完全由后台「导航管理」的 morePanel 数组驱动。
+ * 后台不可用时 getMorePanelItems 返回离线兜底三项（统计/标签墙/GitHub），
+ * 后台清空时返回空数组——前台「更多」按钮仍展示但面板为空。
+ * icon 仅在图标库中存在时渲染，未知图标不显示。
  */
-const socialGithub = (await getSocials()).find((s) => s.icon === 'github')?.href?.trim();
-const settingGithubUser = (settings?.githubUser ?? '').trim().replace(/^@/, '');
-const settingGithubRepo = (settings?.githubRepo ?? '').trim();
-// 社交链接里的值必须是个绝对 http(s) 地址才算数：
-// parseSocials 对非法协议会塞 '#' 占位（见 site-settings.ts），而少写协议的值
-// （如误填 `github.com/xxx`）会被当成站内路径，点了跳到 /github.com/xxx 直接 404。
-// 这两种都当没填，继续往下回退。
-const isAbsoluteHttp = (href: string) => /^https?:\/\//i.test(href);
-const githubHref =
-  (socialGithub && isAbsoluteHttp(socialGithub) ? socialGithub : '') ||
-  (settingGithubUser ? `https://github.com/${settingGithubUser}` : '') ||
-  (isAbsoluteHttp(settingGithubRepo) ? settingGithubRepo : '');
-
-// 站内页面：交给 ClientRouter 走单页切换（data-more-link 让点击处理器放行默认行为）
-const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?: boolean }> = [
-  { label: '统计', emoji: '📊', href: '/stats' },
-  { label: '标签墙', emoji: '🏷️', href: '/tags' },
-  { label: 'GitHub', emoji: '🔥', href: githubHref, external: true },
-];
+const moreItems = await getMorePanelItems();
+const moreItemsWithIcon = moreItems.map((item) => ({
+  ...item,
+  icon: item.icon && hasIcon(item.icon) ? item.icon : undefined,
+}));
 ---
 
 <header
@@ -75,6 +52,10 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
               href={item.href}
               class:list={['site-nav__tag', isCurrent(item.href) && 'is-current']}
               data-nav-route
+              /* 后台选了「外部链接」的条目在新标签打开：外站没有本站的返回路径，
+                 直接覆盖当前页会丢掉读者正在看的内容 */
+              target={item.external ? '_blank' : undefined}
+              rel={item.external ? 'noopener noreferrer' : undefined}
             >
               {item.label}
             </a>
@@ -98,7 +79,7 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
         </button>
         <div class="site-more" id="site-more-panel" data-more-panel hidden>
           <ul class="site-more__grid">
-            {MORE_ITEMS.map((item) =>
+            {moreItemsWithIcon.map((item) =>
               item.href ? (
                 <li>
                   <a
@@ -108,7 +89,13 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
                     target={item.external ? '_blank' : undefined}
                     rel={item.external ? 'noopener noreferrer' : undefined}
                   >
-                    <span class="site-more__emoji" aria-hidden="true">{item.emoji}</span>
+                    {item.icon ? (
+                      <span class="site-more__icon" aria-hidden="true">
+                        <Icon name={item.icon} size={20} />
+                      </span>
+                    ) : (
+                      <span class="site-more__icon site-more__icon--placeholder" aria-hidden="true"></span>
+                    )}
                     <span class="site-more__label">{item.label}</span>
                   </a>
                 </li>
@@ -116,7 +103,13 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
                 <li>
                   <!-- 页面未建：渲染成不可点的占位条目，等有 href 后自动变链接 -->
                   <span class="site-more__item is-disabled" aria-disabled="true">
-                    <span class="site-more__emoji" aria-hidden="true">{item.emoji}</span>
+                    {item.icon ? (
+                      <span class="site-more__icon" aria-hidden="true">
+                        <Icon name={item.icon} size={20} />
+                      </span>
+                    ) : (
+                      <span class="site-more__icon site-more__icon--placeholder" aria-hidden="true"></span>
+                    )}
                     <span class="site-more__label">{item.label}</span>
                   </span>
                 </li>
@@ -166,9 +159,21 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
     return path === '//' ? '/' : path;
   };
 
+  /**
+   * 外链（后台选了「外部链接」的条目）不参与「当前页」推导：
+   * 它在别的标签页打开，既不该高亮成当前页，也不该有 pending 过渡。
+   * 判据用 target 属性而非 href 形态——和模板里渲染 target 的条件保持一致。
+   */
+  const isExternalLink = (link: HTMLAnchorElement) => link.target === '_blank';
+
   const syncCurrentNavItem = () => {
     const pathname = normalizePath(window.location.pathname);
     document.querySelectorAll<HTMLAnchorElement>('.site-nav__tag[data-nav-route]').forEach((link) => {
+      if (isExternalLink(link)) {
+        link.classList.remove('is-pending', 'is-current');
+        link.removeAttribute('aria-current');
+        return;
+      }
       const href = normalizePath(new URL(link.href, window.location.href).pathname);
       const current = href === '/' ? pathname === '/' : pathname.startsWith(href);
       link.classList.remove('is-pending');
@@ -186,7 +191,7 @@ const MORE_ITEMS: Array<{ label: string; emoji: string; href: string; external?:
     const target = event.target;
     if (!(target instanceof Element)) return;
     const link = target.closest<HTMLAnchorElement>('.site-nav__tag[data-nav-route]');
-    if (!link) return;
+    if (!link || isExternalLink(link)) return;
 
     const targetPath = normalizePath(new URL(link.href, window.location.href).pathname);
     if (targetPath === normalizePath(window.location.pathname)) return;

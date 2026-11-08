@@ -87,8 +87,6 @@ function flatten(tree: TreeNode[], collapsed: Set<number>, keep: Set<number> | n
   }
 }
 
-const TYPE_LABEL: Record<string, string> = { category: '分类', page: '页面', nav: '导航' }
-
 export const CategoriesViewInner = () => {
   const [docs, setDocs] = useState<CategoryDoc[]>([])
   const [loading, setLoading] = useState(true)
@@ -240,19 +238,8 @@ export const CategoriesViewInner = () => {
       />
 
       <div className="cat__panel">
-        {/* 工具栏：图例 + 搜索 + 展开/折叠 + 批量删除 */}
+        {/* 工具栏：搜索 + 展开/折叠 + 批量删除 */}
         <div className="cat__toolbar">
-          <div className="cat__legend" aria-hidden="true">
-            <span>
-              <i className="cat__dot cat__dot--category" />分类
-            </span>
-            <span>
-              <i className="cat__dot cat__dot--page" />页面
-            </span>
-            <span>
-              <i className="cat__dot cat__dot--nav" />导航
-            </span>
-          </div>
           <div className="cat__tools">
             <input
               type="search"
@@ -305,7 +292,7 @@ export const CategoriesViewInner = () => {
                 </svg>
               </span>
               <h3>还没有分类</h3>
-              <p>分类用于组织文章归档，页面用于站内菜单，导航用于外链跳转</p>
+              <p>分类用于组织文章归档，支持多级分类层级</p>
               <button type="button" className="manage__create" onClick={() => setModal({ mode: 'create' })}>
                 + 创建第一个分类
               </button>
@@ -315,7 +302,6 @@ export const CategoriesViewInner = () => {
           ) : (
             rows.map((row) => {
               const d = row.doc
-              const type = d.nodeType ?? 'category'
               const hasChildren = row.hasChildren
               const isOpen = keyword.trim() ? true : !collapsed.has(d.id)
               return (
@@ -339,13 +325,11 @@ export const CategoriesViewInner = () => {
                   ) : (
                     <span className="cat__disclosure-spacer" />
                   )}
-                  <i className={`cat__dot cat__dot--${type}`} aria-hidden="true" />
-                  <span className="cat__name" title={TYPE_LABEL[type]}>
+                  <span className="cat__name">
                     {d.name}
                   </span>
                   {d.slug && <code className="cat__slug">{d.slug}</code>}
                   {d.visible === false && <i className="cat__tag cat__tag--hidden">已隐藏</i>}
-                  {type !== 'category' && <i className="cat__tag">{TYPE_LABEL[type]}</i>}
                   <span className="cat__weight">{Number(d.sort ?? 0) || ''}</span>
                   <span className="cat__row-actions">
                     <button type="button" className="drafts__op" onClick={() => setModal({ mode: 'edit', doc: d })}>

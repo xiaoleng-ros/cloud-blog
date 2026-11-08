@@ -172,9 +172,9 @@ export async function createTerm(collection: 'categories' | 'tags', name: string
   return request<TermOption>('POST', `/api/${collection}`, { name })
 }
 
-/** 「可选分类」下拉专用：只列节点类型=分类 且 前台可见 的节点，按权重排序 */
+/** 「可选分类」下拉专用：只列前台可见的节点，按权重排序 */
 export async function fetchSelectableCategories(): Promise<TermOption[]> {
-  const where = { nodeType: { equals: 'category' }, visible: { not_equals: false } }
+  const where = { visible: { not_equals: false } }
   const res = await request<ListResponse<TermOption>>(
     'GET',
     `/api/categories?limit=0&depth=0&sort=sort&where=${encodeURIComponent(JSON.stringify(where))}`,

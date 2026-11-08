@@ -184,10 +184,6 @@ export interface Category {
    * 用于前台文章 URL 的分类段，例如填 daily → /posts/daily/46。留空则回退使用「分类名称」。
    */
   slug?: string | null;
-  /**
-   * 仅「分类」且前台可见的节点会出现在写文章/写随笔的分类下拉；页面/导航是层级标记，前台暂不消费。
-   */
-  nodeType: 'category' | 'page' | 'nav';
   parent?: (number | null) | Category;
   /**
    * 同级内数字越小越靠前
@@ -532,7 +528,6 @@ export interface NotesSelect<T extends boolean = true> {
 export interface CategoriesSelect<T extends boolean = true> {
   name?: T;
   slug?: T;
-  nodeType?: T;
   parent?: T;
   sort?: T;
   visible?: T;
@@ -735,17 +730,48 @@ export interface SiteSetting {
   createdAt?: string | null;
 }
 /**
- * 配置前台顶部导航菜单（支持增删、排序）。
+ * 配置前台顶部导航标签与「更多」面板条目（支持增删、排序、可见性）。
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "navigation".
  */
 export interface Navigation {
   id: number;
-  /**
-   * 每条一个「文字 链接」，一行一项，按从上到下顺序在前台顶部导航展示。
-   */
-  navItems?: string | null;
+  topNav?:
+    | {
+        label: string;
+        /**
+         * 站内路径如 /archive，或外链如 https://...
+         */
+        href: string;
+        /**
+         * 数字越小越靠前
+         */
+        sort?: number | null;
+        visible?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  morePanel?:
+    | {
+        label: string;
+        /**
+         * 站内路径如 /stats，或外链如 https://...
+         */
+        href: string;
+        /**
+         * 图标名，与前台 Icon 组件一致，如 github / tag / globe
+         */
+        icon?: string | null;
+        external?: boolean | null;
+        /**
+         * 数字越小越靠前
+         */
+        sort?: number | null;
+        visible?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -784,7 +810,26 @@ export interface SiteSettingsSelect<T extends boolean = true> {
  * via the `definition` "navigation_select".
  */
 export interface NavigationSelect<T extends boolean = true> {
-  navItems?: T;
+  topNav?:
+    | T
+    | {
+        label?: T;
+        href?: T;
+        sort?: T;
+        visible?: T;
+        id?: T;
+      };
+  morePanel?:
+    | T
+    | {
+        label?: T;
+        href?: T;
+        icon?: T;
+        external?: T;
+        sort?: T;
+        visible?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

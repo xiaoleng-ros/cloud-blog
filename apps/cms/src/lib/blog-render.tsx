@@ -570,7 +570,7 @@ function renderHeroPicks(picks: MdEntry[]): string {
 
 /** 导航链接（Nav.astro 中 .site-nav__tags 的动态链接部分） */
 function renderNavLinks(
-  navItems: Array<{ href: string; label: string }>,
+  navItems: Array<{ href: string; label: string; external?: boolean }>,
   pathname: string,
 ): string {
   const path = pathname.endsWith('/') ? pathname : `${pathname}/`
@@ -580,7 +580,11 @@ function renderNavLinks(
   return navItems
     .map((item) => {
       const href = safeHref(item.href, '#')
-      return `<a href="${escapeAttr(href)}" class="site-nav__tag${isCurrent(href) ? ' is-current' : ''}" data-nav-route>${escapeHtml(item.label)}</a>`
+      // 外链新标签打开：与 Nav.astro 的静态渲染保持逐字一致，否则同步注入会改变链接行为
+      const ext = item.external
+        ? ' target="_blank" rel="noopener noreferrer"'
+        : ''
+      return `<a href="${escapeAttr(href)}" class="site-nav__tag${isCurrent(href) ? ' is-current' : ''}" data-nav-route${ext}>${escapeHtml(item.label)}</a>`
     })
     .join('')
 }
@@ -1410,7 +1414,7 @@ interface SyncData {
   /** 友链（仅 status=published），/friends 页平铺展示，不分组 */
   friends: FriendEntry[]
   settings: Record<string, any> | null
-  nav: Array<{ href: string; label: string }>
+  nav: Array<{ href: string; label: string; external?: boolean }>
   /** Media 集合 url → alt 映射，用于正文图片 alt 补齐 */
   mediaAltMap: Map<string, string>
   version: string
@@ -1918,7 +1922,7 @@ export function buildSiteIndex(ctx: {
   posts: MdEntry[]
   notes: MdEntry[]
   projects: ProjectEntry[]
-  nav: Array<{ href: string; label: string }>
+  nav: Array<{ href: string; label: string; external?: boolean }>
 }): SiteIndexEntry[] {
   const posts = sortPosts(ctx.posts)
 

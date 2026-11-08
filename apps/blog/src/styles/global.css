@@ -5247,6 +5247,32 @@ a.site-more__item:hover {
   line-height: 1;
 }
 
+.site-more__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  color: var(--color-text-soft);
+}
+
+.site-more__icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  stroke: currentColor;
+  fill: none;
+}
+
+.site-more__icon--placeholder {
+  /* 无图标时占位，保持网格对齐 */
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.site-more__item:hover .site-more__icon {
+  color: var(--color-accent);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .site-nav__more.is-open .site-more {
     animation: more-pop 0.2s var(--ease-out-soft);
