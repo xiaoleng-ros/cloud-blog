@@ -1,0 +1,73 @@
+# 提交/PR 的最小回归门禁。
+#
+# 只跑五件事，都是仓库里早已存在但一直靠手动执行的检查：
+#   1. typecheck —— blog 用 `astro check`，cms 用 `tsc --noEmit`；
+#   2. verify:html-inject —— 53 条断言，覆盖 parse5 注入的全部边界（未闭合标签、
+#      同名嵌套 article、属性引号形态、data-sync-version 覆盖等）；
+#   3. verify:csp —— 同一份 CSP 策略在 next.config.mjs 与 edgeone.json 两处必须逐字一致；
+#   4. verify:render —— 45 个页面用例的渲染输出必须与基线逐字相同。渲染层拆成
+#      ./render/* 十几个文件后，「搬家有没有搬错」只能靠输出比对来证明；
+#   5. fmt:check —— Prettier 只做检查不改文件，格式漂移在评审阶段就暴露。
+#
+# 为什么不在这里跑完整 build：`build:all` 需要连线上 Payload 拉数据（Astro 构建期
+# fetch PUBLIC_PAYLOAD_URL），CI 里没有该凭证，跑起来只会得到模板兜底页。完整构建
+# 的正确位置是 EdgeOne 的 buildCommand（已接入同一份 verify 脚本）。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 同一分支上的新提交取消上一轮未完成的运行，避免排队堆积。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 两个 app 各自独立 lockfile（无 workspace），必须分别 npm ci。
+      # blog 的 postinstall 会跑 patch-package（astro+7.4.0.patch），不能加 --ignore-scripts。
+      # 根目录也要装：Prettier 声明在根 devDependencies（fmt 门禁用）。
+      - name: 安装依赖
+        run: |
+          npm ci
+          npm ci --prefix apps/blog
+          npm ci --prefix apps/cms
+
+      - name: 类型检查（blog）
+        run: npm run typecheck --prefix apps/blog
+
+      - name: 类型检查（cms）
+        run: npm run typecheck --prefix apps/cms
+
+      - name: HTML 注入行为校验
+        run: node apps/cms/scripts/verify-html-inject.mjs
+
+      # CSP 同一份策略要在 next.config.mjs 与 edgeone.json 两处下发（静态层不经过
+      # Next，next.config 的头对它无效）。只改一处时，页面会一半有 CSP 一半没有，
+      # 而"没有"在浏览器里毫无报错——只能靠逐字比对两处取值发现。
+      - name: CSP 策略一致性
+        run: node apps/cms/scripts/verify-csp-sync.mjs
+
+      # 渲染层不启动 Next、不连数据库：loader 把 blog-sync/sync-cache 换成了
+      # 可注入快照的桩，跑的是真实渲染代码。拆分或改版后漏改的地方会当场暴露。
+      - name: 渲染输出回归
+        run: node apps/cms/scripts/verify-render-parity.mjs
+
+      - name: 格式检查
+        run: npm run fmt:check
