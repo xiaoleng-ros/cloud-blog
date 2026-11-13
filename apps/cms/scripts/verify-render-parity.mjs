@@ -25,6 +25,40 @@ import { register } from 'node:module'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const BASELINE = join(HERE, 'render-parity', 'baseline.json')
 
+// ---------------------------------------------------------------------------
+// 冻结渲染期的所有环境输入
+//
+// 这份基线的意义是「同一份代码永远算出同一份 HTML」。任何从外部读进来的东西
+// 都会让它在不同机器上失配，而失配时人是分不清「我改坏了」还是「环境不同」的。
+// 三个来源都踩过：
+//
+// 1. NEXT_PUBLIC_SERVER_URL —— `src/lib/render/config.ts:13` 在**模块加载时**就把它
+//    读进 SITE_DEFAULTS.url，而 renderArticleLicense 用它拼文章绝对地址。
+//    本地没这个变量（取 example.com），EdgeOne 构建机有（取真实域名），
+//    于是 articleFooter 区块的摘要必然不同。首次部署就是这么失败的。
+// 2. NODE_ENV —— `src/lib/render/site-settings.ts:111` 的 avatarOf 在 production
+//    下返回构建期小图、否则回退后台原图，两条分支输出不同。
+// 3. 当前时间 —— `src/lib/render/util.ts:28` 的 currentYearShanghai 喂给页脚年份，
+//    不冻结的话每年 1 月 1 日基线都会「莫名」失效。
+//
+// 冻结的是**测试的输入**，不是被测行为：渲染代码本身没被改动，换任何 URL
+// 它仍然会拼出对应的绝对地址。
+// ---------------------------------------------------------------------------
+process.env.NEXT_PUBLIC_SERVER_URL = 'https://example.com'
+process.env.NODE_ENV = 'test'
+
+const FIXED_NOW = new Date('2026-06-01T12:00:00+08:00').getTime()
+const RealDate = Date
+globalThis.Date = class extends RealDate {
+  constructor(...args) {
+    if (args.length === 0) super(FIXED_NOW)
+    else super(...args)
+  }
+  static now() {
+    return FIXED_NOW
+  }
+}
+
 register('./render-parity/loader.mjs', import.meta.url)
 
 const { runCases } = await import('./render-parity/cases.mjs')
