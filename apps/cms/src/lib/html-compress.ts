@@ -104,10 +104,7 @@ export function clientRejectsBrotli(header: string | null): boolean {
 }
 
 /** 取压缩结果（带 LRU 缓存）。返回 null 表示不值得压，调用方原样发送。 */
-function compress(
-  html: string,
-  cacheKey: string | undefined,
-): { body: Buffer; sourceBytes: number } | null {
+function compress(html: string, cacheKey: string | undefined): { body: Buffer; sourceBytes: number } | null {
   const sourceBytes = Buffer.byteLength(html, 'utf8')
   if (sourceBytes < MIN_COMPRESS_BYTES) return null
 
@@ -123,8 +120,7 @@ function compress(
   if (cacheKey) {
     const existing = cacheGet(cacheKey)
     // 键相同但源长度变了（版本没变而外壳被换掉）：丢弃旧条目重新攒
-    const entry: CacheEntry =
-      existing && existing.sourceBytes === sourceBytes ? existing : { sourceBytes }
+    const entry: CacheEntry = existing && existing.sourceBytes === sourceBytes ? existing : { sourceBytes }
     entry.br = body
     cacheSet(cacheKey, entry)
   }

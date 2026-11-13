@@ -254,7 +254,10 @@ const shapeTemplateCache = new Map<string, ShapeTemplate | null>()
 
 /** 磁盘目录名是解码后的原文（astro 按参数原值建目录）；统一收敛成请求路径形态 */
 function fileToPathname(htmlDir: string, file: string): string {
-  const relative = file.slice(htmlDir.length).replace(/\\/g, '/').replace(/\/index\.html$/, '')
+  const relative = file
+    .slice(htmlDir.length)
+    .replace(/\\/g, '/')
+    .replace(/\/index\.html$/, '')
   const segments = relative
     .split('/')
     .filter(Boolean)
@@ -352,12 +355,7 @@ function encodePathname(pathname: string): string {
  * 只做定向替换（canonical / og:url 的 URL 结尾 + og:title / twitter:title），
  * 不能对全文做路径替换——/archive/ 这类前后缀形态会波及正文里的分页链接。
  */
-function rewriteTemplateHead(
-  html: string,
-  templatePathname: string,
-  pathname: string,
-  title: string | null,
-): string {
+function rewriteTemplateHead(html: string, templatePathname: string, pathname: string, title: string | null): string {
   let out = html
   const from = encodePathname(templatePathname)
   // 模板路径按构建产物形态带尾斜杠，而模板 head 里的 canonical 已经由 BaseLayout 归一成
@@ -396,10 +394,7 @@ function rewriteTemplateHead(
   return out
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ path?: string[] }> }) {
   const { path } = await params
   const pathname = normalizeRequestPath(path)
   if (pathname === null) {

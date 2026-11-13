@@ -249,10 +249,7 @@ export async function listComments(options: {
       [url],
     )
     const count = Number(countResult.rows[0].count)
-    const rootCountResult = await client.query(
-      `SELECT COUNT(*) FROM ${table('comment')} WHERE ${ROOT_WHERE}`,
-      [url],
-    )
+    const rootCountResult = await client.query(`SELECT COUNT(*) FROM ${table('comment')} WHERE ${ROOT_WHERE}`, [url])
     const rootCount = Number(rootCountResult.rows[0].count)
     // 官方：totalPages = ceil(rootCount / pageSize)。count 则是含回复的全量数。
     const totalPages = Math.max(1, Math.ceil(rootCount / pageSize))
@@ -444,7 +441,7 @@ export async function createComment(
     pid: pid ?? null,
     rid: rid ?? null,
     status,
-    user_id: context.isAdmin ? context.adminUserId ?? null : null,
+    user_id: context.isAdmin ? (context.adminUserId ?? null) : null,
   })
 }
 
@@ -465,10 +462,7 @@ async function insertComment(params: {
     // 如果有 pid，查询父评论取 rid（根评论 id）
     let finalRid = params.rid
     if (params.pid != null && finalRid == null) {
-      const parent = await client.query(
-        `SELECT id, rid FROM ${table('comment')} WHERE id = $1`,
-        [params.pid],
-      )
+      const parent = await client.query(`SELECT id, rid FROM ${table('comment')} WHERE id = $1`, [params.pid])
       if (parent.rowCount) {
         finalRid = parent.rows[0].rid ?? parent.rows[0].id
       }
@@ -575,10 +569,7 @@ export async function deleteComment(id: number): Promise<void> {
 export async function getCounter(url: string): Promise<RawCounter> {
   const normUrl = normalizeUrl(url)
   return withDb(async (client) => {
-    const result = await client.query(
-      `SELECT * FROM ${table('counter')} WHERE url = $1`,
-      [normUrl],
-    )
+    const result = await client.query(`SELECT * FROM ${table('counter')} WHERE url = $1`, [normUrl])
     if (result.rowCount) return result.rows[0] as RawCounter
     // 不存在则创建
     const inserted = await client.query(
@@ -678,10 +669,7 @@ export async function updateCounter(url: string, type: string, action: string, v
 
   return withDb(async (client) => {
     // 先确保行存在（wl_counter.url 无唯一约束，不能用 ON CONFLICT）
-    const existing = await client.query(
-      `SELECT id FROM ${table('counter')} WHERE url = $1 LIMIT 1`,
-      [normUrl],
-    )
+    const existing = await client.query(`SELECT id FROM ${table('counter')} WHERE url = $1 LIMIT 1`, [normUrl])
     if (!existing.rowCount) {
       // 只对新行计入配额（已有行的自增是真实阅读，不该被限）
       if (!reserveNewCounterRow()) {
@@ -693,7 +681,7 @@ export async function updateCounter(url: string, type: string, action: string, v
         [normUrl],
       )
     }
-    const delta = action === 'inc' ? 1 : action === 'dec' ? -1 : value ?? 0
+    const delta = action === 'inc' ? 1 : action === 'dec' ? -1 : (value ?? 0)
     const result = await client.query(
       `UPDATE ${table('counter')} SET ${type} = GREATEST(0, COALESCE(${type}, 0) + $1), updatedat = now()
        WHERE url = $2 RETURNING *`,

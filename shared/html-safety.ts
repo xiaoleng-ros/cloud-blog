@@ -8,7 +8,7 @@
  */
 
 /** href 允许的协议。相对路径（`/posts/1/`）与锚点（`#top`）不带协议，天然允许。 */
-const ALLOWED_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
+const ALLOWED_SCHEMES = new Set(['http', 'https', 'mailto', 'tel'])
 
 /**
  * href 协议白名单校验（只判断协议，不做域名白名单）。
@@ -20,18 +20,18 @@ const ALLOWED_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
  *  - 协议相对链接 `//host`：不带协议就跳到外部域，后台填写里几乎不可能是有意为之
  */
 export function isSafeHref(raw: unknown): boolean {
-  if (typeof raw !== 'string') return false;
-  const value = raw.trim();
-  if (!value) return false;
-  if (/[\u0000-\u001f\u007f]/.test(value)) return false;
-  if (value.includes('\\')) return false;
-  if (value.startsWith('//')) return false;
-  const scheme = value.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
-  if (!scheme) return true;
-  return ALLOWED_SCHEMES.has(scheme[1].toLowerCase());
+  if (typeof raw !== 'string') return false
+  const value = raw.trim()
+  if (!value) return false
+  if (/[\u0000-\u001f\u007f]/.test(value)) return false
+  if (value.includes('\\')) return false
+  if (value.startsWith('//')) return false
+  const scheme = value.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/)
+  if (!scheme) return true
+  return ALLOWED_SCHEMES.has(scheme[1].toLowerCase())
 }
 
 /** 校验并返回可安全写入 href 的值；不安全或缺失时返回 fallback */
 export function safeHref(raw: unknown, fallback = '#'): string {
-  return isSafeHref(raw) ? String(raw).trim() : fallback;
+  return isSafeHref(raw) ? String(raw).trim() : fallback
 }

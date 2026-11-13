@@ -41,9 +41,6 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error('[comment-image/gc] 失败:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : '回收失败' },
-      { status: 502 },
-    )
+    return NextResponse.json({ error: error instanceof Error ? error.message : '回收失败' }, { status: 502 })
   }
 }

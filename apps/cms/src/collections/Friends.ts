@@ -56,8 +56,7 @@ export const Friends: CollectionConfig = {
   admin: {
     useAsTitle: 'name',
     defaultColumns: ['name', 'url', 'group', 'sortOrder', 'status', 'source', 'updatedAt'],
-    description:
-      '友链卡片。前台 /friends 把所有「已通过」的友链平铺成卡片墙（不分组），按排序值升序展示。',
+    description: '友链卡片。前台 /friends 把所有「已通过」的友链平铺成卡片墙（不分组），按排序值升序展示。',
     // 待审核的申请最需要被看见，列表页把 pending 排前面由 sortOrder 决定不了，
     // 这里给一个默认筛选提示（Payload 没有原生的「默认按状态筛选」配置项）
     listSearchableFields: ['name', 'url', 'description'],

@@ -17,14 +17,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { DateRangeField } from '../../components/DateField'
 import { Toast, useToast } from '../../components/Toast'
 import { clip, extractNames, fmt, tagPill } from '../lib/format'
-import {
-  deleteTrashedDoc,
-  describeApiError,
-  listDocs,
-  restoreDoc,
-  type AdminNote,
-  type AdminPost,
-} from '../lib/api'
+import { deleteTrashedDoc, describeApiError, listDocs, restoreDoc, type AdminNote, type AdminPost } from '../lib/api'
 
 type Tab = 'posts' | 'notes'
 
@@ -91,14 +84,7 @@ export const TrashViewInner = () => {
       if (from) and.push({ [dateField]: { greater_than_equal: from } })
       if (to) and.push({ [dateField]: { less_than_equal: to } })
 
-      const res = await listDocs<AdminPost | AdminNote>(
-        tab,
-        { and },
-        page,
-        10,
-        `-createdAt`,
-        true,
-      )
+      const res = await listDocs<AdminPost | AdminNote>(tab, { and }, page, 10, `-createdAt`, true)
       setTotal(res.totalDocs)
       setRows(
         res.docs.map((d) => {
@@ -113,7 +99,7 @@ export const TrashViewInner = () => {
                 : (note.mood ?? '').trim() || clip(note.content) || '—',
             categoryNames: extractNames(d.categories),
             tagNames: extractNames(d.tags),
-            publishedAt: tab === 'posts' ? post.createdAt : note.date ?? post.createdAt,
+            publishedAt: tab === 'posts' ? post.createdAt : (note.date ?? post.createdAt),
           }
         }),
       )
@@ -329,12 +315,7 @@ export const TrashViewInner = () => {
           <thead>
             <tr>
               <th className="manage__check-col">
-                <input
-                  type="checkbox"
-                  checked={allOnPageSelected}
-                  onChange={toggleSelectAll}
-                  aria-label="全选本页"
-                />
+                <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} aria-label="全选本页" />
               </th>
               <th>标题</th>
               <th>摘要</th>
@@ -391,9 +372,7 @@ export const TrashViewInner = () => {
                       type="button"
                       className="drafts__op drafts__op--danger"
                       disabled={busyId === row.id}
-                      onClick={() =>
-                        setDeleting({ collection: tab, id: row.id, title: row.title })
-                      }
+                      onClick={() => setDeleting({ collection: tab, id: row.id, title: row.title })}
                     >
                       彻底删除
                     </button>
@@ -410,7 +389,9 @@ export const TrashViewInner = () => {
           <button type="button" className="drafts__op" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             上一页
           </button>
-          <span className="drafts__pager-info">{page} / {pageCount}（共 {total} 条）</span>
+          <span className="drafts__pager-info">
+            {page} / {pageCount}（共 {total} 条）
+          </span>
           <button
             type="button"
             className="drafts__op"
@@ -429,7 +410,9 @@ export const TrashViewInner = () => {
             <h3>确认彻底删除</h3>
             <p>「{deleting.title}」将被永久删除，无法恢复，确定继续吗？</p>
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" onClick={() => setDeleting(null)}>取消</button>
+              <button type="button" className="drafts__op" onClick={() => setDeleting(null)}>
+                取消
+              </button>
               <button type="button" className="drafts__op drafts__op--danger" onClick={() => void confirmDelete()}>
                 彻底删除
               </button>
@@ -443,16 +426,19 @@ export const TrashViewInner = () => {
         <div className="drafts__confirm-mask" onClick={() => !batchBusy && setConfirmBatchDelete(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认批量彻底删除</h3>
-            <p>
-              确定将选中的 {confirmBatchDelete.length} 条内容永久删除吗？此操作无法恢复。
-            </p>
+            <p>确定将选中的 {confirmBatchDelete.length} 条内容永久删除吗？此操作无法恢复。</p>
             {batchProgress && (
               <p className="manage__delete-progress">
                 删除中 {batchProgress.current} / {batchProgress.total}…
               </p>
             )}
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" disabled={batchBusy} onClick={() => setConfirmBatchDelete(null)}>
+              <button
+                type="button"
+                className="drafts__op"
+                disabled={batchBusy}
+                onClick={() => setConfirmBatchDelete(null)}
+              >
                 取消
               </button>
               <button

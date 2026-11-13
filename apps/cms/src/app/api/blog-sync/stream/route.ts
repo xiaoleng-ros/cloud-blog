@@ -117,9 +117,7 @@ export async function GET(request: Request) {
         // 连接数达到上限时拒绝新连接
         if (!client) {
           safeEnqueue(`retry: ${REJECT_RETRY_MS}\n\n`)
-          safeEnqueue(
-            `event: error\ndata: ${JSON.stringify({ message: 'SSE 连接数已满' })}\n\n`,
-          )
+          safeEnqueue(`event: error\ndata: ${JSON.stringify({ message: 'SSE 连接数已满' })}\n\n`)
           teardown()
           return
         }
@@ -127,9 +125,7 @@ export async function GET(request: Request) {
         // 握手：重连间隔 + 在线人数
         if (
           !safeEnqueue(`retry: ${RETRY_MS}\n\n`) ||
-          !safeEnqueue(
-            `event: hello\ndata: ${JSON.stringify({ id: client.id, online: sseClientCount() })}\n\n`,
-          )
+          !safeEnqueue(`event: hello\ndata: ${JSON.stringify({ id: client.id, online: sseClientCount() })}\n\n`)
         ) {
           return
         }

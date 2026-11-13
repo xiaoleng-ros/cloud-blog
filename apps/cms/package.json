@@ -23,6 +23,9 @@
     "generate:preview-css": "node scripts/generate-preview-css.mjs",
     "warmup": "node scripts/warmup.mjs",
     "verify:html-inject": "node scripts/verify-html-inject.mjs",
+    "prerender:blog": "node scripts/prerender-blog-shells.mjs",
+    "verify:csp": "node scripts/verify-csp-sync.mjs",
+    "verify:render": "node scripts/verify-render-parity.mjs",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "typecheck": "cross-env NODE_OPTIONS=--no-deprecation tsc --noEmit"
   },

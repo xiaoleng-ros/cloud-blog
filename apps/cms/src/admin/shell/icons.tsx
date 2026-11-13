@@ -158,7 +158,8 @@ const paths: Record<string, React.ReactNode> = {
   ),
 }
 
-export type IconName = ShellIconKey | 'search' | 'sun' | 'moon' | 'close' | 'chevronDown' | 'logout' | 'command' | 'external'
+export type IconName =
+  ShellIconKey | 'search' | 'sun' | 'moon' | 'close' | 'chevronDown' | 'logout' | 'command' | 'external'
 
 export const ShellIcon = ({ name, className, size = 18 }: Props) => (
   <svg

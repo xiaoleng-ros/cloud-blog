@@ -201,10 +201,7 @@ export async function GET(request: NextRequest) {
   g.__cloudSuppressPayloadFailFast = true
   let payload: { ok: true } | { ok: false; error: string }
   try {
-    const [{ getPayload }, { default: config }] = await Promise.all([
-      import('payload'),
-      import('@payload-config'),
-    ])
+    const [{ getPayload }, { default: config }] = await Promise.all([import('payload'), import('@payload-config')])
     await getPayload({ config })
     payload = { ok: true }
   } catch (err) {

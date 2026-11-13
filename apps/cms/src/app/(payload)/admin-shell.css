@@ -58,8 +58,7 @@ html {
   --shell-gradient:
     radial-gradient(115% 90% at 0% 0%, #eaf2ff 0%, rgb(234 242 255 / 0) 58%),
     radial-gradient(92% 82% at 100% 0%, #dcebfe 0%, rgb(220 235 254 / 0) 52%),
-    radial-gradient(120% 120% at 55% 100%, #f7fafd 0%, rgb(247 250 253 / 0) 62%),
-    linear-gradient(#ffffff, #ffffff);
+    radial-gradient(120% 120% at 55% 100%, #f7fafd 0%, rgb(247 250 253 / 0) 62%), linear-gradient(#ffffff, #ffffff);
 }
 
 /* ---------- 2. 暗色：灰阶整体反转 ---------- */
@@ -127,8 +126,7 @@ html[data-theme='dark'] {
 
   --shell-gradient:
     radial-gradient(115% 90% at 0% 0%, #182740 0%, rgb(24 39 64 / 0) 60%),
-    radial-gradient(92% 82% at 100% 0%, #12213a 0%, rgb(18 33 58 / 0) 55%),
-    linear-gradient(#0f1723, #0f1723);
+    radial-gradient(92% 82% at 100% 0%, #12213a 0%, rgb(18 33 58 / 0) 55%), linear-gradient(#0f1723, #0f1723);
 
   color-scheme: dark;
 }
@@ -395,7 +393,9 @@ html[data-theme='dark'] .shell-header__brand img {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .usercard__trigger:hover,
@@ -647,7 +647,9 @@ html[data-theme='dark'] .shell-themetoggle__knob {
   font: inherit;
   font-size: 0.87rem;
   cursor: pointer;
-  transition: border-color 140ms ease, color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .shell-cmdentry:hover {
@@ -702,7 +704,10 @@ html[data-theme='dark'] .shell-cmdentry kbd {
   color: var(--theme-elevation-500);
   font-size: 0.87rem;
   text-decoration: none;
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
 }
 
 .pagetab__tab:hover {
@@ -817,7 +822,9 @@ html[data-theme='dark'] .pagetab__tab--active {
   border: 1px solid var(--shell-line-strong);
   border-radius: 0.85rem;
   color: var(--theme-elevation-400);
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .palette__search:focus-within {

@@ -8,22 +8,22 @@
 // - createRehypeImgAttrs(map)：工厂版，闭包绑定指定 map（blog-render 每次渲染时调用，避免共享状态串味）
 const visit = (node, fn) => {
   if (!node) {
-    return;
+    return
   }
 
   if (node.type === 'element') {
-    fn(node);
+    fn(node)
   }
 
   if (Array.isArray(node.children)) {
     for (const child of node.children) {
-      visit(child, fn);
+      visit(child, fn)
     }
   }
-};
+}
 
 /** 模块级全局 altMap：url → alt 文本 */
-let globalAltMap = new Map();
+let globalAltMap = new Map()
 
 /**
  * 设置全局 altMap（url → alt）。
@@ -31,65 +31,65 @@ let globalAltMap = new Map();
  * @param {Map<string,string> | Record<string,string>} map 图片 URL 到替代文本的映射
  */
 export function setAltMap(map) {
-  globalAltMap = map instanceof Map ? map : new Map(Object.entries(map ?? {}));
+  globalAltMap = map instanceof Map ? map : new Map(Object.entries(map ?? {}))
 }
 
 /** 遍历 img 节点，按给定 map 或全局 map 补齐 alt */
 function applyImgAttrs(tree, altMap) {
-  const lookup = altMap && altMap.size > 0 ? altMap : globalAltMap;
+  const lookup = altMap && altMap.size > 0 ? altMap : globalAltMap
   visit(tree, (node) => {
     if (node.tagName !== 'img') {
-      return;
+      return
     }
 
-    node.properties = node.properties ?? {};
-    node.properties.referrerPolicy = 'no-referrer';
-    node.properties.loading ??= 'lazy';
-    node.properties.decoding ??= 'async';
+    node.properties = node.properties ?? {}
+    node.properties.referrerPolicy = 'no-referrer'
+    node.properties.loading ??= 'lazy'
+    node.properties.decoding ??= 'async'
 
     // alt 补齐策略：
     // 1) markdown 里 `![alt](url)` 显式写了非空 alt → 保留（remark 会转成 properties.alt = "文本"）
     // 2) 无 alt 或空 alt（markdown 的 `![](url)` 语法默认就是空） → 用 src 反查 Media.alt
     // 3) 都拿不到 → 保持空字符串，保证属性存在（比无属性对搜索引擎更友好）
-    const existingAlt = node.properties.alt;
-    const hasExplicitAlt = typeof existingAlt === 'string' && existingAlt.length > 0;
+    const existingAlt = node.properties.alt
+    const hasExplicitAlt = typeof existingAlt === 'string' && existingAlt.length > 0
     if (!hasExplicitAlt) {
-      const src = node.properties.src;
+      const src = node.properties.src
       // 与 fetchMediaAltMap 的 urlNormalizationKeys 同口径：逐形态查
       // （原值 / 去 # 锚点 / 去 ?query / 纯 path），命中即用，未命中保持空
-      const candidates = [];
+      const candidates = []
       if (typeof src === 'string') {
-        const noHash = src.split('#')[0];
-        const noQuery = noHash.split('?')[0];
-        candidates.push(src, noHash, noQuery);
+        const noHash = src.split('#')[0]
+        const noQuery = noHash.split('?')[0]
+        candidates.push(src, noHash, noQuery)
         try {
-          if (/^https?:\/\//.test(noQuery)) candidates.push(new URL(noQuery).pathname);
+          if (/^https?:\/\//.test(noQuery)) candidates.push(new URL(noQuery).pathname)
         } catch {
           // 非法 URL 按原样处理
         }
       }
-      let found = '';
+      let found = ''
       for (const key of new Set(candidates)) {
         if (key && lookup.has(key)) {
-          found = lookup.get(key);
-          break;
+          found = lookup.get(key)
+          break
         }
       }
-      node.properties.alt = found || '';
+      node.properties.alt = found || ''
     }
-  });
+  })
 }
 
 /** 工厂版：闭包绑定指定 map。blog-render 每次渲染时用，避免污染全局。 */
 export function createRehypeImgAttrs(altMap) {
   return (tree) => {
-    applyImgAttrs(tree, altMap);
-  };
+    applyImgAttrs(tree, altMap)
+  }
 }
 
 /** 默认导出：使用全局 altMap。Astro markdown 管线走这个（构建期通过 setAltMap 注入）。 */
 export default function rehypeImgAttrs() {
   return (tree) => {
-    applyImgAttrs(tree);
-  };
+    applyImgAttrs(tree)
+  }
 }

@@ -243,7 +243,9 @@ export const DraftsViewInner = () => {
           <button type="button" className="drafts__op" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             上一页
           </button>
-          <span className="drafts__pager-info">{page} / {pageCount}（共 {total} 条）</span>
+          <span className="drafts__pager-info">
+            {page} / {pageCount}（共 {total} 条）
+          </span>
           <button
             type="button"
             className="drafts__op"
@@ -261,7 +263,9 @@ export const DraftsViewInner = () => {
             <h3>确认删除</h3>
             <p>删除后可在「回收站」恢复，确定删除这条草稿吗？</p>
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" onClick={() => setDeleting(null)}>取消</button>
+              <button type="button" className="drafts__op" onClick={() => setDeleting(null)}>
+                取消
+              </button>
               <button type="button" className="drafts__op drafts__op--danger" onClick={() => void confirmDelete()}>
                 移入回收站
               </button>

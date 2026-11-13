@@ -156,9 +156,7 @@ async function fetchText(url: string, headers: Record<string, string> = {}, time
  * 按 <td 切块解析比全局正则配对更稳，能保证 date/level/count 属于同一格子。
  */
 async function loadContributionsFromGitHub(year: number): Promise<Payload['contributions']> {
-  const url =
-    `https://github.com/users/${GITHUB_USER}/contributions` +
-    `?from=${year}-01-01&to=${year}-12-31`
+  const url = `https://github.com/users/${GITHUB_USER}/contributions` + `?from=${year}-01-01&to=${year}-12-31`
   const html = await fetchText(url, { accept: 'text/html' }, CONTRIB_FETCH_TIMEOUT_MS)
   const chunks = html.split(/<td\b/).slice(1)
   const days: ContributionDay[] = []
@@ -190,9 +188,9 @@ async function loadContributionsFromGitHub(year: number): Promise<Payload['contr
 
 /** 备用源：社区镜像 jogruber（部分云函数出口访问不到，仅作兜底） */
 async function loadContributionsFromMirror(year: number): Promise<Payload['contributions']> {
-  const raw = (await fetchJson(
-    `https://github-contributions-api.jogruber.de/v4/${GITHUB_USER}?y=${year}`,
-  )) as { contributions?: Array<{ date: string; count: number }> }
+  const raw = (await fetchJson(`https://github-contributions-api.jogruber.de/v4/${GITHUB_USER}?y=${year}`)) as {
+    contributions?: Array<{ date: string; count: number }>
+  }
   const list = Array.isArray(raw.contributions) ? raw.contributions : []
   if (!list.length) return null
   const days: ContributionDay[] = list
@@ -246,7 +244,9 @@ async function loadGroup(group: (typeof GROUPS)[number]): Promise<GroupResult> {
           sha: String(c.sha || '').slice(0, 7),
           date: c.commit?.author?.date || '',
           // 只取首行，避免正文撑爆卡片
-          message: String(c.commit?.message || '').split('\n')[0].trim(),
+          message: String(c.commit?.message || '')
+            .split('\n')[0]
+            .trim(),
           url: c.html_url || '',
         })),
       )
@@ -271,9 +271,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const now = new Date()
   const yearParam = Number(searchParams.get('year'))
-  const year = Number.isInteger(yearParam) && yearParam >= 2008 && yearParam <= now.getFullYear()
-    ? yearParam
-    : now.getFullYear()
+  const year =
+    Number.isInteger(yearParam) && yearParam >= 2008 && yearParam <= now.getFullYear() ? yearParam : now.getFullYear()
 
   const hit = cache.get(year)
   if (hit && Date.now() - hit.at < hit.ttl) {
@@ -290,7 +289,14 @@ export async function GET(request: Request) {
 
   const task = (async () => {
     const [contributions, ...groups] = await Promise.all([loadContributions(year), ...GROUPS.map(loadGroup)])
-    const data: Payload = { user: GITHUB_USER, repo: REPO, year, fetchedAt: new Date().toISOString(), contributions, groups }
+    const data: Payload = {
+      user: GITHUB_USER,
+      repo: REPO,
+      year,
+      fetchedAt: new Date().toISOString(),
+      contributions,
+      groups,
+    }
     // 贡献抓取失败时只缓存 30 秒：否则一次网络抖动会让热力图空满 5 分钟，
     // 而这段时间里接口其实已经能正常返回数据了。
     cache.set(year, {

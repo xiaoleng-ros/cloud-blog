@@ -142,7 +142,12 @@ export const CustomNav = () => {
     )
   }
 
-  const asideClasses = ['nav', navOpen && 'nav--nav-open', shouldAnimate && 'nav--nav-animate', hydrated && 'nav--nav-hydrated']
+  const asideClasses = [
+    'nav',
+    navOpen && 'nav--nav-open',
+    shouldAnimate && 'nav--nav-animate',
+    hydrated && 'nav--nav-hydrated',
+  ]
     .filter(Boolean)
     .join(' ')
 
@@ -184,12 +189,17 @@ export const CustomNav = () => {
                   <span className="nav-group__title">
                     <span className="nav-group__label">{section.label}</span>
                   </span>
-                  <span className={`nav-group__chevron${isCollapsed ? ' nav-group__chevron--down' : ''}`} aria-hidden="true">
+                  <span
+                    className={`nav-group__chevron${isCollapsed ? ' nav-group__chevron--down' : ''}`}
+                    aria-hidden="true"
+                  >
                     ▾
                   </span>
                 </button>
 
-                {!isCollapsed && <div className="nav-group__content">{section.items.map((item) => renderNavLink(item))}</div>}
+                {!isCollapsed && (
+                  <div className="nav-group__content">{section.items.map((item) => renderNavLink(item))}</div>
+                )}
               </div>
             )
           })}

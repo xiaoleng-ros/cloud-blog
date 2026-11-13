@@ -83,10 +83,7 @@ export const Categories: CollectionConfig = {
           req,
         })
         if (children.totalDocs > 0) {
-          throw new APIError(
-            `该分类下还有 ${children.totalDocs} 个子分类，请先处理子分类的层级，再删除它。`,
-            400,
-          )
+          throw new APIError(`该分类下还有 ${children.totalDocs} 个子分类，请先处理子分类的层级，再删除它。`, 400)
         }
         const posts = await req.payload.count({
           collection: 'posts',
@@ -123,8 +120,7 @@ export const Categories: CollectionConfig = {
       label: '分类标识',
       admin: {
         position: 'sidebar',
-        description:
-          '用于前台文章 URL 的分类段，例如填 daily → /posts/daily/46。留空则回退使用「分类名称」。',
+        description: '用于前台文章 URL 的分类段，例如填 daily → /posts/daily/46。留空则回退使用「分类名称」。',
       },
     },
     {

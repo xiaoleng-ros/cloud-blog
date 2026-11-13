@@ -58,15 +58,11 @@
      阻塞渲染的 CSS（实测 215KB / 185 个 unicode-range 子集），首屏开销远大于收益。
      系统楷体在 Windows（楷体/KaiTi）、macOS（Kaiti SC/STKaiti）、
      Android（多数机型回退到默认黑体，故保留 cursive 兜底）都能用。 */
-  --font-hand: "KaiTi", "STKaiti", "Kaiti SC", "楷体", "FangSong", "STFangsong", cursive;
-  --font-hand-cn: "KaiTi", "STKaiti", "Kaiti SC", "楷体", "FangSong", "STFangsong", cursive;
+  --font-hand: 'KaiTi', 'STKaiti', 'Kaiti SC', '楷体', 'FangSong', 'STFangsong', cursive;
+  --font-hand-cn: 'KaiTi', 'STKaiti', 'Kaiti SC', '楷体', 'FangSong', 'STFangsong', cursive;
   /* 玻璃拟态保留为「手账纸片」质感，不再使用高光扫掠 */
   --glass-tint: rgba(255, 253, 246, 0.92);
-  --glass-sheen: linear-gradient(
-    115deg,
-    rgba(255, 255, 255, 0.4),
-    rgba(255, 255, 255, 0) 55%
-  );
+  --glass-sheen: linear-gradient(115deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 55%);
   --glass-rim-top: rgba(58, 50, 38, 0.18);
   --glass-rim-bottom: rgba(58, 50, 38, 0.06);
   --glass-backdrop: saturate(100%) blur(6px);
@@ -85,7 +81,7 @@
   --floating-edge: clamp(1rem, 4vw, 2rem);
 }
 
-html[data-theme="dark"] {
+html[data-theme='dark'] {
   color-scheme: dark;
   /* 冷调墨色：夜里看要往冷、深走，而不是把暖棕继续压暗。
      原来的黄昏手账底色 #4a4034 铺满整屏时，暖棕 × 低对比 = 发闷。
@@ -136,11 +132,7 @@ html[data-theme="dark"] {
   --button-text-on-accent: #161a20;
   --page-glow: none;
   --glass-tint: rgba(31, 35, 43, 0.92);
-  --glass-sheen: linear-gradient(
-    115deg,
-    rgba(255, 255, 255, 0.05),
-    rgba(255, 255, 255, 0) 55%
-  );
+  --glass-sheen: linear-gradient(115deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 55%);
   --glass-rim-top: rgba(255, 255, 255, 0.14);
   --glass-rim-bottom: rgba(255, 255, 255, 0.05);
   --glass-backdrop: saturate(100%) blur(6px);
@@ -152,8 +144,14 @@ html[data-theme="dark"] {
 }
 
 html {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
   font-size: 14px;
   line-height: 1.7;
   color: var(--text);
@@ -341,9 +339,11 @@ p {
 }
 
 .site-nav__pill.is-indicator-ready .site-nav__indicator {
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+  transition:
+    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
     width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-    height 0.2s var(--ease-out), opacity 0.14s var(--ease-out);
+    height 0.2s var(--ease-out),
+    opacity 0.14s var(--ease-out);
 }
 
 .site-nav__pill > :not(.site-nav__indicator) {
@@ -364,15 +364,19 @@ p {
 
   /* Gradient rim — bright where light hits the top edge, fading below */
   .site-nav__pill::before {
-    content: "";
+    content: '';
     position: absolute;
     inset: -1px;
     border-radius: inherit;
     padding: 1px;
     background: linear-gradient(180deg, var(--glass-rim-top), var(--glass-rim-bottom));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
     mask-composite: exclude;
     pointer-events: none;
   }
@@ -400,7 +404,9 @@ p {
   font-weight: 600;
   line-height: normal;
   text-align: center;
-  transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out),
+  transition:
+    color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
     scale var(--t-fast) var(--ease-spring);
 }
 
@@ -450,7 +456,9 @@ p {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+  transition:
+    color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out);
 }
 
 .site-nav__pill .site-nav__icon:hover {
@@ -464,7 +472,8 @@ p {
 }
 
 .site-nav__pill .site-nav__icon svg {
-  transition: rotate var(--t-base) var(--ease-spring),
+  transition:
+    rotate var(--t-base) var(--ease-spring),
     scale var(--t-base) var(--ease-spring);
 }
 
@@ -484,7 +493,9 @@ p {
 
 .theme-toggle :is(.theme-toggle__moon, .theme-toggle__sun) {
   grid-area: 1 / 1;
-  transition: opacity 0.26s var(--ease-out), rotate 0.46s var(--ease-out-soft),
+  transition:
+    opacity 0.26s var(--ease-out),
+    rotate 0.46s var(--ease-out-soft),
     scale 0.4s var(--ease-out-soft) !important;
   will-change: opacity, rotate, scale;
 }
@@ -501,13 +512,13 @@ p {
   scale: 0.56;
 }
 
-.theme-toggle[data-theme-icon="dark"] .theme-toggle__moon {
+.theme-toggle[data-theme-icon='dark'] .theme-toggle__moon {
   opacity: 0;
   rotate: 72deg;
   scale: 0.56;
 }
 
-.theme-toggle[data-theme-icon="dark"] .theme-toggle__sun {
+.theme-toggle[data-theme-icon='dark'] .theme-toggle__sun {
   opacity: 1;
   rotate: 0deg;
   scale: 1;
@@ -536,8 +547,11 @@ p {
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid var(--surface);
-  box-shadow: 0 0 0 1px var(--border), var(--shadow);
-  transition: rotate var(--t-base) var(--ease-spring),
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow);
+  transition:
+    rotate var(--t-base) var(--ease-spring),
     scale var(--t-base) var(--ease-spring);
 }
 
@@ -559,11 +573,7 @@ p {
   .article__header h1,
   .page-header h1,
   .about__lead {
-    background: linear-gradient(
-      180deg,
-      var(--text) 52%,
-      color-mix(in srgb, var(--text) 58%, transparent)
-    );
+    background: linear-gradient(180deg, var(--text) 52%, color-mix(in srgb, var(--text) 58%, transparent));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -669,7 +679,10 @@ p {
   color: var(--text-muted);
   border: 1px solid var(--border);
   background: var(--surface);
-  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out),
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out),
     background var(--t-fast) var(--ease-out);
 }
 
@@ -751,7 +764,7 @@ p {
 }
 
 .hero__picks-label::before {
-  content: "";
+  content: '';
   width: 3px;
   height: 0.95em;
   border-radius: 3px;
@@ -782,7 +795,8 @@ p {
   border-radius: var(--radius);
   background: var(--surface-muted);
   box-shadow: 0 10px 26px rgba(20, 24, 32, 0.09);
-  transition: translate var(--t-base) var(--ease-spring),
+  transition:
+    translate var(--t-base) var(--ease-spring),
     box-shadow var(--t-base) var(--ease-out);
 }
 
@@ -906,11 +920,7 @@ p {
 }
 
 .pick__thumb--fallback {
-  background: linear-gradient(
-    140deg,
-    hsl(var(--h, 24) 32% 60%),
-    hsl(calc(var(--h, 24) + 18) 36% 48%)
-  );
+  background: linear-gradient(140deg, hsl(var(--h, 24) 32% 60%), hsl(calc(var(--h, 24) + 18) 36% 48%));
 }
 
 /* ---------- Post meta ---------- */
@@ -942,7 +952,7 @@ p {
 /* Divider spans the content width; the hover block's rounded corners bleed
    into the gutter (outside this line), so there's no notch. */
 .post-row + .post-row::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 0;
@@ -1115,7 +1125,10 @@ p {
   font-size: 0.88rem;
   font-weight: 600;
   line-height: 1.2;
-  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out),
     scale var(--t-fast) var(--ease-spring);
 }
 
@@ -1157,7 +1170,8 @@ p {
 .term-more {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--t-base) var(--ease-out),
+  transition:
+    grid-template-rows var(--t-base) var(--ease-out),
     margin-top var(--t-base) var(--ease-out);
 }
 
@@ -1308,7 +1322,9 @@ p {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
 }
 
 .search-box input:focus {
@@ -1472,7 +1488,8 @@ html.is-search-open {
   border-radius: 10px 14px 9px 15px / 13px 9px 15px 10px;
   color: var(--text);
   text-decoration: none;
-  transition: background-color var(--t-fast) var(--ease-out),
+  transition:
+    background-color var(--t-fast) var(--ease-out),
     border-color var(--t-fast) var(--ease-out);
 }
 
@@ -1540,12 +1557,7 @@ html.is-search-open {
 .search-results mark {
   padding: 0 0.1em;
   border-radius: 2px;
-  background: linear-gradient(
-    transparent 62%,
-    var(--brand-soft) 62%,
-    var(--brand-soft) 92%,
-    transparent 92%
-  );
+  background: linear-gradient(transparent 62%, var(--brand-soft) 62%, var(--brand-soft) 92%, transparent 92%);
   color: inherit;
   font-weight: inherit;
 }
@@ -1715,7 +1727,8 @@ html.is-search-open {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   box-shadow: 2px 3px 0 var(--shadow-sm);
-  transition: transform var(--t-fast) var(--ease-out),
+  transition:
+    transform var(--t-fast) var(--ease-out),
     box-shadow var(--t-fast) var(--ease-out);
 }
 
@@ -1777,7 +1790,10 @@ html.is-search-open {
   color: var(--text);
   font-weight: 650;
   font-size: 0.92rem;
-  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out),
     scale var(--t-fast) var(--ease-spring);
 }
 
@@ -1817,8 +1833,11 @@ html.is-search-open {
   border: 3px solid var(--surface);
   border-radius: 50%;
   object-fit: cover;
-  box-shadow: 0 0 0 1px var(--border), var(--shadow);
-  transition: rotate var(--t-base) var(--ease-spring),
+  box-shadow:
+    0 0 0 1px var(--border),
+    var(--shadow);
+  transition:
+    rotate var(--t-base) var(--ease-spring),
     scale var(--t-base) var(--ease-spring);
 }
 
@@ -1842,7 +1861,6 @@ html.is-search-open {
   font-style: normal;
   color: var(--brand);
 }
-
 
 .about__sub {
   max-width: 38rem;
@@ -1878,7 +1896,7 @@ html.is-search-open {
 }
 
 .about__fact::before {
-  content: "";
+  content: '';
   width: 3px;
   height: 0.95em;
   border-radius: 3px;
@@ -1957,8 +1975,11 @@ html.is-search-open {
   border-radius: 10px;
   background: var(--surface);
   color: var(--text-muted);
-  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out),
-    scale var(--t-base) var(--ease-spring), rotate var(--t-base) var(--ease-spring);
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
+    scale var(--t-base) var(--ease-spring),
+    rotate var(--t-base) var(--ease-spring);
 }
 
 .proj:hover .proj__icon {
@@ -2017,7 +2038,9 @@ html.is-search-open {
 
 .proj__go {
   color: var(--text-faint);
-  transition: color var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
+  transition:
+    color var(--t-fast) var(--ease-out),
+    transform var(--t-fast) var(--ease-out);
 }
 
 .proj:hover .proj__title a {
@@ -2142,7 +2165,9 @@ html.is-search-open {
   color: var(--text-muted);
   font-size: 0.95rem;
   line-height: 1.5;
-  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out),
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out),
     padding-left var(--t-base) var(--ease-spring);
 }
 
@@ -2222,7 +2247,7 @@ html.is-search-open {
 }
 
 .post-content h2::before {
-  content: "";
+  content: '';
   flex: 0 0 auto;
   width: 0.38rem;
   height: 1.25em;
@@ -2268,7 +2293,9 @@ html.is-search-open {
   text-decoration: underline;
   text-decoration-color: var(--accent-line);
   text-underline-offset: 0.2em;
-  transition: color var(--t-fast) var(--ease-out), text-decoration-color var(--t-fast) var(--ease-out);
+  transition:
+    color var(--t-fast) var(--ease-out),
+    text-decoration-color var(--t-fast) var(--ease-out);
 }
 
 .post-content a:hover {
@@ -2333,8 +2360,10 @@ html.is-search-open {
   opacity: 0;
   transform: translateY(10px) scale(0.92);
   pointer-events: none;
-  transition: opacity var(--t-base) var(--ease-out-soft),
-    transform var(--t-base) var(--ease-out-soft), color var(--t-fast) var(--ease-out),
+  transition:
+    opacity var(--t-base) var(--ease-out-soft),
+    transform var(--t-base) var(--ease-out-soft),
+    color var(--t-fast) var(--ease-out),
     border-color var(--t-fast) var(--ease-out);
 }
 
@@ -2445,7 +2474,9 @@ body.is-dragging-floating {
   font-size: 0.78rem;
   font-weight: 650;
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  transition:
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out);
 }
 
 .copy-code-button:hover,
@@ -2460,8 +2491,7 @@ body.is-dragging-floating {
 }
 
 .post-content code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 0.9em;
 }
 
@@ -2484,11 +2514,11 @@ body.is-dragging-floating {
 
 /* Decorative quote mark — reads clearly as a quote, not a heading bar */
 .post-content blockquote::before {
-  content: "\201C";
+  content: '\201C';
   position: absolute;
   top: 0.45rem;
   left: 0.85rem;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.9rem;
   line-height: 1;
   color: var(--brand);
@@ -2592,17 +2622,15 @@ body.is-dragging-floating {
   object-position: center;
   filter: blur(7px) saturate(0.92);
   transform: scale(1.12);
-  transition: filter var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-out);
+  transition:
+    filter var(--t-base) var(--ease-out),
+    transform var(--t-base) var(--ease-out);
 }
 
 /* 无封面时用与首页同款的色相渐变兜底，不至于露出一块死灰色 */
 .post-nav__cover--fallback {
   display: block;
-  background: linear-gradient(
-    140deg,
-    hsl(var(--h, 24) 32% 60%),
-    hsl(calc(var(--h, 24) + 18) 36% 48%)
-  );
+  background: linear-gradient(140deg, hsl(var(--h, 24) 32% 60%), hsl(calc(var(--h, 24) + 18) 36% 48%));
 }
 
 /* 压暗层：浅色主题用稍重的遮罩，深色主题可以轻一点，两边都保证白字对比度。
@@ -2613,21 +2641,11 @@ body.is-dragging-floating {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(
-    150deg,
-    rgb(18 14 12 / 0.54),
-    rgb(18 14 12 / 0.62) 50%,
-    rgb(18 14 12 / 0.54)
-  );
+  background: linear-gradient(150deg, rgb(18 14 12 / 0.54), rgb(18 14 12 / 0.62) 50%, rgb(18 14 12 / 0.54));
 }
 
-html[data-theme="dark"] .post-nav__mask {
-  background: linear-gradient(
-    150deg,
-    rgb(8 10 14 / 0.58),
-    rgb(8 10 14 / 0.66) 50%,
-    rgb(8 10 14 / 0.58)
-  );
+html[data-theme='dark'] .post-nav__mask {
+  background: linear-gradient(150deg, rgb(8 10 14 / 0.58), rgb(8 10 14 / 0.66) 50%, rgb(8 10 14 / 0.58));
 }
 
 .post-nav__text {
@@ -2732,7 +2750,7 @@ html[data-theme="dark"] .post-nav__mask {
 }
 
 .related-posts__grid a + a::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 0;
@@ -2805,7 +2823,7 @@ html[data-theme="dark"] .post-nav__mask {
   top: 50%;
   z-index: 0;
   transform: translateY(-50%);
-  font-family: "Helvetica Neue", Arial, "PingFang SC", sans-serif;
+  font-family: 'Helvetica Neue', Arial, 'PingFang SC', sans-serif;
   font-size: 10rem;
   font-weight: 800;
   letter-spacing: -0.08em;
@@ -2893,7 +2911,9 @@ html[data-theme="dark"] .post-nav__mask {
   background: var(--surface);
   color: var(--text);
   text-decoration: none;
-  transition: border-color var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out);
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    box-shadow var(--t-fast) var(--ease-out);
 }
 
 .legacy-link-card:hover,
@@ -3185,7 +3205,9 @@ html[data-theme="dark"] .post-nav__mask {
   line-height: 1.5;
   white-space: nowrap;
   text-decoration: none;
-  transition: color 0.18s ease, border-color 0.18s ease;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .site-footer__icp svg {
@@ -3227,7 +3249,10 @@ html[data-theme="dark"] .post-nav__mask {
   color: var(--text);
   font-size: 0.86rem;
   font-weight: 600;
-  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out),
+  transition:
+    border-color var(--t-fast) var(--ease-out),
+    background var(--t-fast) var(--ease-out),
+    color var(--t-fast) var(--ease-out),
     scale var(--t-fast) var(--ease-spring);
 }
 
@@ -3291,12 +3316,14 @@ html[data-theme="dark"] .post-nav__mask {
   align-items: center;
   gap: 0.45rem;
   border-bottom: 1px solid transparent;
-  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+  transition:
+    color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
 }
 
 .site-footer__legal::before,
 .site-footer__privacy::before {
-  content: "";
+  content: '';
   width: 3px;
   height: 3px;
   border-radius: 50%;
@@ -3373,7 +3400,7 @@ html[data-theme="dark"] .post-nav__mask {
 }
 
 .notes-year__label::after {
-  content: "";
+  content: '';
   flex: 1;
   height: 1px;
   background: var(--border);
@@ -3381,7 +3408,7 @@ html[data-theme="dark"] .post-nav__mask {
 
 /* Delicate rail dividing the date gutter from the content */
 .notes-feed::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0.7rem;
   bottom: 0.4rem;
@@ -3406,7 +3433,7 @@ html[data-theme="dark"] .post-nav__mask {
 
 /* Date dot on the rail, aligned with the entry's first line */
 .note::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 8.13rem;
   top: 0.5rem;
@@ -3594,29 +3621,48 @@ html[data-theme="dark"] .post-nav__mask {
 
 /* ---------- Motion: scroll reveal + theme crossfade ---------- */
 @media (prefers-reduced-motion: no-preference) {
-  .js :is(
-    .hero__intro > *, .hero__picks,
-    .section__header, .section__more, .post-row,
-    .related-posts, .post-nav, .article__header > *,
-    .proj-section__head, .proj,
-    .page-header, .archive-summary, .archive-year__head,
-    .about__intro > *,
-    .note
-  ) {
-    transition: opacity var(--t-slow) var(--ease-out-soft),
+  .js
+    :is(
+      .hero__intro > *,
+      .hero__picks,
+      .section__header,
+      .section__more,
+      .post-row,
+      .related-posts,
+      .post-nav,
+      .article__header > *,
+      .proj-section__head,
+      .proj,
+      .page-header,
+      .archive-summary,
+      .archive-year__head,
+      .about__intro > *,
+      .note
+    ) {
+    transition:
+      opacity var(--t-slow) var(--ease-out-soft),
       transform var(--t-slow) var(--ease-out-soft);
     transition-delay: var(--reveal-delay, 0s);
   }
 
-  .js :is(
-    .hero__intro > *, .hero__picks,
-    .section__header, .section__more, .post-row,
-    .related-posts, .post-nav, .article__header > *,
-    .proj-section__head, .proj,
-    .page-header, .archive-summary, .archive-year__head,
-    .about__intro > *,
-    .note
-  ):not(.is-revealed) {
+  .js
+    :is(
+      .hero__intro > *,
+      .hero__picks,
+      .section__header,
+      .section__more,
+      .post-row,
+      .related-posts,
+      .post-nav,
+      .article__header > *,
+      .proj-section__head,
+      .proj,
+      .page-header,
+      .archive-summary,
+      .archive-year__head,
+      .about__intro > *,
+      .note
+    ):not(.is-revealed) {
     opacity: 0;
     transform: translateY(1.25rem);
   }
@@ -3625,7 +3671,8 @@ html[data-theme="dark"] .post-nav__mask {
      (.js.js matches the (0,3,0) specificity of the main reveal selector,
      so this later rule wins and adds `filter` to the transition.) */
   .js.js :is(.hero__intro > *, .article__header > *) {
-    transition: opacity var(--t-slow) var(--ease-out-soft),
+    transition:
+      opacity var(--t-slow) var(--ease-out-soft),
       transform var(--t-slow) var(--ease-out-soft),
       filter var(--t-slow) var(--ease-out-soft);
     transition-delay: var(--reveal-delay, 0s);
@@ -3641,7 +3688,9 @@ html[data-theme="dark"] .post-nav__mask {
   .js .post-content img:not(.legacy-inline-image) {
     opacity: 0.001;
     scale: 0.992;
-    transition: opacity 0.6s var(--ease-out), scale 0.8s var(--ease-out-soft);
+    transition:
+      opacity 0.6s var(--ease-out),
+      scale 0.8s var(--ease-out-soft);
   }
 
   .js .post-content img.is-loaded {
@@ -3831,15 +3880,45 @@ html.theme-anim body {
 .doodle-torn {
   --tear: 6px;
   clip-path: polygon(
-    0% var(--tear), 2% 0, 5% var(--tear), 8% 0, 11% var(--tear), 15% 0,
-    19% var(--tear), 24% 0, 30% var(--tear), 37% 0, 44% var(--tear), 52% 0,
-    60% var(--tear), 68% 0, 76% var(--tear), 83% 0, 89% var(--tear), 94% 0,
-    98% var(--tear), 100% 0,
-    100% calc(100% - var(--tear)), 98% 100%, 94% calc(100% - var(--tear)),
-    89% 100%, 83% calc(100% - var(--tear)), 76% 100%, 68% calc(100% - var(--tear)),
-    60% 100%, 52% calc(100% - var(--tear)), 44% 100%, 37% calc(100% - var(--tear)),
-    30% 100%, 24% calc(100% - var(--tear)), 19% 100%, 15% calc(100% - var(--tear)),
-    11% 100%, 8% calc(100% - var(--tear)), 5% 100%, 2% calc(100% - var(--tear)),
+    0% var(--tear),
+    2% 0,
+    5% var(--tear),
+    8% 0,
+    11% var(--tear),
+    15% 0,
+    19% var(--tear),
+    24% 0,
+    30% var(--tear),
+    37% 0,
+    44% var(--tear),
+    52% 0,
+    60% var(--tear),
+    68% 0,
+    76% var(--tear),
+    83% 0,
+    89% var(--tear),
+    94% 0,
+    98% var(--tear),
+    100% 0,
+    100% calc(100% - var(--tear)),
+    98% 100%,
+    94% calc(100% - var(--tear)),
+    89% 100%,
+    83% calc(100% - var(--tear)),
+    76% 100%,
+    68% calc(100% - var(--tear)),
+    60% 100%,
+    52% calc(100% - var(--tear)),
+    44% 100%,
+    37% calc(100% - var(--tear)),
+    30% 100%,
+    24% calc(100% - var(--tear)),
+    19% 100%,
+    15% calc(100% - var(--tear)),
+    11% 100%,
+    8% calc(100% - var(--tear)),
+    5% 100%,
+    2% calc(100% - var(--tear)),
     0% 100%
   );
 }
@@ -3878,7 +3957,7 @@ html.theme-anim body {
   max-width: 100%;
 }
 .hero__title::after {
-  content: "";
+  content: '';
   position: absolute;
   left: -0.08em;
   right: -0.08em;
@@ -3897,7 +3976,7 @@ html.theme-anim body {
   display: inline-block;
 }
 .section__header h2::before {
-  content: "";
+  content: '';
   display: inline-block;
   width: 0.55em;
   height: 0.55em;
@@ -3908,7 +3987,7 @@ html.theme-anim body {
   vertical-align: baseline;
 }
 .section__header h2::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   right: -0.15em;
@@ -3987,11 +4066,7 @@ html.theme-anim body {
   color: var(--on-sticky);
 }
 .post-row + .post-row::before {
-  background: repeating-linear-gradient(
-    90deg,
-    transparent 0 6px,
-    var(--hairline) 6px 10px
-  );
+  background: repeating-linear-gradient(90deg, transparent 0 6px, var(--hairline) 6px 10px);
   height: 1.5px;
 }
 
@@ -4060,7 +4135,8 @@ html.theme-anim body {
   box-shadow: 3px 4px 0 var(--shadow-sm);
   margin-inline: 0;
   padding: 1.1rem;
-  transition: background var(--t-fast) var(--ease-out),
+  transition:
+    background var(--t-fast) var(--ease-out),
     transform var(--t-base) var(--ease-spring);
 }
 .proj:hover {
@@ -4249,7 +4325,7 @@ html.theme-anim body {
 
 .note__body .post-content blockquote::before,
 .post-content blockquote::before {
-  content: "";
+  content: '';
   display: none;
 }
 
@@ -4487,11 +4563,7 @@ html.theme-anim body {
   background: var(--accent);
   box-shadow: 2px 3px 0 var(--shadow-sm);
   /* Accent buttons carry a whisper of light from above — Apple-style depth */
-  background-image: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.16),
-    rgba(255, 255, 255, 0) 60%
-  );
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 60%);
 }
 
 /* 首页 Hero 名片卡片（参考图居中手账卡片） */
@@ -4519,7 +4591,7 @@ html.theme-anim body {
 /* 第二层外框：套在卡片外面一圈，与卡片反向微旋，
    让上下左右的留白自然不匀，读起来像手绘描了两遍 */
 .hero__card::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: -2.4rem;
   border: 2px solid color-mix(in srgb, var(--ink) 55%, transparent);
@@ -4539,7 +4611,7 @@ html.theme-anim body {
 }
 
 .hero__title::after {
-  content: "";
+  content: '';
   position: absolute;
   left: -0.1em;
   right: -0.1em;
@@ -4567,7 +4639,7 @@ html.theme-anim body {
 
 .hero__subtitle::before,
 .hero__subtitle::after {
-  content: "✦";
+  content: '✦';
   margin: 0 0.4em;
   color: var(--sticky-cyan);
   font-size: 0.8em;
@@ -4604,7 +4676,9 @@ html.theme-anim body {
   font-family: var(--font-hand-cn);
   font-size: 0.95rem;
   transform: rotate(-0.5deg);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .hero__tag:hover {
@@ -4731,7 +4805,7 @@ html.theme-anim body {
    （用内联 SVG 波浪箭头作为标注） */
 @supports (background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E")) {
   .hero__intro::before {
-    content: "";
+    content: '';
     display: block;
     width: 88px;
     height: 44px;
@@ -4774,7 +4848,9 @@ html.theme-anim body {
   font-family: var(--font-hand);
   font-size: 1.05rem;
   transform: rotate(-0.8deg);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .site-nav__brand:hover {
@@ -4812,7 +4888,10 @@ html.theme-anim body {
   font-family: var(--font-hand-cn);
   font-size: 0.9rem;
   transform: rotate(-0.6deg);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
 }
 
 .site-nav__tag:nth-child(2n) {
@@ -4839,7 +4918,9 @@ html.theme-anim body {
 }
 
 .site-nav__tag--icon svg {
-  transition: rotate 0.4s var(--ease-out-soft), scale 0.4s var(--ease-out-soft);
+  transition:
+    rotate 0.4s var(--ease-out-soft),
+    scale 0.4s var(--ease-out-soft);
 }
 
 .site-nav__tag--icon:hover svg {
@@ -4924,7 +5005,7 @@ html.theme-anim body {
 }
 
 .about__eyebrow::before {
-  content: "✦";
+  content: '✦';
   color: var(--brand);
   font-size: 0.85em;
 }
@@ -5072,7 +5153,7 @@ html.theme-anim body {
 }
 
 .skill-ring__track::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0.5rem;
   border-radius: 50%;
@@ -5227,7 +5308,9 @@ html.theme-anim body {
   font-size: 0.92rem;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
 }
 
 a.site-more__item:hover {

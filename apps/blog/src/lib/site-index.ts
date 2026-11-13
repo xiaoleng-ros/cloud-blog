@@ -4,9 +4,9 @@
  * 口径是覆盖面优先：每个页面、每篇文章/随笔/项目、每个分类与标签都进索引，
  * 但匹配域只到标题/摘要/分类/标签/关键词，不灌正文。打分与高亮在 lib/search-match.ts。
  */
-import { getCollection, type CollectionEntry } from 'astro:content';
-import type { IndexEntry } from './search-match';
-import { getNavItems } from './site-settings';
+import { getCollection, type CollectionEntry } from 'astro:content'
+import type { IndexEntry } from './search-match'
+import { getNavItems } from './site-settings'
 import {
   formatDate,
   getCategories,
@@ -18,12 +18,12 @@ import {
   getTags,
   getTagPath,
   sortPosts,
-} from './posts';
-import { noteMonthAnchors, projectGroupIds } from './anchors';
+} from './posts'
+import { noteMonthAnchors, projectGroupIds } from './anchors'
 
-type BlogPost = CollectionEntry<'posts'>;
-type Note = CollectionEntry<'notes'>;
-type Project = CollectionEntry<'projects'>;
+type BlogPost = CollectionEntry<'posts'>
+type Note = CollectionEntry<'notes'>
+type Project = CollectionEntry<'projects'>
 
 /** 拼小写匹配域：空值直接丢掉，避免多余空格把词切碎 */
 function matchField(...parts: Array<string | string[] | undefined | null>): string {
@@ -31,7 +31,7 @@ function matchField(...parts: Array<string | string[] | undefined | null>): stri
     .flat()
     .filter((part): part is string => Boolean(part))
     .join(' ')
-    .toLowerCase();
+    .toLowerCase()
 }
 
 const stripMarkdown = (value: string) =>
@@ -41,15 +41,15 @@ const stripMarkdown = (value: string) =>
     .replace(/[*_`]/g, '')
     .replace(/^#{1,6}\s+/, '')
     .replace(/^[-+]\s+/, '')
-    .trim();
+    .trim()
 
 /** 随笔大多没有标题，拿正文首行当摘要（首行即内容本身，不是全文索引） */
 function firstLine(body: string): string {
   for (const line of body.split('\n')) {
-    const text = stripMarkdown(line);
-    if (text) return text.length > 46 ? `${text.slice(0, 46)}…` : text;
+    const text = stripMarkdown(line)
+    if (text) return text.length > 46 ? `${text.slice(0, 46)}…` : text
   }
-  return '';
+  return ''
 }
 
 /**
@@ -61,11 +61,9 @@ const EXTRA_PAGES: Array<{ href: string; label: string; keywords: string }> = [
   { href: '/tags', label: '标签墙', keywords: '标签 tags 分类 cloud 拾取' },
   { href: '/privacy', label: '隐私政策', keywords: '隐私 privacy 政策 条款 数据 个人信息 合规' },
   { href: '/timeline', label: '发展历程', keywords: '发展 历程 timeline history 成长 更新 进度 沿革 大事记 关于' },
-];
+]
 
-function pageEntries(
-  navItems: Array<{ href: string; label: string }> | null,
-): IndexEntry[] {
+function pageEntries(navItems: Array<{ href: string; label: string }> | null): IndexEntry[] {
   // 后台清空导航（null）时不再把四个默认项硬塞进站内搜索 ——
   // 旧实现在此处无条件兜底，与 getNavItems 的「后台可用但清空 → 隐藏」语义脱节
   const nav = (navItems ?? []).map((item) => ({
@@ -76,7 +74,7 @@ function pageEntries(
     url: item.href,
     tags: [],
     text: matchField(item.label, item.href),
-  }));
+  }))
   const extra = EXTRA_PAGES.map((item) => ({
     kind: 'page' as const,
     title: item.label,
@@ -85,13 +83,13 @@ function pageEntries(
     url: item.href,
     tags: [],
     text: matchField(item.label, item.href, item.keywords),
-  }));
-  return [...nav, ...extra];
+  }))
+  return [...nav, ...extra]
 }
 
 function postEntries(posts: BlogPost[]): IndexEntry[] {
   return posts.map((post) => {
-    const excerpt = getPostExcerpt(post) ?? '';
+    const excerpt = getPostExcerpt(post) ?? ''
     return {
       kind: 'post',
       title: post.data.title,
@@ -99,23 +97,17 @@ function postEntries(posts: BlogPost[]): IndexEntry[] {
       meta: post.data.date ? formatDate(post.data.date) : '',
       url: getPostPath(post),
       tags: getPostTags(post),
-      text: matchField(
-        post.data.title,
-        excerpt,
-        getPostCategory(post),
-        getPostTags(post),
-        post.data.keywords,
-      ),
-    };
-  });
+      text: matchField(post.data.title, excerpt, getPostCategory(post), getPostTags(post), post.data.keywords),
+    }
+  })
 }
 
 function noteEntries(notes: Note[]): IndexEntry[] {
-  const anchors = noteMonthAnchors(notes);
+  const anchors = noteMonthAnchors(notes)
   return notes.map((note) => {
-    const title = note.data.title?.trim();
-    const excerpt = firstLine(note.body ?? '');
-    const anchor = anchors.get(note.id);
+    const title = note.data.title?.trim()
+    const excerpt = firstLine(note.body ?? '')
+    const anchor = anchors.get(note.id)
     return {
       kind: 'note',
       title: title || excerpt || `${formatDate(note.data.date)} 的随笔`,
@@ -124,14 +116,14 @@ function noteEntries(notes: Note[]): IndexEntry[] {
       url: anchor ? `/notes#${anchor}` : '/notes',
       tags: note.data.tags ?? [],
       text: matchField(note.data.title, excerpt, note.data.mood, note.data.tags),
-    };
-  });
+    }
+  })
 }
 
 function projectEntries(projects: Project[]): IndexEntry[] {
-  const groupIds = projectGroupIds(projects);
+  const groupIds = projectGroupIds(projects)
   return projects.map((project) => {
-    const { data } = project;
+    const { data } = project
     return {
       kind: 'project',
       title: data.title,
@@ -141,8 +133,8 @@ function projectEntries(projects: Project[]): IndexEntry[] {
       url: data.articleHref ?? `/about#${groupIds.get(data.group)}`,
       tags: data.tags ?? [],
       text: matchField(data.title, data.description, data.group, data.owner, data.tags),
-    };
-  });
+    }
+  })
 }
 
 function termEntries(posts: BlogPost[]): IndexEntry[] {
@@ -154,7 +146,7 @@ function termEntries(posts: BlogPost[]): IndexEntry[] {
     url: getCategoryPath(term.name),
     tags: [],
     text: matchField(term.name),
-  }));
+  }))
   const tags = getTags(posts).map((term) => ({
     kind: 'tag' as const,
     title: term.name,
@@ -163,8 +155,8 @@ function termEntries(posts: BlogPost[]): IndexEntry[] {
     url: getTagPath(term.name),
     tags: [],
     text: matchField(term.name),
-  }));
-  return [...categories, ...tags];
+  }))
+  return [...categories, ...tags]
 }
 
 export async function buildSiteIndex(): Promise<IndexEntry[]> {
@@ -173,7 +165,7 @@ export async function buildSiteIndex(): Promise<IndexEntry[]> {
     getCollection('notes'),
     getCollection('projects'),
     getNavItems(),
-  ]);
+  ])
 
   return [
     ...pageEntries(navItems),
@@ -181,5 +173,5 @@ export async function buildSiteIndex(): Promise<IndexEntry[]> {
     ...noteEntries(notes),
     ...projectEntries(projects),
     ...termEntries(posts),
-  ];
+  ]
 }

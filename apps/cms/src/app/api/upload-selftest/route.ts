@@ -26,10 +26,7 @@ export async function GET(request: NextRequest) {
   g.__cloudSuppressPayloadFailFast = true
 
   try {
-    const [{ getPayload }, { default: config }] = await Promise.all([
-      import('payload'),
-      import('@payload-config'),
-    ])
+    const [{ getPayload }, { default: config }] = await Promise.all([import('payload'), import('@payload-config')])
     const payload = await getPayload({ config })
 
     const { user } = await payload.auth({ headers: request.headers })

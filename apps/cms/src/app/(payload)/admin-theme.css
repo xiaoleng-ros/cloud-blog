@@ -95,7 +95,14 @@ html,
 body {
   background: var(--theme-elevation-50);
   color: var(--theme-text);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -297,7 +304,9 @@ header.list-header,
   color: var(--theme-elevation-600);
   font-size: 14.5px;
   font-weight: 500;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .nav__link:hover {
@@ -363,7 +372,9 @@ textarea.el-textarea__inner {
   color: var(--theme-text);
   box-shadow: none;
   font-size: 15px;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .field-type input,
@@ -425,7 +436,10 @@ textarea.el-textarea__inner {
   box-shadow: none;
   font-size: 14px;
   font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .btn--style-primary {
@@ -521,7 +535,9 @@ textarea:focus-visible {
   padding: 16px 18px;
   border-radius: var(--card-radius);
   text-decoration: none;
-  transition: box-shadow 140ms ease, filter 140ms ease;
+  transition:
+    box-shadow 140ms ease,
+    filter 140ms ease;
 }
 
 .dashboard__stat:hover {
@@ -707,7 +723,10 @@ textarea:focus-visible {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-700);
   text-decoration: none;
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .dashboard__action:hover {
@@ -852,7 +871,10 @@ img.gravatar-account {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 .markdown-editor__tab:hover {
@@ -1003,7 +1025,9 @@ img.gravatar-account {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .social-links-field__remove:hover {
@@ -1020,7 +1044,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .social-links-field__add:hover {
@@ -1120,7 +1146,9 @@ img.gravatar-account {
   border: 1px solid var(--theme-elevation-300);
   border-radius: 50%;
   cursor: pointer;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .about-color__dot:hover {
@@ -1179,7 +1207,9 @@ img.gravatar-account {
   font-size: 12px;
   line-height: 1.5;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .about-list-field__toggle:hover {
@@ -1238,7 +1268,9 @@ img.gravatar-account {
   font-size: 14px !important;
   line-height: 1.3;
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .post-category-field__select:focus {
@@ -1293,7 +1325,9 @@ img.gravatar-account {
   background: var(--theme-elevation-0);
   border: 1px solid var(--theme-elevation-200);
   border-radius: 8px;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .nav-items-field__row:hover {
@@ -1592,7 +1626,9 @@ img.gravatar-account {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-700);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 
 .compose__btn:hover {
@@ -1716,7 +1752,9 @@ img.gravatar-account {
   border: 1px solid var(--theme-elevation-250);
   border-radius: 6px;
   box-sizing: border-box;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .publish-modal__input:focus,
@@ -1840,7 +1878,9 @@ img.gravatar-account {
   border-radius: 10px;
   background: var(--theme-elevation-0);
   overflow: hidden;
-  transition: border-color 150ms, box-shadow 150ms;
+  transition:
+    border-color 150ms,
+    box-shadow 150ms;
 }
 
 .cover-uploader__combo:focus-within {
@@ -1929,7 +1969,9 @@ img.gravatar-account {
   border-radius: 6px;
   background: var(--theme-elevation-0);
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .tag-picker__combo:focus-within,
@@ -1981,7 +2023,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-700);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .tag-picker__combo-btn:hover:not(:disabled) {
@@ -2100,7 +2144,10 @@ img.gravatar-account {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-700);
   cursor: pointer;
-  transition: border-color 100ms ease, background 100ms ease, color 100ms ease;
+  transition:
+    border-color 100ms ease,
+    background 100ms ease,
+    color 100ms ease;
 }
 
 .tag-picker__item:hover {
@@ -2166,7 +2213,9 @@ img.gravatar-account {
   background: var(--theme-elevation-0);
   color: var(--theme-text);
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .date-field__trigger--open {
@@ -2195,7 +2244,9 @@ img.gravatar-account {
   border: 1px solid var(--theme-elevation-250);
   border-radius: 8px;
   background: var(--theme-elevation-0);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .range-field--open {
@@ -2214,7 +2265,9 @@ img.gravatar-account {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .range-field__half--empty {
@@ -2288,7 +2341,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-400);
   cursor: pointer;
-  transition: background 120ms, color 120ms;
+  transition:
+    background 120ms,
+    color 120ms;
 }
 
 .date-picker__nav-btn:hover {
@@ -2329,7 +2384,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-700);
   cursor: pointer;
-  transition: color 100ms, border-color 100ms;
+  transition:
+    color 100ms,
+    border-color 100ms;
 }
 
 .date-picker__day:hover {
@@ -2367,7 +2424,9 @@ img.gravatar-account {
   padding: 4px 16px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 120ms, color 120ms;
+  transition:
+    background 120ms,
+    color 120ms;
 }
 
 .date-picker__foot-btn:hover {
@@ -2396,7 +2455,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .drafts__tab:hover {
@@ -2504,7 +2565,10 @@ img.gravatar-account {
   color: var(--theme-elevation-600);
   cursor: pointer;
   text-decoration: none;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .drafts__op:hover {
@@ -2672,7 +2736,9 @@ img.gravatar-account {
   border-radius: 8px;
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-500);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .comments__search:focus-within {
@@ -2711,7 +2777,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-500);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .comments__reset:hover {
@@ -2776,7 +2844,9 @@ img.gravatar-account {
   background: transparent;
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .comments__chip:hover {
@@ -2894,7 +2964,9 @@ img.gravatar-account {
   color: var(--theme-elevation-400);
   font-size: 13px;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 button.comments__caret:hover {
@@ -2949,7 +3021,9 @@ button.comments__caret:hover {
   background: transparent;
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .comments__quick:hover:not(:disabled) {
@@ -3230,7 +3304,10 @@ button.comments__caret:hover {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-700);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .comments__act:hover {
@@ -3318,7 +3395,9 @@ button.comments__caret:hover {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .manage__reset:hover {
@@ -3344,7 +3423,10 @@ button.comments__caret:hover {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-700);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .manage__action:hover:not(:disabled) {
@@ -3534,7 +3616,9 @@ button.comments__caret:hover {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .cat__tool-btn:hover {
@@ -3808,7 +3892,10 @@ button.comments__caret:hover {
   background: var(--theme-elevation-0);
   color: var(--theme-elevation-600);
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .cat__seg:hover {
@@ -3835,7 +3922,9 @@ button.comments__caret:hover {
   border-radius: 10px;
   background: var(--theme-elevation-0);
   cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 }
 
 .cat__type-card b {
@@ -4001,7 +4090,9 @@ button.comments__caret:hover {
   font-size: 13.5px;
   color: var(--theme-elevation-500);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .cat__tab:hover {
@@ -4253,7 +4344,9 @@ button.comments__caret:hover {
   background: var(--theme-elevation-0);
   font-size: 14.5px;
   color: var(--theme-elevation-900);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .tag__input:focus {
@@ -4371,7 +4464,9 @@ button.comments__caret:hover {
   border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 120ms ease, box-shadow 120ms ease;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .settings__menu-item:hover {
@@ -4515,7 +4610,8 @@ button.comments__caret:hover {
 }
 
 @keyframes settings-loading-breathe {
-  0%, 100% {
+  0%,
+  100% {
     border-color: var(--theme-elevation-250);
   }
   50% {
@@ -4625,7 +4721,9 @@ button.comments__caret:hover {
   color: var(--theme-text);
   box-sizing: border-box;
   font-family: inherit;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .settings__field input:focus,
@@ -4683,7 +4781,6 @@ button.comments__caret:hover {
   /* 社交链接不走 .settings__grid，单独收到 596 列，与其他分区、保存钮同宽 */
   max-width: 596px;
 }
-
 
 /* ---------- 19. 登录页：极简浅色 ----------
    作用域：section.template-minimal.login（含 create-first-user）。
@@ -4802,7 +4899,9 @@ section.template-minimal.login .login__form textarea {
   border: 1px solid var(--theme-elevation-250);
   border-radius: 6px;
   outline: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 section.template-minimal.login .login__form input::placeholder {
@@ -4845,7 +4944,9 @@ html[data-yx-page='login'] .yx-pw-toggle {
   color: var(--theme-elevation-400);
   cursor: pointer;
   border-radius: 6px;
-  transition: color 140ms ease, background 140ms ease;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
 }
 
 html[data-yx-page='login'] .yx-pw-toggle:hover {
@@ -4883,7 +4984,9 @@ section.template-minimal.login .login__form .form-submit .btn.btn--style-primary
   border-radius: 6px;
   cursor: pointer;
   box-shadow: 0 2px 8px -2px rgb(96 165 250 / 0.35);
-  transition: box-shadow 140ms ease, filter 140ms ease;
+  transition:
+    box-shadow 140ms ease,
+    filter 140ms ease;
 }
 
 section.template-minimal.login .login__form .form-submit button[type='submit']:hover,
@@ -4974,7 +5077,10 @@ section.template-minimal.login .feishu-login-link {
   border-radius: 6px;
   cursor: pointer;
   text-decoration: none;
-  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
 }
 
 section.template-minimal.login .feishu-login-link:hover {
@@ -5057,7 +5163,9 @@ section.template-minimal.login .feishu-login-icon {
   border: 1px solid var(--theme-elevation-200);
   border-radius: 10px;
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .media__card:hover {
@@ -5421,7 +5529,9 @@ section.template-minimal.login .feishu-login-icon {
   color: var(--theme-elevation-500);
   font: inherit;
   cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
 }
 
 .changelog__year-trigger:hover {
@@ -5601,17 +5711,37 @@ section.template-minimal.login .feishu-login-icon {
   background: transparent;
 }
 
-.changelog__cell--l1 { background: #9be9a8; }
-.changelog__cell--l2 { background: #40c463; }
-.changelog__cell--l3 { background: #30a14e; }
-.changelog__cell--l4 { background: #216e39; }
+.changelog__cell--l1 {
+  background: #9be9a8;
+}
+.changelog__cell--l2 {
+  background: #40c463;
+}
+.changelog__cell--l3 {
+  background: #30a14e;
+}
+.changelog__cell--l4 {
+  background: #216e39;
+}
 
-.dark .changelog__cell { background: rgba(255, 255, 255, 0.07); }
-.dark .changelog__cell--void { background: transparent; }
-.dark .changelog__cell--l1 { background: #0e4429; }
-.dark .changelog__cell--l2 { background: #006d32; }
-.dark .changelog__cell--l3 { background: #26a641; }
-.dark .changelog__cell--l4 { background: #39d353; }
+.dark .changelog__cell {
+  background: rgba(255, 255, 255, 0.07);
+}
+.dark .changelog__cell--void {
+  background: transparent;
+}
+.dark .changelog__cell--l1 {
+  background: #0e4429;
+}
+.dark .changelog__cell--l2 {
+  background: #006d32;
+}
+.dark .changelog__cell--l3 {
+  background: #26a641;
+}
+.dark .changelog__cell--l4 {
+  background: #39d353;
+}
 
 .changelog__heat-foot {
   display: flex;
@@ -5749,13 +5879,31 @@ section.template-minimal.login .feishu-login-icon {
   flex: none;
 }
 
-.changelog__repo-badge--green { background: rgba(48, 161, 78, 0.12); color: #30a14e; }
-.changelog__repo-badge--amber { background: rgba(217, 143, 35, 0.14); color: #b9770e; }
-.changelog__repo-badge--violet { background: rgba(124, 92, 214, 0.14); color: #6f4fcf; }
+.changelog__repo-badge--green {
+  background: rgba(48, 161, 78, 0.12);
+  color: #30a14e;
+}
+.changelog__repo-badge--amber {
+  background: rgba(217, 143, 35, 0.14);
+  color: #b9770e;
+}
+.changelog__repo-badge--violet {
+  background: rgba(124, 92, 214, 0.14);
+  color: #6f4fcf;
+}
 
-.dark .changelog__repo-badge--green { background: rgba(57, 211, 83, 0.16); color: #39d353; }
-.dark .changelog__repo-badge--amber { background: rgba(240, 173, 78, 0.16); color: #f0ad4e; }
-.dark .changelog__repo-badge--violet { background: rgba(156, 130, 240, 0.18); color: #9c82f0; }
+.dark .changelog__repo-badge--green {
+  background: rgba(57, 211, 83, 0.16);
+  color: #39d353;
+}
+.dark .changelog__repo-badge--amber {
+  background: rgba(240, 173, 78, 0.16);
+  color: #f0ad4e;
+}
+.dark .changelog__repo-badge--violet {
+  background: rgba(156, 130, 240, 0.18);
+  color: #9c82f0;
+}
 
 .changelog__repo-titles {
   display: flex;
@@ -5792,13 +5940,31 @@ section.template-minimal.login .feishu-login-icon {
   flex: none;
 }
 
-.changelog__repo-count--green { background: rgba(48, 161, 78, 0.12); color: #2c8b45; }
-.changelog__repo-count--amber { background: rgba(217, 143, 35, 0.14); color: #a86a0d; }
-.changelog__repo-count--violet { background: rgba(124, 92, 214, 0.14); color: #6344bd; }
+.changelog__repo-count--green {
+  background: rgba(48, 161, 78, 0.12);
+  color: #2c8b45;
+}
+.changelog__repo-count--amber {
+  background: rgba(217, 143, 35, 0.14);
+  color: #a86a0d;
+}
+.changelog__repo-count--violet {
+  background: rgba(124, 92, 214, 0.14);
+  color: #6344bd;
+}
 
-.dark .changelog__repo-count--green { background: rgba(57, 211, 83, 0.16); color: #63dd7d; }
-.dark .changelog__repo-count--amber { background: rgba(240, 173, 78, 0.16); color: #f0ad4e; }
-.dark .changelog__repo-count--violet { background: rgba(156, 130, 240, 0.18); color: #ab95f5; }
+.dark .changelog__repo-count--green {
+  background: rgba(57, 211, 83, 0.16);
+  color: #63dd7d;
+}
+.dark .changelog__repo-count--amber {
+  background: rgba(240, 173, 78, 0.16);
+  color: #f0ad4e;
+}
+.dark .changelog__repo-count--violet {
+  background: rgba(156, 130, 240, 0.18);
+  color: #ab95f5;
+}
 
 /* ── 时间线 ───────────────────────────────────────────── */
 .changelog__timeline {
@@ -5983,8 +6149,13 @@ section.template-minimal.login .feishu-login-icon {
 }
 
 @keyframes changelog-pulse {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ==========================================================================
@@ -6014,7 +6185,10 @@ section.template-minimal.login .feishu-login-icon {
   color: var(--theme-elevation-700);
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .friends__filter:hover {
@@ -6059,7 +6233,9 @@ section.template-minimal.login .feishu-login-icon {
   border: 1px solid var(--theme-elevation-200);
   border-radius: 12px;
   background: var(--theme-elevation-0);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .friends__card:hover {
@@ -6327,7 +6503,9 @@ section.template-minimal.login .feishu-login-icon {
   background: transparent;
   color: var(--theme-elevation-500);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .friends__dialog-close:hover {
@@ -6385,7 +6563,9 @@ section.template-minimal.login .feishu-login-icon {
   font: inherit;
   font-size: 13px;
   line-height: 1.5;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .friends__form-input:focus {
@@ -6489,7 +6669,10 @@ section.template-minimal.login .feishu-login-icon {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, opacity 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
 }
 
 .friends__btn:hover:not(:disabled) {

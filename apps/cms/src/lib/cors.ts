@@ -54,8 +54,7 @@ export function corsHeadersFor(request: Request): Record<string, string> {
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD',
     // 把浏览器预检里点名的头部原样放回去（Waline 会带 content-type 等）
-    'Access-Control-Allow-Headers':
-      request.headers.get('access-control-request-headers') ?? 'content-type',
+    'Access-Control-Allow-Headers': request.headers.get('access-control-request-headers') ?? 'content-type',
     'Access-Control-Max-Age': '600',
     Vary: 'Origin',
   }

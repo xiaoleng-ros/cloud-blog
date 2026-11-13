@@ -1,0 +1,34 @@
+# Prettier 忽略清单
+#
+# 原则：只排除「不该由格式化器改写」的产物与内容，业务代码一律纳入。
+
+# 生成物：重跑生成命令会被覆盖，格式化只会在每次生成后产生无意义 diff
+apps/cms/src/payload-types.ts
+apps/cms/src/payload-generated-schema.ts
+apps/cms/src/editor/markdown-preview-css.ts
+apps/cms/src/migrations/
+
+# 构建与依赖产物
+node_modules/
+.next/
+.astro/
+dist/
+build/
+apps/cms/public/
+apps/blog/public/
+apps/blog/dist/
+
+# 第三方许可与说明（逐字照抄上游原文）
+THIRD-PARTY-NOTICES.md
+
+# 锁文件由 npm 维护
+package-lock.json
+
+# 补丁文件是对上游包的原样改动，不能重排
+patches/
+
+# 编辑器/工具目录
+.trae/
+.workbuddy/
+.vscode/
+.idea/

@@ -5,17 +5,17 @@
 //
 // 这里用 createRequire 让 Node 原生 CJS loader 加载 picomatch，再以 ESM 命名导出
 // 暴露它的 API。astro.config.mjs 里通过 resolve.alias 把 'picomatch' 指到本文件。
-import { createRequire } from 'node:module';
+import { createRequire } from 'node:module'
 
-const require = createRequire(import.meta.url);
-const pm = require('picomatch');
+const require = createRequire(import.meta.url)
+const pm = require('picomatch')
 
 // picomatch 本身是函数，同时挂载 isMatch / makeRe 等静态方法
-const picomatch = pm;
-export const isMatch = pm.isMatch;
-export const makeRe = pm.makeRe;
-export const scan = pm.scan;
-export const parse = pm.parse;
-export const compileRe = pm.compileRe;
-export const toRegex = pm.toRegex;
-export default picomatch;
+const picomatch = pm
+export const isMatch = pm.isMatch
+export const makeRe = pm.makeRe
+export const scan = pm.scan
+export const parse = pm.parse
+export const compileRe = pm.compileRe
+export const toRegex = pm.toRegex
+export default picomatch

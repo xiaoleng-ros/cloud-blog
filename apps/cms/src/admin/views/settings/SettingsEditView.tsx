@@ -31,12 +31,7 @@ import {
 import { PageHeader } from '../../components/PageHeader'
 import { DateField } from '../../components/DateField'
 import { CoverUploader } from '../../components/CoverUploader'
-import {
-  parseSocials,
-  PLATFORM_OPTIONS,
-  stringifySocials,
-  type Platform,
-} from '../../components/SocialLinksField'
+import { parseSocials, PLATFORM_OPTIONS, stringifySocials, type Platform } from '../../components/SocialLinksField'
 import { describeApiError, fetchGlobal, updateGlobal } from '../lib/api'
 
 /** 字段定义：text 单行、textarea 多行、date 自定义日历；span=2 占满整行 */
@@ -66,7 +61,17 @@ interface SectionDef {
 
 /** 18px 线性图标，风格与回收站/分类页一致 */
 const icon = (path: ReactNode) => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     {path}
   </svg>
 )
@@ -104,7 +109,14 @@ const SECTIONS: SectionDef[] = [
       </>,
     ),
     fields: [
-      { name: 'siteIcon', label: '网站图标', type: 'text', span: 2, widget: 'uploader', hint: '用作浏览器标签页图标与页脚头像；留空则用站点默认头像。' },
+      {
+        name: 'siteIcon',
+        label: '网站图标',
+        type: 'text',
+        span: 2,
+        widget: 'uploader',
+        hint: '用作浏览器标签页图标与页脚头像；留空则用站点默认头像。',
+      },
       {
         name: 'siteIcp',
         label: 'ICP 备案号',
@@ -337,11 +349,7 @@ export const SettingsEditView = () => {
       // 落盘前重读全局文档：updatedAt 变化说明他人/他处已改，拒绝覆盖并提示重载
       const latest = await fetchGlobal<GlobalDoc>('site-settings')
       const latestUpdatedAt = typeof latest?.updatedAt === 'string' ? latest.updatedAt : ''
-      if (
-        loadedUpdatedAtRef.current &&
-        latestUpdatedAt &&
-        latestUpdatedAt !== loadedUpdatedAtRef.current
-      ) {
+      if (loadedUpdatedAtRef.current && latestUpdatedAt && latestUpdatedAt !== loadedUpdatedAtRef.current) {
         setConflict(true)
         setError('站点设置已被他人或他处修改，为避免覆盖你的改动未保存，请重载后再编辑')
         return
@@ -399,7 +407,11 @@ export const SettingsEditView = () => {
             // 加载只发生在框内数据（此时为空）。水合完成后切换到受控的单分区渲染。
             <div className="settings__ssr">
               {SECTIONS.map((s, i) => (
-                <div key={s.key} id={s.key} className={`settings__ssr-sec${i === 0 ? ' settings__ssr-sec--default' : ''}`}>
+                <div
+                  key={s.key}
+                  id={s.key}
+                  className={`settings__ssr-sec${i === 0 ? ' settings__ssr-sec--default' : ''}`}
+                >
                   <h2 className="settings__panel-title">{s.title}</h2>
                   <fieldset className="settings__body" disabled>
                     <SectionBody sec={s} values={emptyValues()} onField={noopField} />
@@ -531,7 +543,13 @@ function SectionBody({
   )
 }
 
-/** 社交链接面板：与 SocialLinksField 相同的行卡片交互，但值来自本视图 state */function SocialsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** 社交链接面板：与 SocialLinksField 相同的行卡片交互，但值来自本视图 state */ function SocialsEditor({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
   const items = parseSocials(value)
 
   const replace = (next: typeof items) => onChange(stringifySocials(next))
@@ -543,8 +561,7 @@ function SectionBody({
           <div className="social-links-field__empty">还没有添加社交链接，点击下方按钮添加一条。</div>
         )}
         {items.map((item, index) => {
-          const option =
-            PLATFORM_OPTIONS.find((p) => p.value === item.platform) ?? PLATFORM_OPTIONS[0]
+          const option = PLATFORM_OPTIONS.find((p) => p.value === item.platform) ?? PLATFORM_OPTIONS[0]
           return (
             <div className="social-links-field__row" key={`${item.platform}-${index}`}>
               <div className="social-links-field__platform">
@@ -556,11 +573,7 @@ function SectionBody({
                 <select
                   value={item.platform}
                   onChange={(e) =>
-                    replace(
-                      items.map((it, i) =>
-                        i === index ? { ...it, platform: e.target.value as Platform } : it,
-                      ),
-                    )
+                    replace(items.map((it, i) => (i === index ? { ...it, platform: e.target.value as Platform } : it)))
                   }
                   className="social-links-field__select"
                 >
@@ -574,9 +587,7 @@ function SectionBody({
               <input
                 type="text"
                 value={item.href}
-                onChange={(e) =>
-                  replace(items.map((it, i) => (i === index ? { ...it, href: e.target.value } : it)))
-                }
+                onChange={(e) => replace(items.map((it, i) => (i === index ? { ...it, href: e.target.value } : it)))}
                 placeholder="https://..."
                 className="social-links-field__input"
               />
@@ -601,8 +612,8 @@ function SectionBody({
         + 添加社交链接
       </button>
       <p className="social-links-field__hint">
-        每行保存为「平台 链接」格式，前台会自动匹配对应图标。支持{' '}
-        {PLATFORM_OPTIONS.map((p) => p.label).join(' / ')}；认不出图标的平台不会消失，前台按纯文字显示平台名。
+        每行保存为「平台 链接」格式，前台会自动匹配对应图标。支持 {PLATFORM_OPTIONS.map((p) => p.label).join(' / ')}
+        ；认不出图标的平台不会消失，前台按纯文字显示平台名。
       </p>
     </div>
   )
@@ -636,8 +647,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (color: str
 }
 
 /** 行编辑器公共外壳：头部（字段名 + 「批量文本」切换胶囊）+ 列表 + 添加按钮；批量模式整块换成 textarea */
-const DEFAULT_BATCH_PLACEHOLDER =
-  '每行一条，用竖线分隔，颜色可省略：\n坐标广州|1995 年生|green\n吃素|偶尔|#c9e6a4'
+const DEFAULT_BATCH_PLACEHOLDER = '每行一条，用竖线分隔，颜色可省略：\n坐标广州|1995 年生|green\n吃素|偶尔|#c9e6a4'
 
 function ListEditorShell({
   label,
@@ -892,9 +902,7 @@ function parseFooterLines(raw: string): FooterLine[] {
 
 /** 行数组 → 页脚文本：名称与链接都空的行写成空行，前台解析会跳过 */
 function stringifyFooterLines(items: FooterLine[]): string {
-  return items
-    .map((it) => [it.name.trim(), it.href.trim()].filter(Boolean).join(' '))
-    .join('\n')
+  return items.map((it) => [it.name.trim(), it.href.trim()].filter(Boolean).join(' ')).join('\n')
 }
 
 /** 页脚行编辑器：每行「名称 + 链接」，可切批量文本模式（批量文本就是存储格式本身） */

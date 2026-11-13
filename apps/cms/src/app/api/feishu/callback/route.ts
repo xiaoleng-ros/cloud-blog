@@ -245,9 +245,7 @@ async function getAppAccessToken(appId: string, appSecret: string): Promise<stri
   })
   const body = (await resp.json()) as FeishuAppTokenResponse
   if (body.code !== 0 || !body.app_access_token) {
-    throw new Error(
-      `[feishu] get app_access_token failed: code=${body.code} msg=${body.msg ?? 'unknown'}`,
-    )
+    throw new Error(`[feishu] get app_access_token failed: code=${body.code} msg=${body.msg ?? 'unknown'}`)
   }
   return body.app_access_token
 }
@@ -312,9 +310,7 @@ async function fetchFeishuUserInfo(accessToken: string): Promise<{
   try {
     body = JSON.parse(rawText) as FeishuUserInfoResponse
   } catch {
-    throw new Error(
-      `[feishu] user info 返回非 JSON（HTTP ${resp.status}）：${rawText.slice(0, 200)}`,
-    )
+    throw new Error(`[feishu] user info 返回非 JSON（HTTP ${resp.status}）：${rawText.slice(0, 200)}`)
   }
 
   if (body.code !== 0 || !body.data?.open_id) {
@@ -351,7 +347,13 @@ function withUserLock<T>(userId: string, run: () => Promise<T>): Promise<T> {
   const prev = sessionLocks.get(userId) ?? Promise.resolve()
   // prev 永不 reject（见下方 set 存的是吞错后的续程），故 onFulfilled/onRejected 都跑 run
   const next = prev.then(run, run)
-  sessionLocks.set(userId, next.then(() => undefined, () => undefined))
+  sessionLocks.set(
+    userId,
+    next.then(
+      () => undefined,
+      () => undefined,
+    ),
+  )
   return next
 }
 
@@ -372,8 +374,8 @@ async function createUserSession(
       id: userDoc.id,
       depth: 0,
     })
-    const existing = ((current as { sessions?: Array<{ id: string; expiresAt: string | Date }> })
-      ?.sessions ?? []) as Array<{ id: string; expiresAt: string | Date }>
+    const existing = ((current as { sessions?: Array<{ id: string; expiresAt: string | Date }> })?.sessions ??
+      []) as Array<{ id: string; expiresAt: string | Date }>
     const liveSessions = existing.filter((s) => new Date(s.expiresAt) > now)
 
     // updatedAt 置 null：仅新增会话不应改动「更新时间」（与 Payload addSessionToUser 行为一致）
@@ -555,8 +557,7 @@ export async function GET(request: Request) {
         // 资料回填失败不应阻断登录：openId 已匹配，会话照常建立，下次登录再回填。
         console.error('[feishu/callback] 回填用户资料失败（不阻断登录）', err)
       })
-    const configuredExpiration = (payload.config as { admin?: { cookieExpiration?: number } }).admin
-      ?.cookieExpiration
+    const configuredExpiration = (payload.config as { admin?: { cookieExpiration?: number } }).admin?.cookieExpiration
     const tokenExpiration =
       typeof configuredExpiration === 'number' && configuredExpiration > 0
         ? Math.min(configuredExpiration, DEFAULT_TOKEN_EXPIRATION_SEC)
@@ -583,16 +584,18 @@ export async function GET(request: Request) {
     response.headers.set('Pragma', 'no-cache')
 
     // 从 payload.collections 里取用户集合的 auth 配置，读取 cookies 参数（secure/sameSite/domain）
-    const authConfig = payload.collections.users?.config.auth as {
-      tokenExpiration?: number
-      useSessions?: boolean
-      cookies?: {
-        domain?: string
-        secure?: boolean
-        // Payload 类型定义为 SameSiteOptions | false，这里收敛成 string | boolean 便于读取
-        sameSite?: string | boolean
-      }
-    } | undefined
+    const authConfig = payload.collections.users?.config.auth as
+      | {
+          tokenExpiration?: number
+          useSessions?: boolean
+          cookies?: {
+            domain?: string
+            secure?: boolean
+            // Payload 类型定义为 SameSiteOptions | false，这里收敛成 string | boolean 便于读取
+            sameSite?: string | boolean
+          }
+        }
+      | undefined
 
     // sameSite 解析：对齐 Payload 内部 generatePayloadCookie 的行为
     // - 若配置为字符串（'strict' | 'lax' | 'none' 或大写形式）统一转成小写（Next.js ResponseCookie 规范）
@@ -624,6 +627,9 @@ export async function GET(request: Request) {
     const errType = err instanceof Error ? err.constructor.name : String(err)
     const rawMsg = err instanceof Error ? err.message : String(err)
     const safeMsg = rawMsg.replace(/[A-Za-z0-9]{24,}/g, '***').slice(0, 120)
-    return clearStateCookie(redirectToLogin(request.url, 'server_error', `type=${errType}&msg=${encodeURIComponent(safeMsg)}`), secure)
+    return clearStateCookie(
+      redirectToLogin(request.url, 'server_error', `type=${errType}&msg=${encodeURIComponent(safeMsg)}`),
+      secure,
+    )
   }
 }

@@ -16,7 +16,15 @@ import config from '@payload-config'
 import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils'
 import { normalizeSiteHref } from 'cloud-blog/shared/free-text-lines'
 import { isExternalHref } from 'cloud-blog/shared/site-pages'
-import { getSnapshot, setSnapshot, getProbe, setProbe, getMutationSeq, type SyncSnapshot, type SyncProbe } from './sync-cache'
+import {
+  getSnapshot,
+  setSnapshot,
+  getProbe,
+  setProbe,
+  getMutationSeq,
+  type SyncSnapshot,
+  type SyncProbe,
+} from './sync-cache'
 
 // getPayload 实例进程内缓存（避免每次请求重建数据库连接）
 export type PayloadDb = Awaited<ReturnType<typeof getPayload>>
@@ -125,7 +133,10 @@ function slugsOf(
 /** 把「每行一个」的文本拆为数组（keywords/ai/tags 字段） */
 function linesOf(text?: string | null): string[] | undefined {
   if (!text) return undefined
-  const list = String(text).split('\n').map((s) => s.trim()).filter(Boolean)
+  const list = String(text)
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
   return list.length > 0 ? list : undefined
 }
 
@@ -718,17 +729,44 @@ async function buildSyncSnapshot(): Promise<SyncSnapshot> {
 const PROBE_TTL_MS = process.env.NODE_ENV === 'production' ? 5_000 : 60_000
 
 /** 单指纹串的格式化：与 computeSourceDigests 的 stampOf 同构（条数:最大 updatedAt） */
-const digestStamp = (count: number, updatedAt?: string): string =>
-  `${count}:${maxStamp([updatedAt]) ?? 0}`
+const digestStamp = (count: number, updatedAt?: string): string => `${count}:${maxStamp([updatedAt]) ?? 0}`
 
 async function fetchSyncProbe(): Promise<SyncProbe> {
   const payload = await getDb()
   const publishedWhere = { status: { equals: 'published' } }
   const [posts, notes, projects, friends, media, settings, navGlobal] = await Promise.all([
-    payload.find({ collection: 'posts', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
-    payload.find({ collection: 'notes', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
-    payload.find({ collection: 'projects', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
-    payload.find({ collection: 'friends', where: publishedWhere, limit: 1, sort: '-updatedAt', depth: 0, select: { updatedAt: true } }),
+    payload.find({
+      collection: 'posts',
+      where: publishedWhere,
+      limit: 1,
+      sort: '-updatedAt',
+      depth: 0,
+      select: { updatedAt: true },
+    }),
+    payload.find({
+      collection: 'notes',
+      where: publishedWhere,
+      limit: 1,
+      sort: '-updatedAt',
+      depth: 0,
+      select: { updatedAt: true },
+    }),
+    payload.find({
+      collection: 'projects',
+      where: publishedWhere,
+      limit: 1,
+      sort: '-updatedAt',
+      depth: 0,
+      select: { updatedAt: true },
+    }),
+    payload.find({
+      collection: 'friends',
+      where: publishedWhere,
+      limit: 1,
+      sort: '-updatedAt',
+      depth: 0,
+      select: { updatedAt: true },
+    }),
     // Media 直接复用 fetchMediaAltMap：只查 url/alt/updatedAt 三个小列（无正文类大字段），
     // 且「配了 alt 的条数 + 全表最大 updatedAt」口径与快照路径逐字一致 ——
     // url 是 upload 集合的读时派生列，SQL where 无法精确复现其语义，

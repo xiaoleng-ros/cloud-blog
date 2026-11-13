@@ -41,14 +41,11 @@ export function useToast() {
     }
   }, [])
 
-  const show = useCallback(
-    (type: ToastType, text: string, durationMs: number = AUTO_DISMISS_MS) => {
-      setToast({ type, text })
-      if (timer.current) clearTimeout(timer.current)
-      timer.current = setTimeout(() => setToast(null), durationMs)
-    },
-    [],
-  )
+  const show = useCallback((type: ToastType, text: string, durationMs: number = AUTO_DISMISS_MS) => {
+    setToast({ type, text })
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setToast(null), durationMs)
+  }, [])
 
   // 卸载时清理定时器
   useEffect(
@@ -69,11 +66,28 @@ export const Toast: React.FC<{ toast: ToastState }> = ({ toast }) => {
     <div className={`admin-toast admin-toast--${toast.type}`} role="status" aria-live="polite">
       <span className="admin-toast__icon" aria-hidden="true">
         {toast.type === 'success' ? (
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M20 6 9 17l-5-5" />
           </svg>
         ) : (
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+          >
             <path d="M12 7v6M12 17.2h.01" />
           </svg>
         )}

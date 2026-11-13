@@ -10,11 +10,7 @@
     "href": "https://blog.iceuu.icu",
     "articleHref": "/posts/开发/9001/",
     "stars": 128,
-    "tags": [
-      "Astro",
-      "Payload",
-      "TypeScript"
-    ],
+    "tags": ["Astro", "Payload", "TypeScript"],
     "sortOrder": 10
   }
 ]

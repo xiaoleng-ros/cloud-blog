@@ -160,10 +160,7 @@ export async function deleteTrashedDoc(collection: 'posts' | 'notes', id: number
 
 /** 拉取分类 / 标签全量列表（用于下拉选择） */
 export async function fetchTerms(collection: 'categories' | 'tags'): Promise<TermOption[]> {
-  const res = await request<ListResponse<TermOption>>(
-    'GET',
-    `/api/${collection}?limit=0&depth=0&sort=createdAt`,
-  )
+  const res = await request<ListResponse<TermOption>>('GET', `/api/${collection}?limit=0&depth=0&sort=createdAt`)
   return res.docs
 }
 
@@ -184,10 +181,7 @@ export async function fetchSelectableCategories(): Promise<TermOption[]> {
 
 /** 分类管理树视图：全量拉取（depth=0，parent 为裸 id） */
 export async function listCategoryDocs(): Promise<CategoryDoc[]> {
-  const res = await request<ListResponse<CategoryDoc>>(
-    'GET',
-    '/api/categories?limit=0&depth=0&sort=sort',
-  )
+  const res = await request<ListResponse<CategoryDoc>>('GET', '/api/categories?limit=0&depth=0&sort=sort')
   return res.docs
 }
 
@@ -245,9 +239,7 @@ export async function fetchTagUsage(): Promise<Record<number, number>> {
  *   2. 单个对象 `{ id, name }`（单选关系 depth=1）
  *   3. 裸 id（单选关系 depth=0）
  */
-export function idsOf(
-  refs?: Array<{ id: number } | number> | { id: number } | number | null,
-): number[] {
+export function idsOf(refs?: Array<{ id: number } | number> | { id: number } | number | null): number[] {
   if (!refs) return []
   if (Array.isArray(refs)) {
     return refs.map((r) => (typeof r === 'object' ? Number(r.id) : Number(r)))
@@ -385,12 +377,7 @@ export interface MediaListResult {
 }
 
 /** 分页拉取图片列表 */
-export async function listMedia(
-  page = 1,
-  size = 20,
-  sort = '-createdAt',
-  keyword?: string,
-): Promise<MediaListResult> {
+export async function listMedia(page = 1, size = 20, sort = '-createdAt', keyword?: string): Promise<MediaListResult> {
   const and: Record<string, unknown>[] = []
   if (keyword) and.push({ filename: { like: keyword } })
   const query = new URLSearchParams({
@@ -431,4 +418,3 @@ export async function deleteMediaBatch(
   }
   return { ok, fail }
 }
-

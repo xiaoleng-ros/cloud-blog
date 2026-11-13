@@ -30,11 +30,7 @@ export function LoginBrand({ children }: Props) {
     // 判断当前是否为登录页（含首次创建账号 / 忘记密码）
     const isLoginPage = () => {
       const p = window.location.pathname
-      return (
-        p === '/admin/login' ||
-        p === '/admin/create-first-user' ||
-        p === '/admin/forgot-password'
-      )
+      return p === '/admin/login' || p === '/admin/create-first-user' || p === '/admin/forgot-password'
     }
 
     /** 应用/移除登录页标记（主题只做浅色，不再强制深色） */
@@ -64,9 +60,7 @@ export function LoginBrand({ children }: Props) {
     /** 密码输入框右侧补充显隐切换图标按钮 */
     const ensurePasswordToggle = () => {
       if (!isLoginPage()) return
-      const pwInput = document.querySelector<HTMLInputElement>(
-        '.login__form input[type="password"]',
-      )
+      const pwInput = document.querySelector<HTMLInputElement>('.login__form input[type="password"]')
       if (!pwInput) return
       const fieldWrap = pwInput.closest('.field-type')
       if (!fieldWrap) return
@@ -155,12 +149,7 @@ export function LoginBrand({ children }: Props) {
     window.fetch = (async (...args: Parameters<typeof fetch>) => {
       const input = args[0]
       // 兼容 string / URL / Request 三种入参
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : input?.url ?? ''
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input?.url ?? '')
       // Payload 登录接口匹配：/api/:slug/login（slug 通常为 Users）
       if (/^\/api\/[^/?#]*\/login(\?|$)/.test(url)) loginPending = true
       try {

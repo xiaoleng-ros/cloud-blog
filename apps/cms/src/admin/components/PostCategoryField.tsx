@@ -26,10 +26,7 @@ interface CategoryListResponse {
   docs: CategoryDoc[]
 }
 
-export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
-  path,
-  label,
-}) => {
+export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({ path, label }) => {
   // value / setValue 与 relationship 字段双向绑定
   const { value, setValue, showError, errorMessage } = useField({ path })
 
@@ -51,7 +48,7 @@ export const PostCategoryField: React.FC<{ path: string; label?: string }> = ({
       .then((res) => res.json() as Promise<CategoryListResponse>)
       .then((json) => {
         const docs = Array.isArray(json?.docs) ? json.docs : []
-        docs.sort((a, b) => (Number(a.sort ?? 0) - Number(b.sort ?? 0)) || a.name.localeCompare(b.name, 'zh'))
+        docs.sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0) || a.name.localeCompare(b.name, 'zh'))
         setCategories(docs)
       })
       .catch(() => setCategories([]))

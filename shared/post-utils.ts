@@ -14,35 +14,34 @@
 
 /** 文章条目的最小公共类型：仅需 id + data（可选），兼容 Astro 和 CMS 两种数据源 */
 export interface PostEntry<TData = any> {
-  id: string;
+  id: string
   /** Astro CollectionEntry 的顶层日期；CMS MdEntry 无此字段，日期在 data.date 中 */
-  date?: Date | string;
+  date?: Date | string
   /** Astro CollectionEntry 的 data 属性；CMS MdEntry 无此属性，字段直接在顶层 */
-  data?: TData;
-  body?: string;
+  data?: TData
+  body?: string
 }
 
 /** 项目图标兜底：前台 zod schema、前台 REST 映射、后台注入映射三处共用这一份 */
-export const DEFAULT_PROJECT_ICON = 'github';
+export const DEFAULT_PROJECT_ICON = 'github'
 
 /** 从文章条目中获取字段值：优先 post.data.xxx，回退到 post.xxx（兼容两种数据源） */
 export const getVal = <T = any>(post: PostEntry, field: string): T | undefined => {
   if (post.data && typeof post.data === 'object') {
-    const val = (post.data as any)[field];
-    if (val !== undefined) return val as T;
+    const val = (post.data as any)[field]
+    if (val !== undefined) return val as T
   }
-  return (post as any)[field] as T | undefined;
-};
+  return (post as any)[field] as T | undefined
+}
 
 /** 提取文章日期：优先顶层 date（Astro），回退到 data.date（CMS） */
-const getPostDate = (post: PostEntry): Date | string | undefined =>
-  post.date ?? getVal<Date | string>(post, 'date');
+const getPostDate = (post: PostEntry): Date | string | undefined => post.date ?? getVal<Date | string>(post, 'date')
 
 /** 日期时间戳提取，null/undefined 安全 */
 const getTime = (date?: Date | string) => {
-  if (!date) return 0;
-  return date instanceof Date ? date.getTime() : new Date(date).getTime();
-};
+  if (!date) return 0
+  return date instanceof Date ? date.getTime() : new Date(date).getTime()
+}
 
 /**
  * 固定 Asia/Shanghai 时区的日期部件（年/月/日，均为字符串，月日为两位补零）。
@@ -57,31 +56,28 @@ const SHANGHAI_DATE_TIME = new Intl.DateTimeFormat('en-CA', {
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
-});
+})
 
-export const toShanghaiParts = (
-  date?: Date | string,
-): { year: string; month: string; day: string } | undefined => {
-  if (!date) return undefined;
-  const d = date instanceof Date ? date : new Date(date);
-  if (isNaN(d.getTime())) return undefined;
-  const parts = SHANGHAI_DATE_TIME.formatToParts(d);
-  const pick = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((p) => p.type === type)?.value ?? '';
-  return { year: pick('year'), month: pick('month'), day: pick('day') };
-};
+export const toShanghaiParts = (date?: Date | string): { year: string; month: string; day: string } | undefined => {
+  if (!date) return undefined
+  const d = date instanceof Date ? date : new Date(date)
+  if (isNaN(d.getTime())) return undefined
+  const parts = SHANGHAI_DATE_TIME.formatToParts(d)
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ''
+  return { year: pick('year'), month: pick('month'), day: pick('day') }
+}
 
 /** 格式化为 yyyy-MM-dd（固定 Asia/Shanghai 时区，与构建机 TZ 无关；签名保持兼容） */
 export const formatDate = (date?: Date | string) => {
-  const parts = toShanghaiParts(date);
-  return parts ? `${parts.year}-${parts.month}-${parts.day}` : '';
-};
+  const parts = toShanghaiParts(date)
+  return parts ? `${parts.year}-${parts.month}-${parts.day}` : ''
+}
 
 const SHANGHAI_HOUR = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Shanghai',
   hour: '2-digit',
   hourCycle: 'h23',
-});
+})
 
 /**
  * 固定 Asia/Shanghai 时区的「时段」中文词（凌晨 / 上午 / 中午 / 下午 / 晚上）。
@@ -92,63 +88,51 @@ const SHANGHAI_HOUR = new Intl.DateTimeFormat('en-GB', {
  * 非法或缺失日期返回空串，调用方自行决定要不要输出这一段。
  */
 export const getShanghaiPeriod = (date?: Date | string): string => {
-  if (!date) return '';
-  const d = date instanceof Date ? date : new Date(date);
-  if (isNaN(d.getTime())) return '';
-  const hour = Number(SHANGHAI_HOUR.format(d)) % 24;
-  if (!Number.isFinite(hour)) return '';
-  if (hour < 6) return '凌晨';
-  if (hour < 11) return '上午';
-  if (hour < 14) return '中午';
-  if (hour < 18) return '下午';
-  return '晚上';
-};
+  if (!date) return ''
+  const d = date instanceof Date ? date : new Date(date)
+  if (isNaN(d.getTime())) return ''
+  const hour = Number(SHANGHAI_HOUR.format(d)) % 24
+  if (!Number.isFinite(hour)) return ''
+  if (hour < 6) return '凌晨'
+  if (hour < 11) return '上午'
+  if (hour < 14) return '中午'
+  if (hour < 18) return '下午'
+  return '晚上'
+}
 
 /** 置顶优先 → 日期倒序 → 标题升序 */
 export const sortPosts = <T extends PostEntry>(posts: T[]): T[] =>
   [...posts].sort((a, b) => {
-    const stickyDiff =
-      (Number(getVal(b, 'sticky') ?? 0)) - (Number(getVal(a, 'sticky') ?? 0));
-    if (stickyDiff !== 0) return stickyDiff;
-    const dateDiff = getTime(getPostDate(b)) - getTime(getPostDate(a));
-    if (dateDiff !== 0) return dateDiff;
-    return String(getVal(a, 'title') ?? '').localeCompare(
-      String(getVal(b, 'title') ?? ''),
-      'zh-CN',
-    );
-  });
+    const stickyDiff = Number(getVal(b, 'sticky') ?? 0) - Number(getVal(a, 'sticky') ?? 0)
+    if (stickyDiff !== 0) return stickyDiff
+    const dateDiff = getTime(getPostDate(b)) - getTime(getPostDate(a))
+    if (dateDiff !== 0) return dateDiff
+    return String(getVal(a, 'title') ?? '').localeCompare(String(getVal(b, 'title') ?? ''), 'zh-CN')
+  })
 
 /** 纯日期倒序 → 标题升序 */
 export const sortPostsByDate = <T extends PostEntry>(posts: T[]): T[] =>
   [...posts].sort((a, b) => {
-    const dateDiff = getTime(getPostDate(b)) - getTime(getPostDate(a));
-    if (dateDiff !== 0) return dateDiff;
-    return String(getVal(a, 'title') ?? '').localeCompare(
-      String(getVal(b, 'title') ?? ''),
-      'zh-CN',
-    );
-  });
+    const dateDiff = getTime(getPostDate(b)) - getTime(getPostDate(a))
+    if (dateDiff !== 0) return dateDiff
+    return String(getVal(a, 'title') ?? '').localeCompare(String(getVal(b, 'title') ?? ''), 'zh-CN')
+  })
 
 /** 文章描述：优先 description，其次 AI 摘要首条，兜底默认文案 */
 export const getPostDescription = <T extends PostEntry>(post: T): string =>
-  (getVal(post, 'description') ?? getVal(post, 'ai')?.[0]) ||
-  '技术记录与实践笔记。';
+  (getVal(post, 'description') ?? getVal(post, 'ai')?.[0]) || '技术记录与实践笔记。'
 
 /** 文章摘要：仅真实内容，无则 undefined（列表可省略该行） */
-export const getPostExcerpt = <T extends PostEntry>(post: T) =>
-  getVal(post, 'description') ?? getVal(post, 'ai')?.[0];
+export const getPostExcerpt = <T extends PostEntry>(post: T) => getVal(post, 'description') ?? getVal(post, 'ai')?.[0]
 
 /** 文章分类（取第一个） */
-export const getPostCategory = <T extends PostEntry>(post: T) =>
-  getVal<string[]>(post, 'categories')?.[0];
+export const getPostCategory = <T extends PostEntry>(post: T) => getVal<string[]>(post, 'categories')?.[0]
 
 /** 文章标签 */
-export const getPostTags = <T extends PostEntry>(post: T): string[] =>
-  getVal<string[]>(post, 'tags') ?? [];
+export const getPostTags = <T extends PostEntry>(post: T): string[] => getVal<string[]>(post, 'tags') ?? []
 
 /** 文章封面 */
-export const getPostCover = <T extends PostEntry>(post: T) =>
-  getVal(post, 'cover');
+export const getPostCover = <T extends PostEntry>(post: T) => getVal(post, 'cover')
 
 /**
  * Supabase Storage 图片的边缘变换 URL（P0-2 提速）。
@@ -165,102 +149,83 @@ export const getPostCover = <T extends PostEntry>(post: T) =>
  * 已带查询串（签名/已有变换）或非 Supabase 的外链原样返回，绝不改写。
  */
 const SUPABASE_OBJECT_URL_RE =
-  /^(https:\/\/[a-z0-9]{20}\.storage\.supabase\.co|https:\/\/[a-z0-9]{20}\.supabase\.co)\/storage\/v1\/object\/public\/(.+)$/i;
+  /^(https:\/\/[a-z0-9]{20}\.storage\.supabase\.co|https:\/\/[a-z0-9]{20}\.supabase\.co)\/storage\/v1\/object\/public\/(.+)$/i
 
 export function supabaseImageTransform(
   url: string | undefined,
   options: { width?: number; quality?: number } = {},
 ): string | undefined {
-  if (!url) return url;
-  const m = SUPABASE_OBJECT_URL_RE.exec(url);
-  if (!m) return url; // 非 Supabase object URL：外链/相对路径原样返回
+  if (!url) return url
+  const m = SUPABASE_OBJECT_URL_RE.exec(url)
+  if (!m) return url // 非 Supabase object URL：外链/相对路径原样返回
   // 已带查询串（签名 URL / 已是变换地址）不改写，避免把参数拼坏
-  if (url.includes('?')) return url;
-  const [, origin, path] = m;
-  const params = new URLSearchParams();
-  if (options.width) params.set('width', String(options.width));
-  if (options.quality) params.set('quality', String(options.quality));
-  params.set('format', 'webp');
+  if (url.includes('?')) return url
+  const [, origin, path] = m
+  const params = new URLSearchParams()
+  if (options.width) params.set('width', String(options.width))
+  if (options.quality) params.set('quality', String(options.quality))
+  params.set('format', 'webp')
   // Supabase render 端点的形状是 /storage/v1/render/image/public/<bucket>/<path>，
   // 注意 object/public 要整段换成 render/image/public（不是追加）。
-  return `${origin}/storage/v1/render/image/public/${path}?${params.toString()}`;
+  return `${origin}/storage/v1/render/image/public/${path}?${params.toString()}`
 }
 
 /** 文章阅读时长估算（中日韩字符 1 字 + 英文 1 词 ≈ 350 单位/分钟） */
 export const getReadingMinutes = <T extends PostEntry>(post: T): number => {
-  const body = post.body ?? '';
-  const cjkChars = body.match(/[\u4e00-\u9fff]/g)?.length ?? 0;
-  const words = body
-    .replace(/[\u4e00-\u9fff]/g, ' ')
-    .match(/[A-Za-z0-9_]+/g)?.length ?? 0;
-  return Math.max(1, Math.ceil((cjkChars + words) / 350));
-};
+  const body = post.body ?? ''
+  const cjkChars = body.match(/[\u4e00-\u9fff]/g)?.length ?? 0
+  const words = body.replace(/[\u4e00-\u9fff]/g, ' ').match(/[A-Za-z0-9_]+/g)?.length ?? 0
+  return Math.max(1, Math.ceil((cjkChars + words) / 350))
+}
 
 /** 相邻文章：上一篇 + 下一篇（按时间排序） */
-export const getAdjacentPosts = <T extends PostEntry>(
-  posts: T[],
-  current: T,
-) => {
-  const ordered = sortPostsByDate(posts);
-  const index = ordered.findIndex((p) => p.id === current.id);
+export const getAdjacentPosts = <T extends PostEntry>(posts: T[], current: T) => {
+  const ordered = sortPostsByDate(posts)
+  const index = ordered.findIndex((p) => p.id === current.id)
   return {
     newer: index > 0 ? ordered[index - 1] : undefined,
-    older:
-      index >= 0 && index < ordered.length - 1
-        ? ordered[index + 1]
-        : undefined,
-  };
-};
+    older: index >= 0 && index < ordered.length - 1 ? ordered[index + 1] : undefined,
+  }
+}
 
 /** 相关文章推荐：按分类 + 标签匹配度评分，返回 Top N */
-export const getRelatedPosts = <T extends PostEntry>(
-  posts: T[],
-  current: T,
-  limit = 3,
-): T[] => {
-  const currentCategory = getPostCategory(current);
-  const currentTags = new Set(getPostTags(current));
+export const getRelatedPosts = <T extends PostEntry>(posts: T[], current: T, limit = 3): T[] => {
+  const currentCategory = getPostCategory(current)
+  const currentTags = new Set(getPostTags(current))
   return sortPostsByDate(posts)
     .filter((post) => post.id !== current.id)
     .map((post) => {
-      const sharedTags = getPostTags(post).filter((tag) =>
-        currentTags.has(tag),
-      );
-      const sameCategory =
-        currentCategory && getPostCategory(post) === currentCategory ? 1 : 0;
-      return { post, score: sameCategory * 3 + sharedTags.length };
+      const sharedTags = getPostTags(post).filter((tag) => currentTags.has(tag))
+      const sameCategory = currentCategory && getPostCategory(post) === currentCategory ? 1 : 0
+      return { post, score: sameCategory * 3 + sharedTags.length }
     })
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map((item) => item.post);
-};
+    .map((item) => item.post)
+}
 
 /** 获取文章的更新日期（优先取 data.updated，其次取顶层 date / data.date） */
-export const getPostUpdatedDate = <T extends PostEntry>(
-  post: T,
-): Date | undefined => {
-  const raw = getVal(post, 'updated') ?? getPostDate(post);
-  if (!raw) return undefined;
-  return raw instanceof Date ? raw : new Date(raw);
-};
+export const getPostUpdatedDate = <T extends PostEntry>(post: T): Date | undefined => {
+  const raw = getVal(post, 'updated') ?? getPostDate(post)
+  if (!raw) return undefined
+  return raw instanceof Date ? raw : new Date(raw)
+}
 
 /** 按年份归档分组（年份按 Asia/Shanghai 取，与构建机 TZ 无关） */
-export const groupPostsByYear = <T extends PostEntry>(
-  posts: T[],
-): Array<{ year: string; posts: T[] }> => {
-  const groups = new Map<string, T[]>();
+export const groupPostsByYear = <T extends PostEntry>(posts: T[]): Array<{ year: string; posts: T[] }> => {
+  const groups = new Map<string, T[]>()
   for (const post of sortPosts(posts)) {
-    const raw = getPostDate(post);
+    const raw = getPostDate(post)
     // 无日期字段/非法日期时直接归入「未注明日期」，避免 new Date(undefined) 产生 Invalid Date
-    const year = toShanghaiParts(raw ?? undefined)?.year ?? '未注明日期';
-    groups.set(year, [...(groups.get(year) ?? []), post]);
+    const year = toShanghaiParts(raw ?? undefined)?.year ?? '未注明日期'
+    groups.set(year, [...(groups.get(year) ?? []), post])
   }
   return [...groups.entries()].map(([year, yearPosts]) => ({
     year,
     posts: yearPosts,
-  }));
-};
+  }))
+}
 
 // ---------------------------------------------------------------------------
 // 归档分页
@@ -271,7 +236,7 @@ export const groupPostsByYear = <T extends PostEntry>(
 // ---------------------------------------------------------------------------
 
 /** 归档页每页文章数。前台分页与后台同步共用，改这里即可。 */
-export const ARCHIVE_PAGE_SIZE = 5;
+export const ARCHIVE_PAGE_SIZE = 5
 
 /**
  * 归档分页路径：第 1 页是 /archive，之后 /archive/2、/archive/3…
@@ -282,24 +247,21 @@ export const ARCHIVE_PAGE_SIZE = 5;
  * `/posts/日常生活/46/` 会被跳到 `/posts/æ¥å¸¸çæ´»/46`（乱码），中文路径 100% 打不开。
  * 不带尾斜杠的请求不触发这条 308，直接进函数，由 catch-all 自己找外壳。
  */
-export const getArchivePagePath = (page: number): string =>
-  page <= 1 ? '/archive' : `/archive/${page}`;
+export const getArchivePagePath = (page: number): string => (page <= 1 ? '/archive' : `/archive/${page}`)
 
 /**
  * 从路径解析归档页码：`/archive/` → 1，`/archive/3/` → 3，非归档路径 → 1。
  * 后台按 pathname 决定渲染哪一页时用它，保证与前台构建的页码口径一致。
  */
 export const parseArchivePage = (pathname: string): number => {
-  const matched = /^\/archive\/(\d+)\/?$/.exec(pathname);
-  const page = matched ? Number(matched[1]) : 1;
-  return Number.isInteger(page) && page >= 1 ? page : 1;
-};
+  const matched = /^\/archive\/(\d+)\/?$/.exec(pathname)
+  const page = matched ? Number(matched[1]) : 1
+  return Number.isInteger(page) && page >= 1 ? page : 1
+}
 
 /** 总页数（至少 1 页，空站也渲染出第一页） */
-export const getArchiveTotalPages = (
-  total: number,
-  pageSize: number = ARCHIVE_PAGE_SIZE,
-): number => Math.max(1, Math.ceil(Math.max(0, total) / pageSize));
+export const getArchiveTotalPages = (total: number, pageSize: number = ARCHIVE_PAGE_SIZE): number =>
+  Math.max(1, Math.ceil(Math.max(0, total) / pageSize))
 
 /** 取第 page 页的文章切片（已按传入顺序取，超出范围返回空数组） */
 export const getArchivePagePosts = <T extends PostEntry>(
@@ -307,10 +269,10 @@ export const getArchivePagePosts = <T extends PostEntry>(
   page: number,
   pageSize: number = ARCHIVE_PAGE_SIZE,
 ): T[] => {
-  const safePage = Number.isInteger(page) && page >= 1 ? page : 1;
-  const start = (safePage - 1) * pageSize;
-  return posts.slice(start, start + pageSize);
-};
+  const safePage = Number.isInteger(page) && page >= 1 ? page : 1
+  const start = (safePage - 1) * pageSize
+  return posts.slice(start, start + pageSize)
+}
 
 /**
  * 某一页的年份分组。
@@ -322,33 +284,28 @@ export const getArchivePageYears = <T extends PostEntry>(
   page: number,
   pageSize: number = ARCHIVE_PAGE_SIZE,
 ): Array<{ year: string; posts: T[]; yearCount: number }> => {
-  const totals = new Map(groupPostsByYear(allPosts).map((g) => [g.year, g.posts.length]));
-  return groupPostsByYear(getArchivePagePosts(allPosts, page, pageSize)).map(
-    (group) => ({
-      ...group,
-      yearCount: totals.get(group.year) ?? group.posts.length,
-    }),
-  );
-};
+  const totals = new Map(groupPostsByYear(allPosts).map((g) => [g.year, g.posts.length]))
+  return groupPostsByYear(getArchivePagePosts(allPosts, page, pageSize)).map((group) => ({
+    ...group,
+    yearCount: totals.get(group.year) ?? group.posts.length,
+  }))
+}
 
 /** 紧凑页码序列：1 … 4 5 [6] 7 8 … 20，always 至少含首末与当前页 ±1 */
-export const getArchivePageNumbers = (
-  current: number,
-  total: number,
-): number[] => {
-  if (total <= 1) return [1];
-  const pages = new Set<number>([1, total, current, current - 1, current + 1]);
-  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+export const getArchivePageNumbers = (current: number, total: number): number[] => {
+  if (total <= 1) return [1]
+  const pages = new Set<number>([1, total, current, current - 1, current + 1])
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b)
   // 0 用来占位省略号，渲染时按需跳过
-  const out: number[] = [];
-  let prev = 0;
+  const out: number[] = []
+  let prev = 0
   for (const page of sorted) {
-    if (prev && page - prev > 1) out.push(0);
-    out.push(page);
-    prev = page;
+    if (prev && page - prev > 1) out.push(0)
+    out.push(page)
+    prev = page
   }
-  return out;
-};
+  return out
+}
 
 // ---------------------------------------------------------------------------
 // 分类 / 标签工具
@@ -357,17 +314,15 @@ export const getArchivePageNumbers = (
 /** 统计条目频次 */
 const countItems = (items: string[]) =>
   items.reduce<Map<string, number>>((counts, item) => {
-    counts.set(String(item), (counts.get(String(item)) ?? 0) + 1);
-    return counts;
-  }, new Map());
+    counts.set(String(item), (counts.get(String(item)) ?? 0) + 1)
+    return counts
+  }, new Map())
 
 /** 频次降序 + 名称升序排列 */
 const mapToSortedTerms = (counts: Map<string, number>) =>
   [...counts.entries()]
     .map(([name, count]) => ({ name, count }))
-    .sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'),
-    );
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'))
 
 /**
  * 标签/分类名做 URL 段安全清洗：带 `/`、`#`、`%` 的后台脏值会让前台路由
@@ -375,16 +330,10 @@ const mapToSortedTerms = (counts: Map<string, number>) =>
  * 前台（payload-api 映射）与后台（blog-sync 区块渲染）共用同一份实现。
  */
 export const sanitizeTerm = (name: string): string =>
-  name
-    .trim()
-    .replace(/[/#%]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+  name.trim().replace(/[/#%]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
 
 /** 提取所有分类（含频次统计），名称已做 URL 段安全清洗 */
-export const getCategories = <T extends PostEntry>(
-  posts: T[],
-): Array<{ name: string; count: number }> =>
+export const getCategories = <T extends PostEntry>(posts: T[]): Array<{ name: string; count: number }> =>
   mapToSortedTerms(
     countItems(
       posts
@@ -392,12 +341,10 @@ export const getCategories = <T extends PostEntry>(
         .map(sanitizeTerm)
         .filter(Boolean),
     ),
-  );
+  )
 
 /** 提取所有标签（含频次统计），名称已做 URL 段安全清洗 */
-export const getTags = <T extends PostEntry>(
-  posts: T[],
-): Array<{ name: string; count: number }> =>
+export const getTags = <T extends PostEntry>(posts: T[]): Array<{ name: string; count: number }> =>
   mapToSortedTerms(
     countItems(
       posts
@@ -405,18 +352,16 @@ export const getTags = <T extends PostEntry>(
         .map(sanitizeTerm)
         .filter(Boolean),
     ),
-  );
+  )
 
 /**
  * 分类归档路径（不带宽尾斜杠，理由见 getArchivePagePath 的说明）。
  * 路由侧 /^\/categories\/[^/]+\/?$/ 两种形态都认，去掉斜杠只是为了让 CDN 不发 308。
  */
-export const getCategoryPath = (category: string) =>
-  `/categories/${encodeURIComponent(category)}`;
+export const getCategoryPath = (category: string) => `/categories/${encodeURIComponent(category)}`
 
 /** 标签归档路径（不带尾斜杠，理由同 getCategoryPath） */
-export const getTagPath = (tag: string) =>
-  `/tags/${encodeURIComponent(tag)}`;
+export const getTagPath = (tag: string) => `/tags/${encodeURIComponent(tag)}`
 
 /**
  * 「分类标识」(slug) 的 URL 段安全清洗：转小写、空白转连字符、去掉 `/ # %`。
@@ -424,13 +369,7 @@ export const getTagPath = (tag: string) =>
  * 前台（payload-api 映射 / content schema）与后台（blog-sync）共用这一份实现。
  */
 export const sanitizeSlug = (slug: string): string =>
-  slug
-    .trim()
-    .toLowerCase()
-    .replace(/[/#%]/g, '-')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+  slug.trim().toLowerCase().replace(/[/#%]/g, '-').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
 
 /**
  * 文章 URL 里的分类段：优先用「分类标识」(slug)，未填时回退到清洗后的分类名。
@@ -440,29 +379,18 @@ export const sanitizeSlug = (slug: string): string =>
  * @param post 文章条目；categorySlugs 与 categories 下标对齐（见 payload-api / blog-sync）
  */
 export const getPostCategorySegment = (post: PostEntry): string => {
-  const slugs = getVal<string[]>(post, 'categorySlugs');
-  const slug =
-    Array.isArray(slugs) && slugs.length > 0
-      ? sanitizeSlug(String(slugs[0] ?? ''))
-      : '';
-  if (slug) return slug;
-  const cats = getVal<string[]>(post, 'categories');
-  const name =
-    Array.isArray(cats) && cats.length > 0 ? sanitizeTerm(String(cats[0])) : '';
-  return name || 'uncategorized';
-};
+  const slugs = getVal<string[]>(post, 'categorySlugs')
+  const slug = Array.isArray(slugs) && slugs.length > 0 ? sanitizeSlug(String(slugs[0] ?? '')) : ''
+  if (slug) return slug
+  const cats = getVal<string[]>(post, 'categories')
+  const name = Array.isArray(cats) && cats.length > 0 ? sanitizeTerm(String(cats[0])) : ''
+  return name || 'uncategorized'
+}
 
 /** 按分类筛选文章（已排序） */
-export const getPostsByCategory = <T extends PostEntry>(
-  posts: T[],
-  category: string,
-): T[] =>
-  sortPosts(posts).filter(
-    (post) => getVal<string[]>(post, 'categories')?.includes(category),
-  );
+export const getPostsByCategory = <T extends PostEntry>(posts: T[], category: string): T[] =>
+  sortPosts(posts).filter((post) => getVal<string[]>(post, 'categories')?.includes(category))
 
 /** 按标签筛选文章（已排序） */
-export const getPostsByTag = <T extends PostEntry>(
-  posts: T[],
-  tag: string,
-): T[] => sortPosts(posts).filter((post) => getPostTags(post).includes(tag));
+export const getPostsByTag = <T extends PostEntry>(posts: T[], tag: string): T[] =>
+  sortPosts(posts).filter((post) => getPostTags(post).includes(tag))

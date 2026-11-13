@@ -73,9 +73,7 @@ export const UserCard = () => {
         ref={triggerRef}
         type="button"
       >
-        <span className="usercard__avatar">
-          {avatar ? <img alt="" src={avatar} /> : initial}
-        </span>
+        <span className="usercard__avatar">{avatar ? <img alt="" src={avatar} /> : initial}</span>
         <span className="usercard__meta">
           <span className="usercard__name">{displayName}</span>
           <span className="usercard__sub">{user.email || '本地账号'}</span>
@@ -86,10 +84,7 @@ export const UserCard = () => {
       {/* 侧栏卡片是 overflow:hidden + backdrop-filter，菜单留在里面会被裁掉且定位基准变形；挂到 body */}
       {menuPos &&
         createPortal(
-          <div
-            className="usercard__menu"
-            style={{ bottom: menuPos.bottom, left: menuPos.left, width: menuPos.width }}
-          >
+          <div className="usercard__menu" style={{ bottom: menuPos.bottom, left: menuPos.left, width: menuPos.width }}>
             <Link className="usercard__item usercard__item--danger" href={logoutHref} prefetch={false}>
               <ShellIcon name="logout" size={15} />
               退出登录

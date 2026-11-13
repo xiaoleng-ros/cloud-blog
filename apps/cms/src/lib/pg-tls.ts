@@ -198,9 +198,7 @@ export function loadSupabaseCa(caFile?: string): { pem: string; info: CaInfo } |
     path.resolve('/var/user', 'apps', 'cms', CA_RELATIVE),
     path.resolve('/var/task', CA_RELATIVE),
     // 兜底：从 cwd 逐级向上找（容器把应用放在任意层级时）
-    ...[1, 2, 3].map((depth) =>
-      path.resolve(process.cwd(), ...Array.from({ length: depth }, () => '..'), CA_RELATIVE),
-    ),
+    ...[1, 2, 3].map((depth) => path.resolve(process.cwd(), ...Array.from({ length: depth }, () => '..'), CA_RELATIVE)),
   ].filter((p): p is string => !!p)
 
   for (const candidate of candidates) {
@@ -260,8 +258,7 @@ export function resolvePgTls(input: {
         }
       : undefined
 
-  const trustStoreCerts =
-    ssl && typeof ssl === 'object' && ssl.ca ? ssl.ca.length : 0
+  const trustStoreCerts = ssl && typeof ssl === 'object' && ssl.ca ? ssl.ca.length : 0
 
   return {
     connectionString,

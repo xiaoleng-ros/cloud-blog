@@ -167,18 +167,41 @@ export const MarkdownEditor: React.FC<{
         instance.setValue(latest, true)
       },
       toolbar: [
-        'emoji', 'headings', 'bold', 'italic', 'strike', 'code', 'inline-code',
+        'emoji',
+        'headings',
+        'bold',
+        'italic',
+        'strike',
+        'code',
+        'inline-code',
         '|',
-        'quote', 'insert-after', 'insert-before', 'link', 'image', 'upload',
+        'quote',
+        'insert-after',
+        'insert-before',
+        'link',
+        'image',
+        'upload',
         'table',
         '|',
-        'list', 'ordered-list', 'check', 'outdent', 'indent',
+        'list',
+        'ordered-list',
+        'check',
+        'outdent',
+        'indent',
         '|',
         'line',
         '|',
-        'edit-mode', 'help', 'undo', 'redo',
+        'edit-mode',
+        'help',
+        'undo',
+        'redo',
         '|',
-        'preview', 'content-theme', 'code-theme', 'counter', 'fullscreen', 'info',
+        'preview',
+        'content-theme',
+        'code-theme',
+        'counter',
+        'fullscreen',
+        'info',
       ],
       preview: {
         // 分屏预览延迟按正文长度分级，减少长文的渲染抖动（>5000 字 → 500ms）
@@ -209,7 +232,7 @@ export const MarkdownEditor: React.FC<{
         // 我们统一用 Promise<string | null>，运行时行为完全等价，仅需 TS 层面断言
         // 注意：闭包捕获当前 instance，避免切换模式时 instanceRef.current 变 null 影响插入
         handler: ((files: File[]) => handleVditorUpload(files, instance)) as (
-          files: File[]
+          files: File[],
         ) => string | Promise<string> | Promise<null> | null,
         // 自定义 handler 模式下 success / error 回调不会被触发（源码 index.js:6288 只在 XHR 分支调用），
         // 实际错误通过 handler 返回字符串让 Vditor.tip 展示；此处仅为兼容 Vditor 内部兜底
@@ -233,9 +256,7 @@ export const MarkdownEditor: React.FC<{
          */
         if (!disposed) {
           const nextDelay = resolvePreviewDelay(v.length)
-          const vditorOpts = (
-            instance as unknown as { options?: { preview: { delay: number } } }
-          ).options
+          const vditorOpts = (instance as unknown as { options?: { preview: { delay: number } } }).options
           if (vditorOpts && vditorOpts.preview.delay !== nextDelay) {
             vditorOpts.preview.delay = nextDelay
           }

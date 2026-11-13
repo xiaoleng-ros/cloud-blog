@@ -58,10 +58,7 @@ export interface ComposeFields {
  * posts / notes 现在都以「单选必填的 categories 关系」+ 数据库自增 id 生成 URL，
  * 因此提交体里不再带 slug，categories 传单个 id（关系字段的正确载荷形态）。
  */
-export const buildPayload = (
-  collection: 'posts' | 'notes',
-  s: ComposeFields,
-): Record<string, unknown> => {
+export const buildPayload = (collection: 'posts' | 'notes', s: ComposeFields): Record<string, unknown> => {
   // 关系字段是单选，取第一个 id；空数组时传 undefined，让后端必填校验报错
   const firstCategory = s.categoryIds[0]
   return collection === 'posts'

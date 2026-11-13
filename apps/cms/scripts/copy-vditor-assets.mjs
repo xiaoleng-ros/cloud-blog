@@ -22,81 +22,81 @@
 //   因此保留它们只增加部署体积，不增加页面首屏开销。
 //
 // 触发方式：apps/cms/package.json 的 predev / prebuild，npm 自动在 dev / build 前执行。
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 // vditor 装在本包自己的 node_modules 下；若被提升到仓库根则退回根目录找。
-const LOCAL_VEDITOR_DIST = join(import.meta.dirname, '../node_modules/vditor/dist');
-const HOISTED_VEDITOR_DIST = join(import.meta.dirname, '../../../node_modules/vditor/dist');
-const VEDITOR_DIST = existsSync(LOCAL_VEDITOR_DIST) ? LOCAL_VEDITOR_DIST : HOISTED_VEDITOR_DIST;
+const LOCAL_VEDITOR_DIST = join(import.meta.dirname, '../node_modules/vditor/dist')
+const HOISTED_VEDITOR_DIST = join(import.meta.dirname, '../../../node_modules/vditor/dist')
+const VEDITOR_DIST = existsSync(LOCAL_VEDITOR_DIST) ? LOCAL_VEDITOR_DIST : HOISTED_VEDITOR_DIST
 
-const TARGET_ROOT = join(import.meta.dirname, '../public/vditor');
-const TARGET_DIST = join(TARGET_ROOT, 'dist');
+const TARGET_ROOT = join(import.meta.dirname, '../public/vditor')
+const TARGET_DIST = join(TARGET_ROOT, 'dist')
 
 // 只复制这三个子树（其余是打包产物、TS 声明，或 mathjax 这个 6.33MB 的备用引擎）
-const COPY_SUBTREES = ['js', 'css', 'images'];
+const COPY_SUBTREES = ['js', 'css', 'images']
 // js 下面再跳过 mathjax（与 KaTeX 功能重叠且体积最大）
-const SKIP_JS_DIRS = new Set(['mathjax']);
+const SKIP_JS_DIRS = new Set(['mathjax'])
 
 // dist 根目录下这两个文件不被编辑器本体使用，只有「导出 HTML」「打印预览」两条路径
 // 会以 cdn + "/dist/xxx" 的形式引用（见 vditor/dist/index.js:13369、13377）。
 // 体积极小（共约 100KB），顺手带上，避免导出功能静默缺样式。
-const COPY_ROOT_FILES = ['index.css', 'method.min.js'];
+const COPY_ROOT_FILES = ['index.css', 'method.min.js']
 
 if (!existsSync(VEDITOR_DIST)) {
   // 依赖没装（例如只装了 blog 侧）时不阻断构建：cdn 会退回默认值，
   // 编辑器仍可用，只是又会依赖外网 CDN。
-  console.warn('[vditor-assets] 找不到 node_modules/vditor/dist，跳过复制: ' + VEDITOR_DIST);
-  process.exit(0);
+  console.warn('[vditor-assets] 找不到 node_modules/vditor/dist，跳过复制: ' + VEDITOR_DIST)
+  process.exit(0)
 }
 
 /** 递归复制，skipDirs 只作用于当前这一层的直接子目录 */
 function copyDir(src, dest, skipDirs) {
-  mkdirSync(dest, { recursive: true });
-  let files = 0;
-  let bytes = 0;
+  mkdirSync(dest, { recursive: true })
+  let files = 0
+  let bytes = 0
   for (const entry of readdirSync(src, { withFileTypes: true })) {
-    if (entry.isDirectory() && skipDirs.has(entry.name)) continue;
-    const from = join(src, entry.name);
-    const to = join(dest, entry.name);
+    if (entry.isDirectory() && skipDirs.has(entry.name)) continue
+    const from = join(src, entry.name)
+    const to = join(dest, entry.name)
     if (entry.isDirectory()) {
-      const sub = copyDir(from, to, new Set());
-      files += sub.files;
-      bytes += sub.bytes;
-      continue;
+      const sub = copyDir(from, to, new Set())
+      files += sub.files
+      bytes += sub.bytes
+      continue
     }
-    cpSync(from, to);
-    files += 1;
-    bytes += statSync(to).size;
+    cpSync(from, to)
+    files += 1
+    bytes += statSync(to).size
   }
-  return { files, bytes };
+  return { files, bytes }
 }
 
-rmSync(TARGET_DIST, { recursive: true, force: true });
-mkdirSync(TARGET_DIST, { recursive: true });
+rmSync(TARGET_DIST, { recursive: true, force: true })
+mkdirSync(TARGET_DIST, { recursive: true })
 
-let totalFiles = 0;
-let totalBytes = 0;
+let totalFiles = 0
+let totalBytes = 0
 for (const sub of COPY_SUBTREES) {
-  const from = join(VEDITOR_DIST, sub);
-  if (!existsSync(from)) continue;
-  const skip = sub === 'js' ? SKIP_JS_DIRS : new Set();
-  const { files, bytes } = copyDir(from, join(TARGET_DIST, sub), skip);
-  totalFiles += files;
-  totalBytes += bytes;
+  const from = join(VEDITOR_DIST, sub)
+  if (!existsSync(from)) continue
+  const skip = sub === 'js' ? SKIP_JS_DIRS : new Set()
+  const { files, bytes } = copyDir(from, join(TARGET_DIST, sub), skip)
+  totalFiles += files
+  totalBytes += bytes
 }
 
 for (const file of COPY_ROOT_FILES) {
-  const from = join(VEDITOR_DIST, file);
-  if (!existsSync(from)) continue;
-  cpSync(from, join(TARGET_DIST, file));
-  totalFiles += 1;
-  totalBytes += statSync(join(TARGET_DIST, file)).size;
+  const from = join(VEDITOR_DIST, file)
+  if (!existsSync(from)) continue
+  cpSync(from, join(TARGET_DIST, file))
+  totalFiles += 1
+  totalBytes += statSync(join(TARGET_DIST, file)).size
 }
 
 console.log(
   `[vditor-assets] 已复制 ${totalFiles} 个文件（${(totalBytes / 1024 / 1024).toFixed(2)}MB）到 public/vditor/dist`,
-);
+)
 
 // 写一个可被 HTTP 直接读到的版本标记（GET /vditor/version.json）。
 // 用途：线上排查时判断「自托管资源到底有没有进这次部署」——
@@ -107,4 +107,4 @@ console.log(
 writeFileSync(
   join(TARGET_ROOT, 'version.json'),
   JSON.stringify({ vditor: '4.0.1', assets: totalFiles, bytes: totalBytes }, null, 2) + '\n',
-);
+)

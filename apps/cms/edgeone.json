@@ -1,5 +1,5 @@
 {
-  "buildCommand": "rm -rf .next/cache && npm ci --prefix ../blog && npm ci --prefix . && npm run build --prefix ../blog && node scripts/optimize-site-icons.mjs && npm run build && node scripts/copy-blog-to-public.mjs && node scripts/ensure-supabase-ca.mjs && rm -rf .next/cache .next/dev && find .next -name \"*.map\" -type f -delete && rm -rf .next/standalone/apps/blog && find .next -xtype l -delete",
+  "buildCommand": "rm -rf .next/cache && npm ci --prefix ../blog && npm ci --prefix . && npm run build --prefix ../blog && node scripts/optimize-site-icons.mjs && npm run build && node scripts/copy-blog-to-public.mjs && node scripts/prerender-blog-shells.mjs && node scripts/verify-html-inject.mjs && node scripts/verify-csp-sync.mjs && node scripts/verify-render-parity.mjs && node scripts/ensure-supabase-ca.mjs && rm -rf .next/cache .next/dev && find .next -name \"*.map\" -type f -delete && rm -rf .next/standalone/apps/blog && find .next -xtype l -delete",
   "outputDirectory": ".next",
   "nodeVersion": "22.21.1",
   "cloudFunctions": {
@@ -90,6 +90,15 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=3600, s-maxage=86400"
+        }
+      ]
+    },
+    {
+      "source": "/*",
+      "headers": [
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://lf-package-cn.feishucdn.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://weavatar.com https://q1.qlogo.cn https://*.supabase.co; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https://meting.mikus.ink https://api.injahow.cn https://*.supabase.co; frame-src https://music.163.com https://meting.mikus.ink https://player.bilibili.com https://www.youtube.com https://youtube.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/csp-report"
         }
       ]
     }

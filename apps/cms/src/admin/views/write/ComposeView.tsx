@@ -17,15 +17,7 @@ import { formatDate } from 'cloud-blog/shared/post-utils'
 import { MarkdownEditor } from '../../../editor/MarkdownEditor'
 import { PageHeader } from '../../components/PageHeader'
 import { Toast, useToast } from '../../components/Toast'
-import {
-  ApiError,
-  createDoc,
-  getDoc,
-  updateDoc,
-  idsOf,
-  type AdminNote,
-  type AdminPost,
-} from '../lib/api'
+import { ApiError, createDoc, getDoc, updateDoc, idsOf, type AdminNote, type AdminPost } from '../lib/api'
 import { PublishModal, type PublishMeta } from './PublishModal'
 import { buildPayload, defaultDraftTitle } from './compose-utils'
 
@@ -193,7 +185,8 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
   useEffect(() => {
     void load()
     dirtyRef.current = false
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 只跑一次：load 是 useCallback([id, collection])，id/collection 变化时
+    // 上面的 effect 已经负责重载，这里再依赖 load 会重复请求。
   }, [load])
 
   // 自动保存：内容/元信息变化 1 秒防抖写 localStorage（整包保存，防止刷新丢元信息）
@@ -206,8 +199,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
       try {
         // 只有当内容非空 或 meta 有值时才写入，避免空壳草稿污染
         const hasContent = content.trim().length > 0
-        const hasMeta =
-          Object.values(meta).some((v) => v && (Array.isArray(v) ? v.length > 0 : String(v).length > 0))
+        const hasMeta = Object.values(meta).some((v) => v && (Array.isArray(v) ? v.length > 0 : String(v).length > 0))
         if (hasContent || hasMeta) {
           const bundle = JSON.stringify({ content, meta })
           localStorage.setItem(storageKey, bundle)
@@ -251,77 +243,80 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
 
   // 存草稿：POST（新建）/ PATCH（更新），status=draft
   // overrides：来自元信息弹窗的字段（首次存草稿时必须先选分类，见下），合并进 meta 再提交
-  const saveDraft = useCallback(async (overrides?: Partial<PublishMeta>) => {
-    if (!content.trim()) {
-      setSaveTip('请输入内容')
-      setTimeout(() => setSaveTip(''), 2000)
-      return
-    }
-    const m: Partial<PublishMeta> = { ...meta, ...overrides }
-    // 分类字段在数据库里是 NOT NULL（同时决定文章 URL 的「分类名/ID」），
-    // 没选过分类的新文档直接提交必然 400，所以这里先弹出元信息弹窗补选一次
-    if (!m.categoryIds?.length) {
-      setModal('draft')
-      setSaveTip('请先选择文章分类（决定文章链接）')
-      setTimeout(() => setSaveTip(''), 2500)
-      return
-    }
-    setModal(null)
-    setMeta(m)
-    // 提交互斥：防止连击 / Ctrl+S 与「存草稿 + 发布」并发，导致新建分支建出两份文档
-    if (submittingRef.current) return
-    submittingRef.current = true
-    setLoading(true)
-    try {
-      // 标题为空时自动命名（新建草稿才生成，编辑保留原标题为空则自动生成一次）
-      const titleValue = m.title?.trim() || defaultDraftTitle()
-      const payload = buildPayload(collection, {
-        title: titleValue,
-        description: m.description ?? '',
-        cover: m.cover ?? '',
-        sticky: m.sticky ?? 0,
-        mood: m.mood ?? '',
-        date: m.date ?? formatDate(new Date()),
-        categoryIds: m.categoryIds ?? [],
-        tagIds: m.tagIds ?? [],
-        content,
-        status: 'draft',
-      })
-      // 用 ref 取「当前 id」：新建成功后同步可读，避免同周期内二次提交又走新建分支
-      const docId = id || createdIdRef.current
-      if (docId) {
-        await updateDoc(collection, docId, payload)
-        setSaveTip('草稿已更新')
-      } else {
-        const created = await createDoc<{ id: number }>(collection, payload)
-        createdIdRef.current = String(created.id)
-        setCreatedId(String(created.id))
-        setSaveTip('已保存到草稿箱')
+  const saveDraft = useCallback(
+    async (overrides?: Partial<PublishMeta>) => {
+      if (!content.trim()) {
+        setSaveTip('请输入内容')
+        setTimeout(() => setSaveTip(''), 2000)
+        return
       }
-      dirtyRef.current = false
-      // 清本地：
-      // - 更新路径：clearLocal() 已能拿到当前 :{id} key
-      // - 新建路径：clearLocal() 闭包里的 storageKey 仍是 :new，
-      //   这里先清掉 :new 防止下次进入"新建"误恢复；
-      //   真正 :{id} 键此时尚未写入，下次 effect 运行时会用正确的 key
-      if (id || currentId) {
-        clearLocal()
-      } else {
-        try {
-          localStorage.removeItem(STORAGE_KEY(collection, 'new'))
-        } catch {
-          // 忽略 localStorage 异常
+      const m: Partial<PublishMeta> = { ...meta, ...overrides }
+      // 分类字段在数据库里是 NOT NULL（同时决定文章 URL 的「分类名/ID」），
+      // 没选过分类的新文档直接提交必然 400，所以这里先弹出元信息弹窗补选一次
+      if (!m.categoryIds?.length) {
+        setModal('draft')
+        setSaveTip('请先选择文章分类（决定文章链接）')
+        setTimeout(() => setSaveTip(''), 2500)
+        return
+      }
+      setModal(null)
+      setMeta(m)
+      // 提交互斥：防止连击 / Ctrl+S 与「存草稿 + 发布」并发，导致新建分支建出两份文档
+      if (submittingRef.current) return
+      submittingRef.current = true
+      setLoading(true)
+      try {
+        // 标题为空时自动命名（新建草稿才生成，编辑保留原标题为空则自动生成一次）
+        const titleValue = m.title?.trim() || defaultDraftTitle()
+        const payload = buildPayload(collection, {
+          title: titleValue,
+          description: m.description ?? '',
+          cover: m.cover ?? '',
+          sticky: m.sticky ?? 0,
+          mood: m.mood ?? '',
+          date: m.date ?? formatDate(new Date()),
+          categoryIds: m.categoryIds ?? [],
+          tagIds: m.tagIds ?? [],
+          content,
+          status: 'draft',
+        })
+        // 用 ref 取「当前 id」：新建成功后同步可读，避免同周期内二次提交又走新建分支
+        const docId = id || createdIdRef.current
+        if (docId) {
+          await updateDoc(collection, docId, payload)
+          setSaveTip('草稿已更新')
+        } else {
+          const created = await createDoc<{ id: number }>(collection, payload)
+          createdIdRef.current = String(created.id)
+          setCreatedId(String(created.id))
+          setSaveTip('已保存到草稿箱')
         }
+        dirtyRef.current = false
+        // 清本地：
+        // - 更新路径：clearLocal() 已能拿到当前 :{id} key
+        // - 新建路径：clearLocal() 闭包里的 storageKey 仍是 :new，
+        //   这里先清掉 :new 防止下次进入"新建"误恢复；
+        //   真正 :{id} 键此时尚未写入，下次 effect 运行时会用正确的 key
+        if (id || currentId) {
+          clearLocal()
+        } else {
+          try {
+            localStorage.removeItem(STORAGE_KEY(collection, 'new'))
+          } catch {
+            // 忽略 localStorage 异常
+          }
+        }
+        setTimeout(() => setSaveTip(''), 2500)
+      } catch (error) {
+        // 401/403 等认证类错误给专门提示，避免用户误以为内容丢失（本地草稿仍在）
+        setSaveTip(`保存失败：${describeApiError(error)}`)
+      } finally {
+        setLoading(false)
+        submittingRef.current = false
       }
-      setTimeout(() => setSaveTip(''), 2500)
-    } catch (error) {
-      // 401/403 等认证类错误给专门提示，避免用户误以为内容丢失（本地草稿仍在）
-      setSaveTip(`保存失败：${describeApiError(error)}`)
-    } finally {
-      setLoading(false)
-      submittingRef.current = false
-    }
-  }, [collection, content, meta, currentId, clearLocal, id])
+    },
+    [collection, content, meta, currentId, clearLocal, id],
+  )
 
   // 用 ref 持有 saveDraft，保证 keydown 监听读到最新闭包
   const saveDraftRef = useRef(saveDraft)

@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url'
 
 import { withPayload } from '@payloadcms/next/withPayload'
 
+import { CSP_HEADER_NAME, CSP_POLICY } from './csp-policy.mjs'
+
 /**
  * @type {import('next').NextConfig}
  *
@@ -135,8 +137,13 @@ const nextConfig = {
   //     （旧的内联主题脚本在 flight 流里客户端挂载、从不执行，2026-10-16 移除，
   //     详见 src/app/(payload)/layout.tsx 顶部注释）。仅一个色偏好的低敏提示，
   //     首次访问尚无 hint 时回落 Payload 原生行为（hydration 后按 matchMedia 改）。
-  // 说明：暂不强上 CSP —— 后台（vditor/lexical/内联样式与脚本）内联内容多，贸然加会碎掉界面；
-  //       建议后续单独做 CSP 基线并按 nonce 方案灰度验证后再启用。
+  // CSP：第一阶段只发 **Report-Only**，不发强制模式。
+  //   后台（vditor/lexical）内联脚本与内联样式极多、还会 eval，强制模式直接白屏。
+  //   Report-Only 让浏览器照常渲染，同时把「本会被拦掉的东西」POST 到
+  //   src/app/api/csp-report/route.ts；跑几天看真实分布，再收紧、再切强制。
+  //   策略取值来自 ./csp-policy.mjs（唯一来源），同一份字符串也写在 edgeone.json 的
+  //   headers 里 —— 静态化后的 HTML 由静态层直接吐出，不经过这里。两处由
+  //   scripts/verify-csp-sync.mjs 在构建与 CI 中逐字比对，防止漂移。
   async headers() {
     const securityHeaders = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -147,6 +154,7 @@ const nextConfig = {
       // 关掉浏览器用不到的强能力（摄像头/麦克风/定位/支付等），减少第三方脚本的可用面。
       // 音乐播放器走 <audio>，不受 Permissions-Policy 影响。
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+      { key: CSP_HEADER_NAME, value: CSP_POLICY },
     ]
     return [
       {

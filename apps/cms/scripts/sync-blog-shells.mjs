@@ -9,30 +9,30 @@
 // apps/blog/.env.production，其中的 PUBLIC_PAYLOAD_URL 指向线上域名。本地拉不通时构建
 // 不会报错，而是静默回退本地 markdown 兜底，产出一个「0 篇文章」的空站。
 // Vite 让真实 process.env 优先于 .env 文件，所以这里直接注入即可。
-import { spawnSync } from 'node:child_process';
-import path from 'node:path';
+import { spawnSync } from 'node:child_process'
+import path from 'node:path'
 
-const REPO = path.resolve(import.meta.dirname, '..', '..', '..');
-const BLOG = path.join(REPO, 'apps', 'blog');
-const IS_WIN = process.platform === 'win32';
+const REPO = path.resolve(import.meta.dirname, '..', '..', '..')
+const BLOG = path.join(REPO, 'apps', 'blog')
+const IS_WIN = process.platform === 'win32'
 
 function run(label, cmd, args, opts) {
-  console.log(`[sync-blog] ${label}`);
-  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: IS_WIN, cwd: REPO, ...opts });
+  console.log(`[sync-blog] ${label}`)
+  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: IS_WIN, cwd: REPO, ...opts })
   if (r.status !== 0) {
-    if (r.error) console.error(`[sync-blog] 启动子进程失败: ${r.error.message}`);
-    console.error(`[sync-blog] 失败（退出码 ${r.status ?? 'null'}，信号 ${r.signal ?? '无'}）：${label}`);
-    process.exit(1);
+    if (r.error) console.error(`[sync-blog] 启动子进程失败: ${r.error.message}`)
+    console.error(`[sync-blog] 失败（退出码 ${r.status ?? 'null'}，信号 ${r.signal ?? '无'}）：${label}`)
+    process.exit(1)
   }
 }
 
 // 改 process.env 让子进程继承，而不是给 spawnSync 传整份 env：后者要自己带齐
 // Windows 启动 cmd.exe 依赖的系统变量（SystemRoot/ComSpec），漏了子进程会静默起不来。
-process.env.PUBLIC_PAYLOAD_URL = 'http://127.0.0.1:9527';
-process.env.SITE_URL = 'http://localhost:9527';
+process.env.PUBLIC_PAYLOAD_URL = 'http://127.0.0.1:9527'
+process.env.SITE_URL = 'http://localhost:9527'
 
-run('重建前台产物（PUBLIC_PAYLOAD_URL / SITE_URL 指向本地后台）', 'npm', ['run', 'build'], { cwd: BLOG });
+run('重建前台产物（PUBLIC_PAYLOAD_URL / SITE_URL 指向本地后台）', 'npm', ['run', 'build'], { cwd: BLOG })
 
-run('复制外壳到 apps/cms/public/', 'node', ['apps/cms/scripts/copy-blog-to-public.mjs']);
+run('复制外壳到 apps/cms/public/', 'node', ['apps/cms/scripts/copy-blog-to-public.mjs'])
 
-console.log('[sync-blog] 完成。本地外壳的 canonical/og 是 localhost:9527，上线请走 npm run build:all。');
+console.log('[sync-blog] 完成。本地外壳的 canonical/og 是 localhost:9527，上线请走 npm run build:all。')

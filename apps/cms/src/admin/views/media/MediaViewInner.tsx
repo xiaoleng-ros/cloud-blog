@@ -19,14 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import { Toast, useToast } from '../../components/Toast'
 import { fmt } from '../lib/format'
-import {
-  deleteMedia,
-  deleteMediaBatch,
-  describeApiError,
-  listMedia,
-  updateMedia,
-  type MediaDoc,
-} from '../lib/api'
+import { deleteMedia, deleteMediaBatch, describeApiError, listMedia, updateMedia, type MediaDoc } from '../lib/api'
 import { MAX_SOURCE_IMAGE_BYTES, uploadMedia } from '../../../lib/media-upload'
 
 const PAGE_SIZE = 20
@@ -149,10 +142,7 @@ export const MediaViewInner = () => {
     const valid = files.filter((f) => f.size <= MAX_SOURCE_IMAGE_BYTES)
     const rejected = files.length - valid.length
     if (rejected > 0) {
-      show(
-        'error',
-        `${rejected} 个文件超过 ${(MAX_SOURCE_IMAGE_BYTES / 1024 / 1024).toFixed(0)}MB 上限，已跳过`,
-      )
+      show('error', `${rejected} 个文件超过 ${(MAX_SOURCE_IMAGE_BYTES / 1024 / 1024).toFixed(0)}MB 上限，已跳过`)
     }
     if (valid.length === 0) return
 
@@ -329,17 +319,10 @@ export const MediaViewInner = () => {
       {!loading && rows.length > 0 && (
         <div className="media__select-bar">
           <label className="media__select-all">
-            <input
-              type="checkbox"
-              checked={allOnPageSelected}
-              onChange={toggleSelectAll}
-              aria-label="全选本页图片"
-            />
+            <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} aria-label="全选本页图片" />
             <span>全选（{rows.length}）</span>
           </label>
-          {selected.size > 0 && (
-            <span className="media__selected-count">已选 {selected.size} 张</span>
-          )}
+          {selected.size > 0 && <span className="media__selected-count">已选 {selected.size} 张</span>}
         </div>
       )}
 
@@ -370,18 +353,10 @@ export const MediaViewInner = () => {
         ) : (
           <div className="media__grid">
             {rows.map((row) => (
-              <div
-                key={row.id}
-                className={`media__card${selected.has(row.id) ? ' media__card--selected' : ''}`}
-              >
+              <div key={row.id} className={`media__card${selected.has(row.id) ? ' media__card--selected' : ''}`}>
                 {/* 缩略图 */}
                 <div className="media__thumb">
-                  <img
-                    src={row.url}
-                    alt={row.alt || row.filename}
-                    loading="lazy"
-                    onClick={() => setPreview(row)}
-                  />
+                  <img src={row.url} alt={row.alt || row.filename} loading="lazy" onClick={() => setPreview(row)} />
                   {/* 勾选框 */}
                   <input
                     type="checkbox"
@@ -413,11 +388,7 @@ export const MediaViewInner = () => {
                     <button type="button" className="drafts__op" onClick={() => openEdit(row)}>
                       编辑
                     </button>
-                    <button
-                      type="button"
-                      className="drafts__op drafts__op--danger"
-                      onClick={() => setConfirmDel(row)}
-                    >
+                    <button type="button" className="drafts__op drafts__op--danger" onClick={() => setConfirmDel(row)}>
                       删除
                     </button>
                   </div>
@@ -489,9 +460,7 @@ export const MediaViewInner = () => {
                 {fmt(preview.createdAt)}
               </p>
               <p className="media__preview-alt">
-                {preview.alt
-                  ? `替代文本：${preview.alt}`
-                  : '未设置替代文本（建议填写以提升 SEO）'}
+                {preview.alt ? `替代文本：${preview.alt}` : '未设置替代文本（建议填写以提升 SEO）'}
               </p>
               <div className="media__preview-actions">
                 <button
@@ -574,9 +543,7 @@ export const MediaViewInner = () => {
         <div className="drafts__confirm-mask" onClick={() => setConfirmDel(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认删除</h3>
-            <p>
-              确定删除「{confirmDel.filename}」吗？删除后无法恢复。
-            </p>
+            <p>确定删除「{confirmDel.filename}」吗？删除后无法恢复。</p>
             <div className="drafts__confirm-actions">
               <button type="button" className="drafts__op" onClick={() => setConfirmDel(null)}>
                 取消
@@ -599,16 +566,19 @@ export const MediaViewInner = () => {
         <div className="drafts__confirm-mask" onClick={() => !batchBusy && setConfirmBatchDelete(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认批量删除</h3>
-            <p>
-              确定删除选中的 {confirmBatchDelete.length} 张图片吗？删除后无法恢复。
-            </p>
+            <p>确定删除选中的 {confirmBatchDelete.length} 张图片吗？删除后无法恢复。</p>
             {batchProgress && (
               <p className="manage__delete-progress">
                 删除中 {batchProgress.current} / {batchProgress.total}…
               </p>
             )}
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" disabled={batchBusy} onClick={() => setConfirmBatchDelete(null)}>
+              <button
+                type="button"
+                className="drafts__op"
+                disabled={batchBusy}
+                onClick={() => setConfirmBatchDelete(null)}
+              >
                 取消
               </button>
               <button

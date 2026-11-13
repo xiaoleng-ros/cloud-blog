@@ -10,13 +10,13 @@
  * 「空格分隔、第一段为名称/平台、最后一段为链接」，三个入口共用。
  * 差异由参数保留：allowEmptyHref 允许「只有名称没有链接」（页脚纯文字标签）。
  */
-import { safeHref } from './html-safety';
+import { safeHref } from './html-safety'
 
 export interface ParsedLineItem {
   /** 名称 / 平台 */
-  name: string;
+  name: string
   /** 链接；不安全或无链接时按 allowEmptyHref 决定是 '' 还是惰性 fallback */
-  href: string;
+  href: string
 }
 
 /**
@@ -31,28 +31,28 @@ export function parseFreeTextLines(
   hrefFallback: string = '#',
   allowEmptyHref = false,
 ): ParsedLineItem[] {
-  if (!raw) return [];
-  const out: ParsedLineItem[] = [];
+  if (!raw) return []
+  const out: ParsedLineItem[] = []
   for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const sp = trimmed.lastIndexOf(' ');
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const sp = trimmed.lastIndexOf(' ')
     if (sp === -1) {
-      if (!allowEmptyHref) continue;
-      out.push({ name: trimmed, href: '' });
-      continue;
+      if (!allowEmptyHref) continue
+      out.push({ name: trimmed, href: '' })
+      continue
     }
-    const name = trimmed.slice(0, sp).trim();
-    const href = trimmed.slice(sp + 1).trim();
+    const name = trimmed.slice(0, sp).trim()
+    const href = trimmed.slice(sp + 1).trim()
     if (!name || !href) {
-      if (!allowEmptyHref) continue;
-      out.push({ name, href: '' });
-      continue;
+      if (!allowEmptyHref) continue
+      out.push({ name, href: '' })
+      continue
     }
     // 协议白名单：javascript:/data: 等一律按 fallback 处理，不进 href
-    out.push({ name, href: normalizeSiteHref(safeHref(href, hrefFallback)) });
+    out.push({ name, href: normalizeSiteHref(safeHref(href, hrefFallback)) })
   }
-  return out;
+  return out
 }
 
 /**
@@ -63,11 +63,11 @@ export function parseFreeTextLines(
  * 所以站内链接一律直接写成最终形态，别让用户先吃到一次跳转。
  */
 export function normalizeSiteHref(href: string): string {
-  if (!href.startsWith('/')) return href;
-  if (href === '/') return '/';
+  if (!href.startsWith('/')) return href
+  if (href === '/') return '/'
   // 保留 hash / query：/notes/#2024 只该清理路径那一段
-  const match = /^([^?#]*)([?#].*)?$/.exec(href);
-  if (!match) return href;
-  const path = match[1].replace(/\/+$/, '');
-  return `${path || '/'}${match[2] ?? ''}`;
+  const match = /^([^?#]*)([?#].*)?$/.exec(href)
+  if (!match) return href
+  const path = match[1].replace(/\/+$/, '')
+  return `${path || '/'}${match[2] ?? ''}`
 }

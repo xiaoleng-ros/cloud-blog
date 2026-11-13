@@ -193,7 +193,9 @@ async function main() {
   } else {
     const dupDays = [...notesByDate.values()].filter((l) => l.length > 1).length
     if (dupDays > 0) {
-      console.log(`ℹ️  ${dupDays} 个日期存在多条随笔；默认不删除任何文档。确需清理完全相同的副本请加 --force-dedupe 重跑`)
+      console.log(
+        `ℹ️  ${dupDays} 个日期存在多条随笔；默认不删除任何文档。确需清理完全相同的副本请加 --force-dedupe 重跑`,
+      )
     }
   }
 
@@ -204,15 +206,14 @@ async function main() {
     const firstCategory =
       (Array.isArray(data.categories) ? data.categories[0] : data.categories) !== undefined
         ? categoryIds.get(String(Array.isArray(data.categories) ? data.categories[0] : data.categories))
-        : categoryIds.get('随笔') ?? categoryIds.values().next().value
+        : (categoryIds.get('随笔') ?? categoryIds.values().next().value)
     const tags = (Array.isArray(data.tags) ? data.tags : data.tags ? [data.tags] : [])
       .map((t: unknown) => tagIds.get(String(t)))
       .filter(Boolean)
 
     // 日期必须转成 ISO 8601 字符串：SQLite 宽松接受 JS Date 的 toStr/格式，
     // 但 PostgreSQL 只认 ISO 格式，否则抛 "invalid input syntax for type timestamp"
-    const noteDate =
-      data.date instanceof Date ? data.date.toISOString() : String(data.date)
+    const noteDate = data.date instanceof Date ? data.date.toISOString() : String(data.date)
 
     const docData = {
       date: noteDate,
@@ -247,22 +248,25 @@ async function main() {
     let global = await payload.findGlobal({ slug: 'site-settings' })
 
     // 仅当对应区块为空时才写入默认值，避免覆盖后台已手动修改的内容
-    const site = global?.siteName ? global : {
-      siteName: siteConfig.siteName,
-      siteDescription: siteConfig.siteDescription,
-      siteAuthor: siteConfig.siteAuthor,
-      githubUser: siteConfig.githubUser,
-      githubRepo: siteConfig.githubRepo,
-      neteasePlaylistId:
-        (siteConfig.neteasePlaylistId as string | undefined) ??
-        Number(siteConfig.neteasePlaylistId)?.toString(),
-    }
-    const hero = global?.name ? global : {
-      greeting: '嗨，我是',
-      name: '云岫',
-      subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
-      bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
-    }
+    const site = global?.siteName
+      ? global
+      : {
+          siteName: siteConfig.siteName,
+          siteDescription: siteConfig.siteDescription,
+          siteAuthor: siteConfig.siteAuthor,
+          githubUser: siteConfig.githubUser,
+          githubRepo: siteConfig.githubRepo,
+          neteasePlaylistId:
+            (siteConfig.neteasePlaylistId as string | undefined) ?? Number(siteConfig.neteasePlaylistId)?.toString(),
+        }
+    const hero = global?.name
+      ? global
+      : {
+          greeting: '嗨，我是',
+          name: '云岫',
+          subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
+          bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
+        }
     // 社交链接：textarea 字符串（每行「平台 链接」）
     const socials =
       global?.socials && String(global.socials).trim()
@@ -290,59 +294,63 @@ async function main() {
       await payload.updateGlobal({
         slug: 'navigation',
         data: {
-          ...(hasTopNav ? {} : {
-            topNav: [
-              { label: '首页', href: '/', sort: 0, visible: true },
-              { label: '随笔', href: '/notes', sort: 1, visible: true },
-              { label: '归档', href: '/archive', sort: 2, visible: true },
-              { label: '关于', href: '/about', sort: 3, visible: true },
-            ],
-          }),
-          ...(hasMorePanel ? {} : {
-            morePanel: [
-              { label: '统计', href: '/stats', icon: 'spark', sort: 0, visible: true },
-              { label: '标签墙', href: '/tags', icon: 'tag', sort: 1, visible: true },
-              { label: 'GitHub', href: 'https://github.com', icon: 'github', external: true, sort: 2, visible: true },
-            ],
-          }),
+          ...(hasTopNav
+            ? {}
+            : {
+                topNav: [
+                  { label: '首页', href: '/', sort: 0, visible: true },
+                  { label: '随笔', href: '/notes', sort: 1, visible: true },
+                  { label: '归档', href: '/archive', sort: 2, visible: true },
+                  { label: '关于', href: '/about', sort: 3, visible: true },
+                ],
+              }),
+          ...(hasMorePanel
+            ? {}
+            : {
+                morePanel: [
+                  { label: '统计', href: '/stats', icon: 'spark', sort: 0, visible: true },
+                  { label: '标签墙', href: '/tags', icon: 'tag', sort: 1, visible: true },
+                  {
+                    label: 'GitHub',
+                    href: 'https://github.com',
+                    icon: 'github',
+                    external: true,
+                    sort: 2,
+                    visible: true,
+                  },
+                ],
+              }),
         },
       })
     }
 
     // ---- 页脚（均已拆到站点设置 Global，仅当为空时写入默认值，避免覆盖后台改动） ----
-    const footerSubtitle =
-      global?.footerSubtitle ?? '剪辑 · AI · Code'
+    const footerSubtitle = global?.footerSubtitle ?? '剪辑 · AI · Code'
     const footerChannels =
-      global?.footerChannels
-      ?? [
+      global?.footerChannels ??
+      [
         'Bilibili https://space.bilibili.com/1459419286',
         'GitHub https://github.com/xiaoleng-ros',
         '邮箱 mailto:1873048956@qq.com',
         'RSS /rss.xml',
       ].join('\n')
-    const footerGroups =
-      global?.footerGroups
-      ?? ''
+    const footerGroups = global?.footerGroups ?? ''
 
     // ---- 关于页（同样仅当为空时写入默认值） ----
     const aboutParagraphs =
-      global?.aboutParagraphs
-      ?? [
+      global?.aboutParagraphs ??
+      [
         '我喜欢==神秘感==——云雾之间。',
         '白天：每天起床==剪视频==。',
         '晚上：幻想==挣大钱==。',
         '梦想是想去看祖国的==大好河山==。',
       ].join('\n')
     const aboutNotes =
-      global?.aboutNotes
-      ?? [
-        '坐标成都|2003 年出生|yellow',
-        '剪辑师|1 年经验|green',
-        '内容创作者|挣大钱|purple',
-      ].join('\n')
+      global?.aboutNotes ??
+      ['坐标成都|2003 年出生|yellow', '剪辑师|1 年经验|green', '内容创作者|挣大钱|purple'].join('\n')
     const skills =
-      global?.skills
-      ?? [
+      global?.skills ??
+      [
         '剪辑|易学难入|30|green',
         'HTML / CSS|全靠 AI|60|purple',
         'AI 工具|听之任之|75|pink',

@@ -8,8 +8,14 @@
  * 以免 CMS 宕机把站点清空。
  * 模块级缓存：整个构建/开发过程只请求一次后台。
  */
-import { fetchNavItems, fetchMorePanelItems, fetchSiteSettings, type MorePanelItem, type NavLinkItem } from './payload-api';
-import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines';
+import {
+  fetchNavItems,
+  fetchMorePanelItems,
+  fetchSiteSettings,
+  type MorePanelItem,
+  type NavLinkItem,
+} from './payload-api'
+import { parseFreeTextLines } from 'cloud-blog/shared/free-text-lines'
 import {
   footerIconFor,
   OFFLINE_ABOUT,
@@ -19,38 +25,38 @@ import {
   PLACEHOLDER_SITE_SINCE,
   socialIconFor,
   type FooterLinkItem,
-} from 'cloud-blog/shared/site-defaults';
+} from 'cloud-blog/shared/site-defaults'
 
 /** 后台站点设置数据的结构（对应 SiteSettings Global，扁平字段） */
 export interface SiteSettingsData {
-  siteName?: string;
-  siteDescription?: string;
-  siteAuthor?: string;
-  githubUser?: string;
-  githubRepo?: string;
-  neteasePlaylistId?: string;
-  greeting?: string;
-  name?: string;
-  subtitle?: string;
-  bio?: string;
+  siteName?: string
+  siteDescription?: string
+  siteAuthor?: string
+  githubUser?: string
+  githubRepo?: string
+  neteasePlaylistId?: string
+  greeting?: string
+  name?: string
+  subtitle?: string
+  bio?: string
   /** 社交链接：textarea 字符串，每行一条「平台 链接」 */
-  socials?: string;
+  socials?: string
   /** 页脚：副标题与链接/群组（textarea 字符串） */
-  footerSubtitle?: string;
-  footerChannels?: string;
-  footerGroups?: string;
+  footerSubtitle?: string
+  footerChannels?: string
+  footerGroups?: string
   /** 页脚：ICP 备案号 */
-  siteIcp?: string;
+  siteIcp?: string
   /** 网站配置：对外展示的正式站点地址（友链页「我的博客信息」用，留空回退 SITE_URL） */
-  siteUrl?: string;
+  siteUrl?: string
   /** 网站配置：网站图标（用作浏览器标签页图标与页脚头像，留空用默认头像） */
-  siteIcon?: string;
+  siteIcon?: string
   /** 网站配置：网站创建时间（YYYY-MM-DD 文本，站点运行时间从这里算） */
-  siteCreatedAt?: string;
+  siteCreatedAt?: string
   /** 关于页：正文/便签/技能（textarea 字符串） */
-  aboutParagraphs?: string;
-  aboutNotes?: string;
-  skills?: string;
+  aboutParagraphs?: string
+  aboutNotes?: string
+  skills?: string
 }
 
 /** 站点设置模块级缓存：同一构建/开发会话内重复调用不会每次都请求后台。
@@ -58,22 +64,22 @@ export interface SiteSettingsData {
  * 后台不可用（fetchSiteSettings 返回 null）时返回 null，由调用方整体用离线兜底；
  * 后台可用但拉回来是空对象（所有字段留空）时照常返回 {}，
  * 调用方按「填了才显示」规则整块省略 —— 不把空对象误判成「后台宕机」。 */
-const SETTINGS_CACHE_TTL = 5_000;
-let settingsCache: { data: SiteSettingsData | null; ts: number } | null = null;
+const SETTINGS_CACHE_TTL = 5_000
+let settingsCache: { data: SiteSettingsData | null; ts: number } | null = null
 
 export async function getSiteSettings(): Promise<SiteSettingsData | null> {
   // 缓存未过期直接复用，避免同一页面多次请求
   if (settingsCache && Date.now() - settingsCache.ts < SETTINGS_CACHE_TTL) {
-    return settingsCache.data;
+    return settingsCache.data
   }
-  const data = await fetchSiteSettings();
+  const data = await fetchSiteSettings()
   // fetchSiteSettings 内部已 catch：成功（含空对象 {}）与失败（null）在此区分。
   // 旧实现把「成功拉回 null」（Global 为空）也写进缓存，5s 内所有调用方拿 null
   // 走离线兜底 —— 后台明明可用却整站显示占位文案。现在 null 不入缓存，下轮重试。
   if (data !== null) {
-    settingsCache = { data, ts: Date.now() };
+    settingsCache = { data, ts: Date.now() }
   }
-  return data ?? settingsCache?.data ?? null;
+  return data ?? settingsCache?.data ?? null
 }
 
 /**
@@ -83,9 +89,9 @@ export async function getSiteSettings(): Promise<SiteSettingsData | null> {
  * - 后台整体不可用 → 离线兜底常量，保证宕机时这块仍在
  */
 export async function getSiteSince(): Promise<string> {
-  const settings = await getSiteSettings();
-  if (settings === null) return PLACEHOLDER_SITE_SINCE;
-  return (settings.siteCreatedAt ?? '').trim();
+  const settings = await getSiteSettings()
+  if (settings === null) return PLACEHOLDER_SITE_SINCE
+  return (settings.siteCreatedAt ?? '').trim()
 }
 
 /** 导航项：后台「导航管理」Global 优先。
@@ -94,7 +100,7 @@ export async function getSiteSince(): Promise<string> {
  * - 后台可用但导航被清空（[]）→ 前台导航整块隐藏（与「后台填了才显示」规则一致）
  * - 后台填了条目 → 原样使用（每条 href/label 非空才进导航） */
 export async function getNavItems(): Promise<NavLinkItem[] | null> {
-  const items = await fetchNavItems();
+  const items = await fetchNavItems()
   if (items === null) {
     return [
       { href: '/', label: '首页' },
@@ -102,11 +108,9 @@ export async function getNavItems(): Promise<NavLinkItem[] | null> {
       { href: '/archive', label: '归档' },
       { href: '/friends', label: '友链' },
       { href: '/about', label: '关于' },
-    ];
+    ]
   }
-  return items.length > 0
-    ? items.filter((item) => item.href && item.label)
-    : null;
+  return items.length > 0 ? items.filter((item) => item.href && item.label) : null
 }
 
 /**
@@ -118,15 +122,15 @@ export async function getNavItems(): Promise<NavLinkItem[] | null> {
  * 真要彻底隐藏可以在前台模板里判断，这里只负责数据。
  */
 export async function getMorePanelItems(): Promise<MorePanelItem[]> {
-  const items = await fetchMorePanelItems();
+  const items = await fetchMorePanelItems()
   if (items === null) {
     return [
       { label: '统计', href: '/stats', icon: 'spark' },
       { label: '标签墙', href: '/tags', icon: 'tag' },
       { label: 'GitHub', href: 'https://github.com', icon: 'github', external: true },
-    ];
+    ]
   }
-  return items;
+  return items
 }
 
 /**
@@ -135,55 +139,53 @@ export async function getMorePanelItems(): Promise<MorePanelItem[]> {
  * 共用 shared/free-text-lines 解析器（与导航/页脚同一套，M4 收敛）。
  */
 function parseSocials(raw?: string): Array<{ platform: string; href: string }> {
-  if (!raw) return [];
+  if (!raw) return []
   // 社交条目必须有链接：无链接的行丢弃；协议不合法 → 惰性 '#'（后续 getSocials 过滤掉）
-  return parseFreeTextLines(raw, '#', false).map((i) => ({ platform: i.name, href: i.href }));
+  return parseFreeTextLines(raw, '#', false).map((i) => ({ platform: i.name, href: i.href }))
 }
 
 /** Hero 文案：后台原样；仅后台不可用时用离线兜底 */
 export async function getHero(): Promise<{
-  greeting: string;
-  name: string;
-  subtitle: string;
-  bio: string;
+  greeting: string
+  name: string
+  subtitle: string
+  bio: string
 }> {
-  const settings = await getSiteSettings();
-  if (settings === null) return { ...OFFLINE_HERO };
+  const settings = await getSiteSettings()
+  if (settings === null) return { ...OFFLINE_HERO }
   return {
     greeting: settings.greeting ?? '',
     name: settings.name ?? '',
     subtitle: settings.subtitle ?? '',
     bio: settings.bio ?? '',
-  };
+  }
 }
 
 /** 社交链接：后台一行一条；后台留空则前台一个图标都不出 */
 export interface SocialItem {
-  platform: string;
-  href: string;
-  label: string;
-  icon: string;
+  platform: string
+  href: string
+  label: string
+  icon: string
 }
 
 export async function getSocials(): Promise<SocialItem[]> {
-  const settings = await getSiteSettings();
+  const settings = await getSiteSettings()
   const items =
     settings === null
       ? OFFLINE_SOCIALS
-      : parseSocials(settings.socials).map((item) => ({ ...item, label: item.platform }));
+      : parseSocials(settings.socials).map((item) => ({ ...item, label: item.platform }))
   // 与页脚同规则：认不出图标的平台照样显示，只是没有图形（见 shared/icon-paths 的 hasIcon）
-  return items
-    .map((item) => ({ ...item, icon: socialIconFor(item.platform) }))
-    .filter((item) => item.href);
+  return items.map((item) => ({ ...item, icon: socialIconFor(item.platform) })).filter((item) => item.href)
 }
 
 /** 页脚链接/群组条目（name 用于展示与找图标，href 可为空表示纯文字标签） */
-export type FooterItem = FooterLinkItem;
+export type FooterItem = FooterLinkItem
 
 export interface FooterData {
-  subtitle: string;
-  channels: FooterItem[];
-  groups: FooterItem[];
+  subtitle: string
+  channels: FooterItem[]
+  groups: FooterItem[]
 }
 
 /**
@@ -192,40 +194,40 @@ export interface FooterData {
  * 共用 shared/free-text-lines 解析器（与导航/社交同一套，M4 收敛）。
  */
 function parseFooterLines(raw?: string | null): FooterItem[] {
-  if (!raw) return [];
+  if (!raw) return []
   // 页脚允许「只有名称没有链接」→ 纯文字标签（allowEmptyHref=true）
   return parseFreeTextLines(raw, '', true)
     .filter((i) => i.name)
-    .map((i) => ({ name: i.name, icon: footerIconFor(i.name), href: i.href }));
+    .map((i) => ({ name: i.name, icon: footerIconFor(i.name), href: i.href }))
 }
 
 /** 页脚内容：后台原样（链接/群组各按行解析），仅后台不可用时用离线兜底 */
 export async function getFooter(): Promise<FooterData> {
-  const settings = await getSiteSettings();
+  const settings = await getSiteSettings()
   if (settings === null) {
-    return { subtitle: OFFLINE_FOOTER.subtitle, channels: OFFLINE_FOOTER.channels, groups: OFFLINE_FOOTER.groups };
+    return { subtitle: OFFLINE_FOOTER.subtitle, channels: OFFLINE_FOOTER.channels, groups: OFFLINE_FOOTER.groups }
   }
   return {
     subtitle: settings.footerSubtitle ?? '',
     channels: parseFooterLines(settings.footerChannels),
     groups: parseFooterLines(settings.footerGroups),
-  };
+  }
 }
 
 /** 关于页条目类型与解析统一走 shared/about-format（后台预览同一份实现） */
-export type { NoteItem, SkillItem } from 'cloud-blog/shared/about-format';
+export type { NoteItem, SkillItem } from 'cloud-blog/shared/about-format'
 import {
   parseNotes,
   parseSkills,
   splitAboutParagraphs,
   type NoteItem,
   type SkillItem,
-} from 'cloud-blog/shared/about-format';
+} from 'cloud-blog/shared/about-format'
 
 export interface AboutData {
-  paragraphs: string[];
-  notes: NoteItem[];
-  skills: SkillItem[];
+  paragraphs: string[]
+  notes: NoteItem[]
+  skills: SkillItem[]
 }
 
 /**
@@ -233,17 +235,17 @@ export interface AboutData {
  * paragraphs 为「==记号== → 高亮 span」的安全 HTML；notes/skills 兼容 JSON 与旧竖线文本。
  */
 export async function getAboutContent(): Promise<AboutData> {
-  const settings = await getSiteSettings();
+  const settings = await getSiteSettings()
   if (settings === null) {
     return {
       paragraphs: OFFLINE_ABOUT.paragraphs,
       notes: OFFLINE_ABOUT.notes,
       skills: OFFLINE_ABOUT.skills,
-    };
+    }
   }
   return {
     paragraphs: splitAboutParagraphs(settings.aboutParagraphs),
     notes: parseNotes(settings.aboutNotes),
     skills: parseSkills(settings.skills),
-  };
+  }
 }

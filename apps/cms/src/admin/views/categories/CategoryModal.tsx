@@ -20,7 +20,7 @@ export function flattenWithDepth(docs: CategoryDoc[], excludeId?: number) {
   const childMap = new Map<number, CategoryDoc[]>()
   const roots: CategoryDoc[] = []
   const cmp = (a: CategoryDoc, b: CategoryDoc) =>
-    (Number(a.sort ?? 0) - Number(b.sort ?? 0)) || String(a.name).localeCompare(String(b.name), 'zh')
+    Number(a.sort ?? 0) - Number(b.sort ?? 0) || String(a.name).localeCompare(String(b.name), 'zh')
 
   for (const d of docs) {
     const p = parentIdOf(d)
@@ -54,7 +54,9 @@ export function CategoryModal({
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [slug, setSlug] = useState(initial?.slug ?? '')
-  const [parent, setParent] = useState<string>(initial && parentIdOf(initial) != null ? String(parentIdOf(initial)) : '')
+  const [parent, setParent] = useState<string>(
+    initial && parentIdOf(initial) != null ? String(parentIdOf(initial)) : '',
+  )
   const [sort, setSort] = useState<string>(String(initial?.sort ?? 0))
   const [visible, setVisible] = useState<boolean>(initial?.visible !== false)
   const [error, setError] = useState('')

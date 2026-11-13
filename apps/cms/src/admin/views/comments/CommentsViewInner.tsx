@@ -140,10 +140,7 @@ const rowActions = (row: CommentRow): Array<{ label: string; run: RowAction; dan
 
 /** 把一棵回复子树摊平成「行 + 相对根的层深」，表格才能一行一格地渲染 */
 const flattenReplies = (node: CommentRow, depth = 1): Array<{ row: CommentRow; depth: number }> =>
-  node.replies.flatMap((child) => [
-    { row: child, depth },
-    ...flattenReplies(child, depth + 1),
-  ])
+  node.replies.flatMap((child) => [{ row: child, depth }, ...flattenReplies(child, depth + 1)])
 
 export const CommentsViewInner = () => {
   const [filter, setFilter] = useState<CommentFilter>('waiting')
@@ -194,8 +191,7 @@ export const CommentsViewInner = () => {
 
   useEffect(() => {
     if (!hashReadyRef.current) return
-    const url =
-      selectedId === null ? window.location.pathname + window.location.search : `#c${selectedId}`
+    const url = selectedId === null ? window.location.pathname + window.location.search : `#c${selectedId}`
     window.history.replaceState(null, '', url)
   }, [selectedId])
 
@@ -261,7 +257,7 @@ export const CommentsViewInner = () => {
   /** 展平索引：详情面板与哈希还原都要按 id 找到任意一层评论 */
   const rowIndex = useMemo(() => indexRows(rows), [rows])
   const selected = useMemo(
-    () => (selectedId === null ? null : rowIndex.get(selectedId) ?? null),
+    () => (selectedId === null ? null : (rowIndex.get(selectedId) ?? null)),
     [rowIndex, selectedId],
   )
 
@@ -480,13 +476,7 @@ export const CommentsViewInner = () => {
                 setPage(1)
               }}
             />
-            <button
-              type="button"
-              className="comments__reset"
-              onClick={resetFilters}
-              aria-label="重置筛选"
-              title="重置"
-            >
+            <button type="button" className="comments__reset" onClick={resetFilters} aria-label="重置筛选" title="重置">
               {resetGlyph}
             </button>
             <span className="comments__hint">
@@ -547,8 +537,7 @@ export const CommentsViewInner = () => {
                     return (
                       <Fragment key={row.id}>
                         {renderRow(row, 0, row.replyCount > 0, open)}
-                        {open &&
-                          flattenReplies(row).map((item) => renderRow(item.row, item.depth, false, false))}
+                        {open && flattenReplies(row).map((item) => renderRow(item.row, item.depth, false, false))}
                       </Fragment>
                     )
                   })

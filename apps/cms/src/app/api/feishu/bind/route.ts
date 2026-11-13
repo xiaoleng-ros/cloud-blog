@@ -100,10 +100,7 @@ export async function POST(request: Request) {
 
   const openId = (body.openId ?? '').trim()
   if (!OPEN_ID_RE.test(openId)) {
-    return NextResponse.json(
-      { error: 'openId 格式非法（应形如 ou_xxxxxxxxxxxxxxxx）' },
-      { status: 400 },
-    )
+    return NextResponse.json({ error: 'openId 格式非法（应形如 ou_xxxxxxxxxxxxxxxx）' }, { status: 400 })
   }
 
   // 一个 open_id 只能属于一个账号，否则两个账号互为提权入口。
@@ -132,10 +129,7 @@ export async function POST(request: Request) {
   } catch (err) {
     // 并发窗口撞了唯一索引：转成可读的 400，不回显原始数据库错误
     if (isUniqueViolation(err)) {
-      return NextResponse.json(
-        { error: '该飞书账号刚刚已被其他用户绑定，请勿重复绑定' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: '该飞书账号刚刚已被其他用户绑定，请勿重复绑定' }, { status: 400 })
     }
     throw err
   }

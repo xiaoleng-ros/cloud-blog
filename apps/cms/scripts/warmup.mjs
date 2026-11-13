@@ -16,7 +16,7 @@
  * 要真正预热后台各页，把浏览器里 payload-token cookie 的值传进来：
  *   WARM_COOKIE=<payload-token 值> npm run warmup
  */
-const BASE = process.env.PUBLIC_PAYLOAD_URL?.replace(/localhost/gi, '127.0.0.1') ?? 'http://127.0.0.1:9527';
+const BASE = process.env.PUBLIC_PAYLOAD_URL?.replace(/localhost/gi, '127.0.0.1') ?? 'http://127.0.0.1:9527'
 
 /** 侧栏各入口（与 src/admin/shell/nav-config.ts 一一对应） */
 const ADMIN_PATHS = [
@@ -33,7 +33,7 @@ const ADMIN_PATHS = [
   '/admin/globals/navigation',
   '/admin/globals/site-settings',
   '/admin/account',
-];
+]
 
 /**
  * 后台进任意一页都会并发打的那几个 REST 端点。
@@ -52,13 +52,13 @@ const API_PATHS = [
   '/api/globals/site-settings',
   '/api/globals/navigation',
   '/api/blog-sync?digest=1',
-];
+]
 
 /**
  * 9527 上被 CMS 直接服务的前台静态页（列表页是运行时注入的，首次访问要付费）。
  * 用户从 9527 浏览前台时，这些是高频入口；冷渲染实测单页 0.3~1.5s（编译另计）。
  */
-const BLOG_PATHS = ['/', '/stats', '/notes', '/about', '/tags', '/search', '/archive'];
+const BLOG_PATHS = ['/', '/stats', '/notes', '/about', '/tags', '/search', '/archive']
 
 /**
  * 评论区（Waline 进程内接管）首屏接口。
@@ -71,14 +71,14 @@ const BLOG_PATHS = ['/', '/stats', '/notes', '/about', '/tags', '/search', '/arc
 const WALINE_PATHS = [
   '/api/waline/api/comment?path=%2F&pageSize=10&page=1&lang=zh-CN&sortBy=insertedAt_desc',
   '/api/waline/api/article?path=%2F&type=reaction0&lang=zh-CN',
-];
+]
 
 const targets = [
   ...ADMIN_PATHS.map((path) => [path, 120]),
   ...API_PATHS.map((path) => [path, 60]),
   ...BLOG_PATHS.map((path) => [path, 60]),
   ...WALINE_PATHS.map((path) => [path, 300]),
-];
+]
 
 /**
  * 文章详情页 URL 是动态的（/posts/{分类标识}/{ID}），从 API 里挑一篇已发布的补进预热清单。
@@ -86,54 +86,52 @@ const targets = [
  */
 async function addArticleTarget() {
   try {
-    const res = await fetch(`${BASE}/api/posts?limit=1&depth=1`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const doc = data?.docs?.[0];
-    if (!doc || doc.status !== 'published') return;
+    const res = await fetch(`${BASE}/api/posts?limit=1&depth=1`)
+    if (!res.ok) return
+    const data = await res.json()
+    const doc = data?.docs?.[0]
+    if (!doc || doc.status !== 'published') return
     // 分类段优先用「分类标识」(slug)，与文章 URL 生成口径一致（slug 空则回退分类名）
-    const catRef = doc.categories && typeof doc.categories === 'object' ? doc.categories : null;
-    const segment = String(catRef?.slug || catRef?.name || '').trim();
-    const path = segment
-      ? `/posts/${encodeURIComponent(segment)}/${doc.id}`
-      : `/posts/${doc.id}`;
-    targets.splice(targets.length - BLOG_PATHS.length, 0, [path, 60]);
+    const catRef = doc.categories && typeof doc.categories === 'object' ? doc.categories : null
+    const segment = String(catRef?.slug || catRef?.name || '').trim()
+    const path = segment ? `/posts/${encodeURIComponent(segment)}/${doc.id}` : `/posts/${doc.id}`
+    targets.splice(targets.length - BLOG_PATHS.length, 0, [path, 60])
   } catch {
     // 忽略：预热失败不影响使用
   }
 }
 
-const tm = (ms) => new Promise((r) => setTimeout(r, ms));
+const tm = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function main() {
-  const cookie = process.env.WARM_COOKIE;
+  const cookie = process.env.WARM_COOKIE
   if (!cookie) {
-    console.log('ℹ️  未设 WARM_COOKIE：/admin/* 会被 middleware 307 到登录页，只热 /api 与登录页。\n');
+    console.log('ℹ️  未设 WARM_COOKIE：/admin/* 会被 middleware 307 到登录页，只热 /api 与登录页。\n')
   }
-  await addArticleTarget();
+  await addArticleTarget()
   for (const [path, timeout] of targets) {
-    const url = `${BASE}${path}`;
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeout * 1000);
-    const start = Date.now();
+    const url = `${BASE}${path}`
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), timeout * 1000)
+    const start = Date.now()
     try {
       const res = await fetch(url, {
         signal: controller.signal,
         redirect: 'manual',
         headers: cookie ? { cookie: `payload-token=${cookie}` } : undefined,
-      });
-      const note = res.status === 307 ? '（未登录，跳过编译）' : '';
-      console.log(`✅ ${path}  HTTP ${res.status}  (${Date.now() - start}ms)${note}`);
+      })
+      const note = res.status === 307 ? '（未登录，跳过编译）' : ''
+      console.log(`✅ ${path}  HTTP ${res.status}  (${Date.now() - start}ms)${note}`)
     } catch (err) {
-      console.log(`⚠️  ${path}  预热失败（${err.message}），继续下一项`);
+      console.log(`⚠️  ${path}  预热失败（${err.message}），继续下一项`)
     } finally {
-      clearTimeout(t);
+      clearTimeout(t)
     }
     // 触发编译后稍微让出，避免瞬时高并发
-    await tm(800);
+    await tm(800)
   }
-  console.log('\n🎉 预热完成，后台已就绪');
-  process.exit(0);
+  console.log('\n🎉 预热完成，后台已就绪')
+  process.exit(0)
 }
 
-main();
+main()

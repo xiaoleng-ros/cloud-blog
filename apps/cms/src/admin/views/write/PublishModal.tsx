@@ -80,8 +80,7 @@ export const PublishModal: React.FC<Props> = ({
         if (preset.length > 0) setTagText((cur) => (cur.trim() ? cur : preset.join('、')))
       })
       .catch(() => {})
-    // initial 只在挂载时读一次，故不列入依赖
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 依赖留空：initial 只在弹窗挂载时读一次，后续用户改动不应被回填覆盖。
   }, [])
 
   /**
@@ -182,7 +181,9 @@ export const PublishModal: React.FC<Props> = ({
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (
-        <option key={o.id} value={o.id}>{o.name}</option>
+        <option key={o.id} value={o.id}>
+          {o.name}
+        </option>
       ))}
     </select>
   )
@@ -194,13 +195,13 @@ export const PublishModal: React.FC<Props> = ({
           <h3 className="publish-modal__title">
             {isDraft ? '存草稿' : collection === 'posts' ? '发布文章' : '发布随笔'}
           </h3>
-          <button type="button" className="publish-modal__close" onClick={onCancel} aria-label="关闭">×</button>
+          <button type="button" className="publish-modal__close" onClick={onCancel} aria-label="关闭">
+            ×
+          </button>
         </header>
 
         <div className="publish-modal__body">
-          <label className="publish-modal__label">
-            {!isDraft && collection === 'posts' ? '标题（必填）' : '标题'}
-          </label>
+          <label className="publish-modal__label">{!isDraft && collection === 'posts' ? '标题（必填）' : '标题'}</label>
           <input
             className="publish-modal__input"
             value={title}
@@ -266,20 +267,16 @@ export const PublishModal: React.FC<Props> = ({
         </div>
 
         <footer className="publish-modal__foot">
-          <button type="button" className="publish-modal__btn" onClick={onCancel} disabled={saving}>取消</button>
+          <button type="button" className="publish-modal__btn" onClick={onCancel} disabled={saving}>
+            取消
+          </button>
           <button
             type="button"
             className="publish-modal__btn publish-modal__btn--primary"
             onClick={() => void submit()}
             disabled={saving}
           >
-            {saving
-              ? '提交中…'
-              : isDraft
-                ? '保存草稿'
-                : collection === 'posts'
-                  ? '发布文章'
-                  : '发布随笔'}
+            {saving ? '提交中…' : isDraft ? '保存草稿' : collection === 'posts' ? '发布文章' : '发布随笔'}
           </button>
         </footer>
       </div>

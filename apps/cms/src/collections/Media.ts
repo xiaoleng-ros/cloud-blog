@@ -1,7 +1,12 @@
 import type { CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 import { syncInvalidateHook } from '../lib/sync-cache'
-import { MAX_IMAGE_PIXELS, MAX_IMAGE_SIZE_BYTES, incrementFilenameSuffix, toStorageSafeFilename } from '../lib/media-upload'
+import {
+  MAX_IMAGE_PIXELS,
+  MAX_IMAGE_SIZE_BYTES,
+  incrementFilenameSuffix,
+  toStorageSafeFilename,
+} from '../lib/media-upload'
 
 /**
  * 图片 / 多媒体集合：文章封面、正文图片、头像等上传文件都会存到这里。
@@ -50,13 +55,7 @@ export const Media: CollectionConfig = {
     staticDir: 'media',
     // 显式列位图类型，**不含 image/svg+xml**（原为 'image/*'，会让 SVG 通过 MIME 校验）。
     // 另附 avif/heic 等后台可能用到的位图格式，避免误伤正常上传。
-    mimeTypes: [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'image/gif',
-      'image/avif',
-    ],
+    mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'],
   },
   fields: [
     {
@@ -82,7 +81,18 @@ export const Media: CollectionConfig = {
       ({ error, req, result }) => {
         // 先无条件打日志：EdgeOne 的日志面板能捞到，是排查的主渠道
         const e = error as { name?: string; message?: string; status?: number; code?: string; cause?: unknown }
-        console.error('[media] 上传/写入失败:', e?.name, '|', e?.message, '| status=', e?.status, '| code=', e?.code, '| cause=', String((e?.cause as { message?: string })?.message ?? e?.cause ?? ''))
+        console.error(
+          '[media] 上传/写入失败:',
+          e?.name,
+          '|',
+          e?.message,
+          '| status=',
+          e?.status,
+          '| code=',
+          e?.code,
+          '| cause=',
+          String((e?.cause as { message?: string })?.message ?? e?.cause ?? ''),
+        )
         if (!req.user) return
         // APIError（4xx）本来就有可读 message，只有被改写成通用文案的才需要还原
         const message = error?.message || String(error)

@@ -105,15 +105,7 @@ export const DashboardView = () => {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
       try {
-        const [
-          postsRes,
-          notesRes,
-          catesRes,
-          tagsRes,
-          mediaRes,
-          latestPostsRes,
-          latestNotesRes,
-        ] = await Promise.all([
+        const [postsRes, notesRes, catesRes, tagsRes, mediaRes, latestPostsRes, latestNotesRes] = await Promise.all([
           fetch('/api/posts?limit=1&depth=0', { signal: controller.signal }),
           fetch('/api/notes?limit=1&depth=0', { signal: controller.signal }),
           fetch('/api/categories?limit=1&depth=0', { signal: controller.signal }),
@@ -165,7 +157,13 @@ export const DashboardView = () => {
   const statCards: StatCard[] = [
     { label: '文章', value: stats.posts ?? 0, unit: '篇', href: `${adminRoute}/collections/posts`, color: 'yellow' },
     { label: '随笔', value: stats.notes ?? 0, unit: '条', href: `${adminRoute}/collections/notes`, color: 'cyan' },
-    { label: '分类', value: stats.categories ?? 0, unit: '个', href: `${adminRoute}/collections/categories`, color: 'pink' },
+    {
+      label: '分类',
+      value: stats.categories ?? 0,
+      unit: '个',
+      href: `${adminRoute}/collections/categories`,
+      color: 'pink',
+    },
     { label: '标签', value: stats.tags ?? 0, unit: '个', href: `${adminRoute}/collections/tags`, color: 'purple' },
     { label: '图片', value: stats.media ?? 0, unit: '张', href: `${adminRoute}/collections/media`, color: 'green' },
   ]
@@ -178,10 +176,13 @@ export const DashboardView = () => {
       {/* 统计卡片 */}
       <section className="dashboard__stats" aria-label="内容统计">
         {statCards.map((card) => (
-          <Link key={card.label} href={card.href} prefetch={false} className={`dashboard__stat dashboard__stat--${card.color}`}>
-            <span className="dashboard__stat-value">
-              {loading ? '…' : error ? '—' : card.value}
-            </span>
+          <Link
+            key={card.label}
+            href={card.href}
+            prefetch={false}
+            className={`dashboard__stat dashboard__stat--${card.color}`}
+          >
+            <span className="dashboard__stat-value">{loading ? '…' : error ? '—' : card.value}</span>
             <span className="dashboard__stat-label">
               {error && !loading ? '加载失败' : `${card.label}（${card.unit}）`}
             </span>
@@ -209,7 +210,11 @@ export const DashboardView = () => {
             <ul className="dashboard__list">
               {recentPosts.map((post) => (
                 <li key={post.id}>
-                  <Link href={`${adminRoute}/collections/posts/${post.id}`} prefetch={false} className="dashboard__list-row">
+                  <Link
+                    href={`${adminRoute}/collections/posts/${post.id}`}
+                    prefetch={false}
+                    className="dashboard__list-row"
+                  >
                     <span className="dashboard__list-title">{post.title || '（无标题）'}</span>
                     <span className="dashboard__list-date">{formatDate(post.createdAt)}</span>
                   </Link>
@@ -237,7 +242,11 @@ export const DashboardView = () => {
             <ul className="dashboard__list">
               {recentNotes.map((note) => (
                 <li key={note.id}>
-                  <Link href={`${adminRoute}/collections/notes/${note.id}`} prefetch={false} className="dashboard__list-row">
+                  <Link
+                    href={`${adminRoute}/collections/notes/${note.id}`}
+                    prefetch={false}
+                    className="dashboard__list-row"
+                  >
                     <span className="dashboard__list-title">{note.title || note.mood || formatDate(note.date)}</span>
                     <span className="dashboard__list-date">{formatDate(note.date)}</span>
                   </Link>
@@ -250,13 +259,25 @@ export const DashboardView = () => {
 
       {/* 快捷操作 */}
       <section className="dashboard__actions" aria-label="快捷操作">
-        <Link href={`${adminRoute}/write-post`} prefetch={false} className="dashboard__action dashboard__action--primary">
+        <Link
+          href={`${adminRoute}/write-post`}
+          prefetch={false}
+          className="dashboard__action dashboard__action--primary"
+        >
           ✍️ 写文章
         </Link>
-        <Link href={`${adminRoute}/write-note`} prefetch={false} className="dashboard__action dashboard__action--yellow">
+        <Link
+          href={`${adminRoute}/write-note`}
+          prefetch={false}
+          className="dashboard__action dashboard__action--yellow"
+        >
           ⚡ 写随笔
         </Link>
-        <Link href={`${adminRoute}/globals/site-settings`} prefetch={false} className="dashboard__action dashboard__action--plain">
+        <Link
+          href={`${adminRoute}/globals/site-settings`}
+          prefetch={false}
+          className="dashboard__action dashboard__action--plain"
+        >
           ⚙️ 站点设置
         </Link>
       </section>

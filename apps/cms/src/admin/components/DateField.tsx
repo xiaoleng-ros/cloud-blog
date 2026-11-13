@@ -8,15 +8,7 @@
  *
  * 值一律是 YYYY-MM-DD 文本，空值传空串；面板用 fixed 定位，躲开「卡内滚动」容器的裁剪。
  */
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 // 客户端在首帧绘制前跑（消除弹层闪位），SSR 无 window 时退化为 useEffect 避免告警
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
@@ -286,9 +278,7 @@ export const DateRangeField: React.FC<{
       >
         {calendarGlyph}
       </button>
-      {open && (
-        <CalendarPanel key={target} value={target === 'from' ? from : to} style={panelPos} onPick={pick} />
-      )}
+      {open && <CalendarPanel key={target} value={target === 'from' ? from : to} style={panelPos} onPick={pick} />}
     </div>
   )
 }

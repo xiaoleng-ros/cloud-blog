@@ -15,15 +15,25 @@
     "setup": "npm install --prefix apps/blog && npm install --prefix apps/cms",
     "dev:blog": "npm run dev --prefix apps/blog",
     "dev:cms": "npm run dev --prefix apps/cms",
-    "dev:cms:warm": "npm run dev:warm --prefix apps/cms",
     "dev:proxy": "npm run dev:proxy --prefix apps/blog",
-    "build:blog": "npm run build --prefix apps/blog",
-    "build:cms": "npm run build --prefix apps/cms",
-    "build:all": "npm run build --prefix apps/blog && npm run build --prefix apps/cms && node apps/cms/scripts/copy-blog-to-public.mjs",
+    "build:all": "npm run build --prefix apps/blog && npm run build --prefix apps/cms && node apps/cms/scripts/copy-blog-to-public.mjs && node apps/cms/scripts/prerender-blog-shells.mjs && npm run verify:html-inject && npm run verify:csp && npm run verify:render",
     "sync:blog": "node apps/cms/scripts/sync-blog-shells.mjs",
-    "preview:blog": "npm run preview --prefix apps/blog",
+    "prerender:blog": "node apps/cms/scripts/prerender-blog-shells.mjs",
+    "verify:html-inject": "node apps/cms/scripts/verify-html-inject.mjs",
+    "verify:csp": "node apps/cms/scripts/verify-csp-sync.mjs",
+    "verify:render": "node apps/cms/scripts/verify-render-parity.mjs",
+    "fmt": "node scripts/run-prettier.mjs --write",
+    "fmt:check": "node scripts/run-prettier.mjs --check",
+    "fmt:changed": "node scripts/run-prettier.mjs --check --changed",
+    "typecheck": "npm run typecheck:blog && npm run typecheck:cms",
     "typecheck:blog": "npm run typecheck --prefix apps/blog",
     "typecheck:cms": "npm run typecheck --prefix apps/cms",
-    "typecheck": "npm run typecheck:blog && npm run typecheck:cms"
+    "dev:cms:warm": "npm run dev:warm --prefix apps/cms",
+    "build:blog": "npm run build --prefix apps/blog",
+    "build:cms": "npm run build --prefix apps/cms",
+    "preview:blog": "npm run preview --prefix apps/blog"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
   }
 }

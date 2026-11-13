@@ -87,12 +87,7 @@ async function withDb<T>(run: (client: Client) => Promise<T>): Promise<T> {
  *
  * @returns 实际删除的行数
  */
-async function purgeStaleComments(
-  client: Client,
-  prefix: string,
-  cutoff: Date,
-  limit: number,
-): Promise<number> {
+async function purgeStaleComments(client: Client, prefix: string, cutoff: Date, limit: number): Promise<number> {
   const { rowCount } = await client.query(
     // 种子那一段必须套括号：Postgres 不允许 UNION 的一侧直接挂 LIMIT
     `WITH RECURSIVE doomed AS (
@@ -248,9 +243,7 @@ export function scheduleLazyGc(): void {
 
   try {
     // 动态引入：after 只在 Next 请求上下文里存在，脚本环境调用会抛错
-    void import('next/server')
-      .then(({ after }) => after(job))
-      .catch(() => job())
+    void import('next/server').then(({ after }) => after(job)).catch(() => job())
   } catch {
     void job()
   }

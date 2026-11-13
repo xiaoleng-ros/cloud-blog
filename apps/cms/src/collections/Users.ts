@@ -12,8 +12,7 @@ const CMS_ADMINS = (process.env.CMS_ADMIN_EMAILS ?? '')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean)
 
-const isCmsAdmin = (user?: { email?: string } | null) =>
-  !!user?.email && CMS_ADMINS.includes(user.email.toLowerCase())
+const isCmsAdmin = (user?: { email?: string } | null) => !!user?.email && CMS_ADMINS.includes(user.email.toLowerCase())
 
 /** 管理员用户集合（用于登录后台） */
 export const Users: CollectionConfig = {

@@ -69,9 +69,12 @@ async function verifyAdminToken(request: Request): Promise<{ ok: boolean; userId
 
 /** 统一信封：成功 errno=0，失败 errno=status */
 function ok<T>(data: T, extra: Record<string, unknown> = {}): Response {
-  return Response.json({ errno: 0, data, ...extra }, {
-    headers: { 'Cache-Control': 'no-store' },
-  })
+  return Response.json(
+    { errno: 0, data, ...extra },
+    {
+      headers: { 'Cache-Control': 'no-store' },
+    },
+  )
 }
 
 function fail(err: unknown): Response {

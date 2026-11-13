@@ -221,7 +221,10 @@ console.log('\n[用例 16] 末尾是无值属性（data-astro-cid）时必须补
   // 自己闭合的写法（/<div ... />）同样要留空格
   const selfClosed = '<html><body><div data-sync-block="sd" data-astro-cid-z9 />X</body></html>'
   const r2 = injectSyncBlocks(selfClosed, { sd: 'Y' }, 'v')
-  check('自闭合分支不粘连', !/data-astro-cid-z9data-sync-version/.test(r2.html) && r2.html.includes('data-sync-version="v"'))
+  check(
+    '自闭合分支不粘连',
+    !/data-astro-cid-z9data-sync-version/.test(r2.html) && r2.html.includes('data-sync-version="v"'),
+  )
 }
 
 // ========== 汇总 ==========

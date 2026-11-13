@@ -65,7 +65,12 @@ export const SiteSettings: GlobalConfig = {
                   '留空则回退环境变量 SITE_URL。',
               },
             },
-            { name: 'siteIcon', type: 'text', label: '网站图标', admin: { description: '用作浏览器标签页图标与页脚头像；留空则用站点默认头像。' } },
+            {
+              name: 'siteIcon',
+              type: 'text',
+              label: '网站图标',
+              admin: { description: '用作浏览器标签页图标与页脚头像；留空则用站点默认头像。' },
+            },
             { name: 'siteIcp', type: 'text', label: 'ICP 备案号' },
             // 创建时间存 'YYYY-MM-DD' 文本而非 date：date 落库是带时区时间戳，
             // 跨时区读回会整体偏一天，而它只需要按年/按日原样展示。
@@ -122,8 +127,7 @@ export const SiteSettings: GlobalConfig = {
               label: '页脚群组',
               admin: {
                 rows: 4,
-                description:
-                  '每行一条「名称 链接」，链接可留空仅填名称（展示为纯文字标签）。支持 QQ / 微信图标。',
+                description: '每行一条「名称 链接」，链接可留空仅填名称（展示为纯文字标签）。支持 QQ / 微信图标。',
               },
             },
           ],

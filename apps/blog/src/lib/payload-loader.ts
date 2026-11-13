@@ -17,13 +17,24 @@
  * 检测到任何变化时更新数据仓库，并通过 touch .astro/payload-sync-touch 通知
  * astro.config 中的 payload-hot-reload 集成，让已打开的前台页面自动刷新。
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import type { Loader, LoaderContext, DataStore } from 'astro/loaders';
-import { PAYLOAD_URL, fetchMediaAltMap, fetchNavItems, fetchNotes, fetchPosts, fetchProjects, fetchFriends, fetchSiteSettings, fetchSyncDigest, type MdEntry } from './payload-api';
-import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+import type { Loader, LoaderContext, DataStore } from 'astro/loaders'
+import {
+  PAYLOAD_URL,
+  fetchMediaAltMap,
+  fetchNavItems,
+  fetchNotes,
+  fetchPosts,
+  fetchProjects,
+  fetchFriends,
+  fetchSiteSettings,
+  fetchSyncDigest,
+  type MdEntry,
+} from './payload-api'
+import { setAltMap } from 'cloud-blog/shared/rehype-img-attrs.mjs'
 
 /**
  * dev 自动同步轮询间隔（毫秒）：3s，接近实时。
@@ -79,35 +90,35 @@ let probeFailures = 0
 let probeBackoffUntil = 0
 
 function probeDigests(): Promise<Record<string, string> | null> {
-  const now = Date.now();
+  const now = Date.now()
   // 在途：无条件复用（探测超时可达 8s，TTL 比超时短就合并不了并发）
-  if (digestPromise) return digestPromise;
-  if (digestResult && now - digestResult.at < AUTO_REFRESH_MS) return Promise.resolve(digestResult.value);
-  if (now < probeBackoffUntil) return Promise.resolve(digestResult?.value ?? null);
+  if (digestPromise) return digestPromise
+  if (digestResult && now - digestResult.at < AUTO_REFRESH_MS) return Promise.resolve(digestResult.value)
+  if (now < probeBackoffUntil) return Promise.resolve(digestResult?.value ?? null)
   digestPromise = fetchSyncDigest()
     .then((res) => res?.digests ?? null)
     .catch(() => null)
     .then((value) => {
       if (value) {
-        probeFailures = 0;
-        probeBackoffUntil = 0;
-        digestResult = { value, at: Date.now() };
+        probeFailures = 0
+        probeBackoffUntil = 0
+        digestResult = { value, at: Date.now() }
       } else {
-        probeFailures += 1;
-        if (probeFailures >= PROBE_FAILURE_LIMIT) probeBackoffUntil = Date.now() + PROBE_BACKOFF_MS;
+        probeFailures += 1
+        if (probeFailures >= PROBE_FAILURE_LIMIT) probeBackoffUntil = Date.now() + PROBE_BACKOFF_MS
       }
       // 结果落缓存之后再清空在途标记，避免两个微任务缝隙里再挤出发重复探测
-      digestPromise = null;
-      return value;
-    });
-  return digestPromise;
+      digestPromise = null
+      return value
+    })
+  return digestPromise
 }
 
 /**
  * 本轮探测到的指纹快照（只读，不写 meta）。拿不到时返回 null，调用方按「全部视为变化」处理。
  */
 function peekStamps(): Promise<Record<string, string> | null> {
-  return probeDigests();
+  return probeDigests()
 }
 
 /**
@@ -116,14 +127,10 @@ function peekStamps(): Promise<Record<string, string> | null> {
  * 探测失败/后台不支持 digest 时一律算「变了」：宁可退回每轮重拉全量的旧行为，
  * 也不能因为探测没结果就漏同步。
  */
-function stampDiffers(
-  ctx: LoaderContext,
-  digests: Record<string, string> | null,
-  source: StampSource,
-): boolean {
-  const next = digests?.[source];
-  if (!next) return true;
-  return ctx.meta.get(STAMP_KEYS[source]) !== next;
+function stampDiffers(ctx: LoaderContext, digests: Record<string, string> | null, source: StampSource): boolean {
+  const next = digests?.[source]
+  if (!next) return true
+  return ctx.meta.get(STAMP_KEYS[source]) !== next
 }
 
 /**
@@ -135,15 +142,11 @@ function stampDiffers(
  * 反过来，落「拉取之前」抓到的指纹意味着：拉取期间若又有改动，下一轮一比就发现不同，
  * 宁可多拉一次也不漏。
  */
-function commitStamps(
-  ctx: LoaderContext,
-  digests: Record<string, string> | null,
-  sources: StampSource[],
-): void {
-  if (!digests) return;
+function commitStamps(ctx: LoaderContext, digests: Record<string, string> | null, sources: StampSource[]): void {
+  if (!digests) return
   for (const source of sources) {
-    const value = digests[source];
-    if (value) ctx.meta.set(STAMP_KEYS[source], value);
+    const value = digests[source]
+    if (value) ctx.meta.set(STAMP_KEYS[source], value)
   }
 }
 
@@ -183,46 +186,40 @@ let mediaReloadPromise: Promise<Map<string, string>> | null = null
  * commitStamps（全 loader 共享的后台指纹）语义不一致，可能 stamp 已推进而某路
  * loader 的正文里 alt 仍是旧值，造成永久陈旧。渲染指纹由 storeEntries 逐 loader 落进 ctx.meta。
  */
-async function refreshMediaAltMap(
-  ctx: LoaderContext,
-  digests: Record<string, string> | null,
-): Promise<boolean> {
+async function refreshMediaAltMap(ctx: LoaderContext, digests: Record<string, string> | null): Promise<boolean> {
   if (stampDiffers(ctx, digests, 'media')) {
     // posts 与 notes 同一轮都检测到变化时，只打一次 /api/media
     if (!mediaReloadPromise) {
       mediaReloadPromise = (async () => {
-        mediaAltPromise = null;
-        return loadMediaAltMap();
+        mediaAltPromise = null
+        return loadMediaAltMap()
       })().finally(() => {
-        mediaReloadPromise = null;
-      });
+        mediaReloadPromise = null
+      })
     }
     // 抛错时不落指纹：下一轮仍会重试，不会把「没拉到」记成「没变化」
-    await mediaReloadPromise;
-    commitStamps(ctx, digests, ['media']);
+    await mediaReloadPromise
+    commitStamps(ctx, digests, ['media'])
   }
-  return currentMediaFp !== ctx.meta.get(MEDIA_RENDERED_KEY);
+  return currentMediaFp !== ctx.meta.get(MEDIA_RENDERED_KEY)
 }
 
 /** 递归收集目录下所有 .md 文件，返回 [id(相对路径去扩展名), 绝对路径] */
 function collectLocalMarkdown(dir: string): Array<{ id: string; file: string }> {
-  if (!existsSync(dir)) return [];
-  const results: Array<{ id: string; file: string }> = [];
+  if (!existsSync(dir)) return []
+  const results: Array<{ id: string; file: string }> = []
 
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.')) continue;
-    const full = path.join(dir, entry.name);
+    if (entry.name.startsWith('.')) continue
+    const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      results.push(...collectLocalMarkdown(full));
+      results.push(...collectLocalMarkdown(full))
     } else if (entry.name.endsWith('.md')) {
-      const id = path
-        .relative(dir, full)
-        .replace(/\\/g, '/')
-        .replace(/\.md$/, '');
-      results.push({ id, file: full });
+      const id = path.relative(dir, full).replace(/\\/g, '/').replace(/\.md$/, '')
+      results.push({ id, file: full })
     }
   }
-  return results.sort((a, b) => a.id.localeCompare(b.id));
+  return results.sort((a, b) => a.id.localeCompare(b.id))
 }
 
 /**
@@ -254,9 +251,9 @@ function grayMatter(input: string): { data: Record<string, unknown>; content: st
 /** 把本地 markdown 文件解析成与 API 相同结构的条目 */
 function localEntries(files: Array<{ id: string; file: string }>): MdEntry[] {
   return files.map(({ id, file }) => {
-    const { data, content } = grayMatter(readFileSync(file, 'utf-8'));
-    return { id, data, body: content };
-  });
+    const { data, content } = grayMatter(readFileSync(file, 'utf-8'))
+    return { id, data, body: content }
+  })
 }
 
 /**
@@ -266,33 +263,33 @@ function localEntries(files: Array<{ id: string; file: string }>): MdEntry[] {
  * 只在 dev 生效，判据复用 ctx.watcher —— build / astro check 下它是 undefined。
  * 这条边界不能省：假文章一旦被构建产物带上线，empty-site-guard 数得清清楚楚、照样放行。
  */
-const FIXTURE_BASE = path.join(process.cwd(), 'dev-fixtures');
+const FIXTURE_BASE = path.join(process.cwd(), 'dev-fixtures')
 
 /** 真实本地兜底（src/content/*）为空时，dev 才改用同名假数据目录 */
 function markdownBaseFor(ctx: LoaderContext, realBase: string): string {
-  if (!ctx.watcher) return realBase;
-  if (collectLocalMarkdown(realBase).length > 0) return realBase;
-  return path.join(FIXTURE_BASE, path.basename(realBase));
+  if (!ctx.watcher) return realBase
+  if (collectLocalMarkdown(realBase).length > 0) return realBase
+  return path.join(FIXTURE_BASE, path.basename(realBase))
 }
 
 function sourceLabelOf(base: string): string {
-  return base.startsWith(FIXTURE_BASE) ? 'dev 假数据' : '本地 markdown';
+  return base.startsWith(FIXTURE_BASE) ? 'dev 假数据' : '本地 markdown'
 }
 
 /** dev 假数据项目：结构与 /api/projects 归一化后的 ProjectEntry 一致，直接喂 parseData */
 async function storeFixtureProjects(ctx: LoaderContext): Promise<void> {
-  const file = path.join(FIXTURE_BASE, 'projects.json');
-  if (!existsSync(file)) return;
-  const list = JSON.parse(readFileSync(file, 'utf-8')) as Array<Record<string, unknown>>;
+  const file = path.join(FIXTURE_BASE, 'projects.json')
+  if (!existsSync(file)) return
+  const list = JSON.parse(readFileSync(file, 'utf-8')) as Array<Record<string, unknown>>
   for (const [index, item] of list.entries()) {
-    const id = String(item.id ?? `fx-${index}`);
+    const id = String(item.id ?? `fx-${index}`)
     try {
-      ctx.store.set({ id, data: await ctx.parseData({ id, data: item }) });
+      ctx.store.set({ id, data: await ctx.parseData({ id, data: item }) })
     } catch (error) {
-      ctx.logger.warn(`[payload-loader] dev 假数据项目校验失败，跳过 ${id}: ${(error as Error).message}`);
+      ctx.logger.warn(`[payload-loader] dev 假数据项目校验失败，跳过 ${id}: ${(error as Error).message}`)
     }
   }
-  ctx.logger.info(`[payload-loader] 项目：dev 假数据载入 ${list.length} 条`);
+  ctx.logger.info(`[payload-loader] 项目：dev 假数据载入 ${list.length} 条`)
 }
 
 /**
@@ -301,17 +298,17 @@ async function storeFixtureProjects(ctx: LoaderContext): Promise<void> {
  * @param store   数据仓库（posts 与 notes 各用各的）
  * @param entries 条目列表（id + data + body）
  */
-type RenderedMarkdown = Awaited<ReturnType<LoaderContext['renderMarkdown']>>;
+type RenderedMarkdown = Awaited<ReturnType<LoaderContext['renderMarkdown']>>
 interface RenderCacheEntry {
-  body: string;
-  file?: string;
-  rendered?: RenderedMarkdown;
+  body: string
+  file?: string
+  rendered?: RenderedMarkdown
 }
 interface RenderCache {
-  mediaFp: string;
-  entries: Map<string, RenderCacheEntry>;
+  mediaFp: string
+  entries: Map<string, RenderCacheEntry>
 }
-const RENDER_CACHE_KEY = 'render-cache';
+const RENDER_CACHE_KEY = 'render-cache'
 
 async function storeEntries(
   ctx: LoaderContext,
@@ -321,210 +318,209 @@ async function storeEntries(
 ) {
   // 单条脏数据只该影响它自己：parseData/renderMarkdown 逐条 try-catch，
   // 坏条目跳过并计数告警，绝不让整批拉取失败（进而误降级成本地 markdown 兜底）。
-  let skipped = 0;
+  let skipped = 0
 
   // alt 映射会烧进渲染产物：media 指纹一变整个缓存作废；正文/来源文件没变的条目复用上轮 rendered，
   // 轮询检测到「某一路变了」时不再把所有条目重渲一遍。
-  const cached = ctx.meta.get(RENDER_CACHE_KEY) as RenderCache | undefined;
-  const cache =
-    cached && cached.mediaFp === currentMediaFp ? cached.entries : new Map<string, RenderCacheEntry>();
+  const cached = ctx.meta.get(RENDER_CACHE_KEY) as RenderCache | undefined
+  const cache = cached && cached.mediaFp === currentMediaFp ? cached.entries : new Map<string, RenderCacheEntry>()
 
   for (const entry of entries) {
     // 用前台 collection schema 校验/清洗数据
-    let data: Awaited<ReturnType<typeof ctx.parseData>>;
+    let data: Awaited<ReturnType<typeof ctx.parseData>>
     try {
-      data = await ctx.parseData({ id: entry.id, data: entry.data });
+      data = await ctx.parseData({ id: entry.id, data: entry.data })
     } catch (error) {
-      skipped += 1;
-      ctx.logger.warn(`[payload-loader] 数据校验失败，跳过该条 ${entry.id}: ${(error as Error).message}`);
-      continue;
+      skipped += 1
+      ctx.logger.warn(`[payload-loader] 数据校验失败，跳过该条 ${entry.id}: ${(error as Error).message}`)
+      continue
     }
 
     // 传 fileURL 以便 markdown 内相对图片路径解析
-    const file = fileOf?.(entry.id);
-    const fileURL = file ? pathToFileURL(file) : undefined;
+    const file = fileOf?.(entry.id)
+    const fileURL = file ? pathToFileURL(file) : undefined
 
-    const key = String(entry.id);
-    const prev = cache.get(key);
-    let rendered: RenderedMarkdown | undefined;
-    let renderFailed = false;
+    const key = String(entry.id)
+    const prev = cache.get(key)
+    let rendered: RenderedMarkdown | undefined
+    let renderFailed = false
     try {
       if (prev && prev.body === entry.body && prev.file === file) {
-        rendered = prev.rendered;
+        rendered = prev.rendered
       }
       if (!rendered) {
-        rendered = await ctx.renderMarkdown(entry.body, fileURL ? { fileURL } : undefined);
+        rendered = await ctx.renderMarkdown(entry.body, fileURL ? { fileURL } : undefined)
       }
     } catch (error) {
       // 个别条目渲染失败不阻塞整体，仅告警并保留原始 body
-      ctx.logger.warn(`[payload-loader] 渲染失败 ${entry.id}: ${(error as Error).message}`);
-      renderFailed = true;
+      ctx.logger.warn(`[payload-loader] 渲染失败 ${entry.id}: ${(error as Error).message}`)
+      renderFailed = true
     }
 
     if (renderFailed) {
-      store.set({ id: entry.id, data, body: entry.body });
-      cache.delete(key);
+      store.set({ id: entry.id, data, body: entry.body })
+      cache.delete(key)
     } else {
-      store.set({ id: entry.id, data, body: entry.body, rendered });
-      cache.set(key, { body: entry.body, file, rendered });
+      store.set({ id: entry.id, data, body: entry.body, rendered })
+      cache.set(key, { body: entry.body, file, rendered })
     }
   }
 
   if (skipped > 0) {
-    ctx.logger.warn(`[payload-loader] 本批 ${entries.length} 条中有 ${skipped} 条脏数据被跳过（其余照常入库）`);
+    ctx.logger.warn(`[payload-loader] 本批 ${entries.length} 条中有 ${skipped} 条脏数据被跳过（其余照常入库）`)
   }
 
   // 删除本次结果里已经不存在的条目：轮询只 set 不删的话，
   // 后台删掉的文章/随笔会永远残留在仓库里（前台仍能看到已删内容）。
   // 判断依据是「本批出现过的 id」（含被跳过的脏条目）：脏条目保留仓库里的旧版本，
   // 好过让一篇文章因后台一次字段错误而从前台消失。
-  const liveIds = new Set(entries.map((e) => String(e.id)));
+  const liveIds = new Set(entries.map((e) => String(e.id)))
   for (const id of [...store.keys()]) {
     if (!liveIds.has(String(id))) {
-      store.delete(id);
-      cache.delete(String(id));
+      store.delete(id)
+      cache.delete(String(id))
     }
   }
 
   // meta 官方类型只标了 string 值，但运行时就是普通 Map；渲染缓存（含 thenable）必须跨轮询存活，双断言塞回去
-  ctx.meta.set(RENDER_CACHE_KEY, { mediaFp: currentMediaFp, entries: cache } as unknown as string);
+  ctx.meta.set(RENDER_CACHE_KEY, { mediaFp: currentMediaFp, entries: cache } as unknown as string)
   // 本 loader 的产物此刻确实基于当前 altMap —— 与 refreshMediaAltMap 的判定配对落盘
-  ctx.meta.set(MEDIA_RENDERED_KEY, currentMediaFp);
+  ctx.meta.set(MEDIA_RENDERED_KEY, currentMediaFp)
 }
 
 /** 文章加载器：API 优先，本地 markdown 兜底 */
 export const payloadPostsLoader: Loader = {
   name: 'payload-posts-loader',
   async load(ctx) {
-    const localBase = path.join(process.cwd(), 'src/content/posts');
-    const urlsOf = new Map<string, string>();
+    const localBase = path.join(process.cwd(), 'src/content/posts')
+    const urlsOf = new Map<string, string>()
 
     // try 只包「拉数据」这一步：渲染/写仓库的异常不该被当成「后台不可用」，
     // 否则单篇 markdown 渲染失败会把整批 API 数据静默降级成本地兜底内容。
-    let entries: MdEntry[] | null = null;
-    let fetchError: Error | null = null;
+    let entries: MdEntry[] | null = null
+    let fetchError: Error | null = null
     // 拉数据之前先抓一份指纹快照，等这一路真的拉成功了再落盘（见 commitStamps）
-    const stamps = await peekStamps();
+    const stamps = await peekStamps()
     try {
       // 先注入 Media alt 映射，确保 renderMarkdown 时 rehypeImgAttrs 能查到 alt；
       // 同时把 map 传给 fetchPosts，让它给每篇文章的封面写入 data.coverAlt
-      const altMap = await loadMediaAltMap();
-      entries = await fetchPosts(altMap);
+      const altMap = await loadMediaAltMap()
+      entries = await fetchPosts(altMap)
     } catch (error) {
-      fetchError = error as Error;
+      fetchError = error as Error
     }
 
     if (entries) {
-      ctx.logger.info(`[payload-loader] 文章：从后台 API 载入 ${entries.length} 条`);
-      await storeEntries(ctx, ctx.store, entries);
-      ctx.meta.set(DIGEST_KEYS.posts, ctx.generateDigest(JSON.stringify(entries)));
-      commitStamps(ctx, stamps, ['posts', 'media', 'settings', 'nav']);
+      ctx.logger.info(`[payload-loader] 文章：从后台 API 载入 ${entries.length} 条`)
+      await storeEntries(ctx, ctx.store, entries)
+      ctx.meta.set(DIGEST_KEYS.posts, ctx.generateDigest(JSON.stringify(entries)))
+      commitStamps(ctx, stamps, ['posts', 'media', 'settings', 'nav'])
     } else {
       // 后台不可用 → 回退本地 markdown（dev 下没有真实兜底文件时改用 dev 假数据）
-      const base = markdownBaseFor(ctx, localBase);
-      const files = collectLocalMarkdown(base);
-      files.forEach(({ id, file }) => urlsOf.set(id, file));
-      const fallbackEntries = localEntries(files);
+      const base = markdownBaseFor(ctx, localBase)
+      const files = collectLocalMarkdown(base)
+      files.forEach(({ id, file }) => urlsOf.set(id, file))
+      const fallbackEntries = localEntries(files)
       ctx.logger.warn(
         `[payload-loader] 后台不可用（${fetchError?.message}），回退${sourceLabelOf(base)}：${fallbackEntries.length} 篇`,
-      );
+      )
       if (fallbackEntries.length === 0) {
         ctx.logger.error(
           '[payload-loader] ⚠️ 后台拉取失败且没有任何本地 markdown 兜底：' +
             '前台会退回默认文案（模板作者名），并且不会生成任何文章详情页（/posts/* 会 404）。' +
             `请检查 PUBLIC_PAYLOAD_URL 是否指向真实后台地址（当前解析为 ${PAYLOAD_URL}）。`,
-        );
+        )
       }
-      await storeEntries(ctx, ctx.store, fallbackEntries, (id) => urlsOf.get(id));
+      await storeEntries(ctx, ctx.store, fallbackEntries, (id) => urlsOf.get(id))
     }
 
     // 无论初始加载是否成功都启用轮询：
     // 若启动时后台正好不可用，等后台恢复后下一轮轮询会自动切回 API 数据并触发前台刷新
-    schedulePolling(ctx, '文章/站点设置', pollPostsAndSettings);
+    schedulePolling(ctx, '文章/站点设置', pollPostsAndSettings)
   },
-};
+}
 
 /** 随笔加载器：API 优先，本地 markdown 兜底 */
 export const payloadNotesLoader: Loader = {
   name: 'payload-notes-loader',
   async load(ctx) {
-    const localBase = path.join(process.cwd(), 'src/content/notes');
-    const urlsOf = new Map<string, string>();
+    const localBase = path.join(process.cwd(), 'src/content/notes')
+    const urlsOf = new Map<string, string>()
 
-    let entries: MdEntry[] | null = null;
-    let fetchError: Error | null = null;
-    const stamps = await peekStamps();
+    let entries: MdEntry[] | null = null
+    let fetchError: Error | null = null
+    const stamps = await peekStamps()
     try {
-      const altMap = await loadMediaAltMap();
-      const apiEntries = await fetchNotes();
+      const altMap = await loadMediaAltMap()
+      const apiEntries = await fetchNotes()
       // 用 altMap 回填随笔封面 alt（如随笔封面也在 Media 表里配置了 alt）
       for (const e of apiEntries) {
-        const cover = e.data?.cover;
+        const cover = e.data?.cover
         if (typeof cover === 'string' && cover) {
-          const alt = altMap.get(cover);
-          if (alt) e.data.coverAlt = alt;
+          const alt = altMap.get(cover)
+          if (alt) e.data.coverAlt = alt
         }
       }
-      entries = apiEntries;
+      entries = apiEntries
     } catch (error) {
-      fetchError = error as Error;
+      fetchError = error as Error
     }
 
     if (entries) {
-      ctx.logger.info(`[payload-loader] 随笔：从后台 API 载入 ${entries.length} 条`);
-      await storeEntries(ctx, ctx.store, entries);
-      ctx.meta.set(DIGEST_KEYS.notes, ctx.generateDigest(JSON.stringify(entries)));
-      commitStamps(ctx, stamps, ['notes', 'media']);
+      ctx.logger.info(`[payload-loader] 随笔：从后台 API 载入 ${entries.length} 条`)
+      await storeEntries(ctx, ctx.store, entries)
+      ctx.meta.set(DIGEST_KEYS.notes, ctx.generateDigest(JSON.stringify(entries)))
+      commitStamps(ctx, stamps, ['notes', 'media'])
     } else {
       // 后台不可用 → 回退本地 markdown（dev 下没有真实兜底文件时改用 dev 假数据）
-      const base = markdownBaseFor(ctx, localBase);
-      const files = collectLocalMarkdown(base);
-      files.forEach(({ id, file }) => urlsOf.set(id, file));
-      const fallbackEntries = localEntries(files);
+      const base = markdownBaseFor(ctx, localBase)
+      const files = collectLocalMarkdown(base)
+      files.forEach(({ id, file }) => urlsOf.set(id, file))
+      const fallbackEntries = localEntries(files)
       ctx.logger.warn(
         `[payload-loader] 后台不可用（${fetchError?.message}），回退${sourceLabelOf(base)}：${fallbackEntries.length} 条`,
-      );
+      )
       if (fallbackEntries.length === 0) {
         ctx.logger.error(
           '[payload-loader] ⚠️ 后台拉取失败且没有任何本地 markdown 兜底：随笔页会显示「还没有随笔」。' +
             `请检查 PUBLIC_PAYLOAD_URL（当前解析为 ${PAYLOAD_URL}）。`,
-        );
+        )
       }
-      await storeEntries(ctx, ctx.store, fallbackEntries, (id) => urlsOf.get(id));
+      await storeEntries(ctx, ctx.store, fallbackEntries, (id) => urlsOf.get(id))
     }
 
     // 无论初始加载是否成功都启用轮询（理由同上：后台恢复后自动切回 API 数据）
-    schedulePolling(ctx, '随笔', pollNotes);
+    schedulePolling(ctx, '随笔', pollNotes)
   },
-};
+}
 
 /** 项目加载器：API 优先；项目已全部入库，无本地 markdown 兜底，只有 dev 假数据 */
 export const payloadProjectsLoader: Loader = {
   name: 'payload-projects-loader',
   async load(ctx) {
-    const stamps = await peekStamps();
+    const stamps = await peekStamps()
     try {
-      const entries = await fetchProjects();
-      ctx.logger.info(`[payload-loader] 项目：从后台 API 载入 ${entries.length} 条`);
+      const entries = await fetchProjects()
+      ctx.logger.info(`[payload-loader] 项目：从后台 API 载入 ${entries.length} 条`)
       for (const entry of entries) {
         // 单条脏数据跳过并计数，不让整批初始载入失败（同 storeEntries 的策略）
         try {
-          const data = await ctx.parseData({ id: entry.id, data: entry });
-          ctx.store.set({ id: entry.id, data });
+          const data = await ctx.parseData({ id: entry.id, data: entry })
+          ctx.store.set({ id: entry.id, data })
         } catch (error) {
-          ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+          ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`)
         }
       }
-      ctx.meta.set(DIGEST_KEYS.projects, ctx.generateDigest(JSON.stringify(entries)));
-      commitStamps(ctx, stamps, ['projects']);
+      ctx.meta.set(DIGEST_KEYS.projects, ctx.generateDigest(JSON.stringify(entries)))
+      commitStamps(ctx, stamps, ['projects'])
     } catch (error) {
-      ctx.logger.warn(`[payload-loader] 项目后台不可用（${(error as Error).message}），跳过`);
-      if (ctx.watcher) await storeFixtureProjects(ctx);
+      ctx.logger.warn(`[payload-loader] 项目后台不可用（${(error as Error).message}），跳过`)
+      if (ctx.watcher) await storeFixtureProjects(ctx)
     }
 
-    schedulePolling(ctx, '项目', pollProjects);
+    schedulePolling(ctx, '项目', pollProjects)
   },
-};
+}
 
 /**
  * 友链加载器：API 优先。
@@ -535,42 +531,42 @@ export const payloadProjectsLoader: Loader = {
 export const payloadFriendsLoader: Loader = {
   name: 'payload-friends-loader',
   async load(ctx) {
-    const stamps = await peekStamps();
+    const stamps = await peekStamps()
     try {
-      const entries = await fetchFriends();
-      ctx.logger.info(`[payload-loader] 友链：从后台 API 载入 ${entries.length} 条`);
+      const entries = await fetchFriends()
+      ctx.logger.info(`[payload-loader] 友链：从后台 API 载入 ${entries.length} 条`)
 
       // 先全部 parse 完再整体重建仓库（同 pollFriends）：
       // dev 的 content store 会持久化到 .astro/，**只 set 不 delete 的话，
       // 后台删掉的友链会永远残留在本地快照里** —— 表现为「后台已经没有这条，
       // 前台重启后还在」（2026-11-02 实测踩到）。
       // 先 parse 再 clear+set，避免中间空窗期读到空仓库。
-      const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = [];
+      const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = []
       for (const entry of entries) {
         try {
-          parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) });
+          parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) })
         } catch (error) {
-          ctx.logger.warn(`[payload-loader] 友链数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+          ctx.logger.warn(`[payload-loader] 友链数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`)
         }
       }
-      ctx.store.clear();
-      for (const { id, data } of parsed) ctx.store.set({ id, data });
+      ctx.store.clear()
+      for (const { id, data } of parsed) ctx.store.set({ id, data })
 
-      ctx.meta.set(DIGEST_KEYS.friends, ctx.generateDigest(JSON.stringify(entries)));
-      commitStamps(ctx, stamps, ['friends']);
+      ctx.meta.set(DIGEST_KEYS.friends, ctx.generateDigest(JSON.stringify(entries)))
+      commitStamps(ctx, stamps, ['friends'])
     } catch (error) {
       // 后台不可用时保留上一轮数据：构建期抖一下不该让整页友链消失
-      ctx.logger.warn(`[payload-loader] 友链后台不可用（${(error as Error).message}），保留上一轮数据`);
+      ctx.logger.warn(`[payload-loader] 友链后台不可用（${(error as Error).message}），保留上一轮数据`)
     }
 
-    schedulePolling(ctx, '友链', pollFriends);
+    schedulePolling(ctx, '友链', pollFriends)
   },
-};
+}
 
 /** touch 刷新信号文件，通知 dev 集成广播浏览器整页刷新 */
 function touchSyncMarker() {
   try {
-    writeFileSync(SYNC_MARKER, String(Date.now()));
+    writeFileSync(SYNC_MARKER, String(Date.now()))
   } catch {
     // 忽略写失败（仅在 dev 模式下需要）
   }
@@ -588,41 +584,40 @@ function touchSyncMarker() {
  */
 const pollingTimers = new Map<string, ReturnType<typeof setInterval>>()
 
-function schedulePolling(
-  ctx: LoaderContext,
-  label: string,
-  pollSource: (ctx: LoaderContext) => Promise<boolean>,
-) {
-  if (!ctx.watcher) return;
+function schedulePolling(ctx: LoaderContext, label: string, pollSource: (ctx: LoaderContext) => Promise<boolean>) {
+  if (!ctx.watcher) return
 
   // 先回收同一 loader 上一轮的轮询，再挂新的
   // 键用 ctx.collection：LoaderContext 上没有 name（name 属于 Loader 对象本身）
-  const previous = pollingTimers.get(ctx.collection);
-  if (previous) clearInterval(previous);
+  const previous = pollingTimers.get(ctx.collection)
+  if (previous) clearInterval(previous)
 
-  ctx.logger.info(`[payload-loader] 已启用 dev 自动同步（每 ${AUTO_REFRESH_MS / 1000}s 轮询 ${label}）`);
+  ctx.logger.info(`[payload-loader] 已启用 dev 自动同步（每 ${AUTO_REFRESH_MS / 1000}s 轮询 ${label}）`)
 
-  let running = false;
+  let running = false
   const poll = async () => {
-    if (running) return;
+    if (running) return
     // 探测退避期间跳过本轮：否则 fail-open（探测无结果→视为全部变化）会每 AUTO_REFRESH_MS 全量重拉
-    if (Date.now() < probeBackoffUntil) return;
-    running = true;
+    if (Date.now() < probeBackoffUntil) return
+    running = true
     try {
-      const changed = await pollSource(ctx);
+      const changed = await pollSource(ctx)
       if (changed) {
-        ctx.logger.info(`[payload-loader] ${label}：后台数据有变化，已自动同步`);
-        touchSyncMarker();
+        ctx.logger.info(`[payload-loader] ${label}：后台数据有变化，已自动同步`)
+        touchSyncMarker()
       }
     } catch (error) {
       // 后台暂时不可用：保持现有数据，等待下一轮
-      ctx.logger.warn(`[payload-loader] ${label}：自动同步失败（${(error as Error).message}）`);
+      ctx.logger.warn(`[payload-loader] ${label}：自动同步失败（${(error as Error).message}）`)
     } finally {
-      running = false;
+      running = false
     }
-  };
+  }
 
-  pollingTimers.set(ctx.collection, setInterval(() => void poll(), AUTO_REFRESH_MS));
+  pollingTimers.set(
+    ctx.collection,
+    setInterval(() => void poll(), AUTO_REFRESH_MS),
+  )
 }
 
 /**
@@ -639,123 +634,125 @@ function schedulePolling(
  *      stampDiffers 恒为 true，靠 digest 比较兜底防「每轮都 reload」）。
  */
 async function pollPostsAndSettings(ctx: LoaderContext): Promise<boolean> {
-  let changed = false;
-  const digests = await peekStamps();
+  let changed = false
+  const digests = await peekStamps()
 
   // Media alt 变更会直接影响前台图片 alt 展示；altMap 更新后，已存储的 markdown HTML
   // 里 <img alt=""> 是旧值，需重新 renderMarkdown 让 rehypeImgAttrs 用新 map 补齐
-  const mediaAltChanged = await refreshMediaAltMap(ctx, digests);
+  const mediaAltChanged = await refreshMediaAltMap(ctx, digests)
 
   if (stampDiffers(ctx, digests, 'posts') || mediaAltChanged) {
-    const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>();
-    const entries = await fetchPosts(altMap);
-    const nextDigest = ctx.generateDigest(JSON.stringify(entries));
-    const contentChanged = ctx.meta.get(DIGEST_KEYS.posts) !== nextDigest;
-    await storeEntries(ctx, ctx.store, entries);
-    ctx.meta.set(DIGEST_KEYS.posts, nextDigest);
-    commitStamps(ctx, digests, ['posts']);
-    changed = changed || contentChanged || mediaAltChanged;
+    const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>()
+    const entries = await fetchPosts(altMap)
+    const nextDigest = ctx.generateDigest(JSON.stringify(entries))
+    const contentChanged = ctx.meta.get(DIGEST_KEYS.posts) !== nextDigest
+    await storeEntries(ctx, ctx.store, entries)
+    ctx.meta.set(DIGEST_KEYS.posts, nextDigest)
+    commitStamps(ctx, digests, ['posts'])
+    changed = changed || contentChanged || mediaAltChanged
   }
 
   if (stampDiffers(ctx, digests, 'settings')) {
-    const data = await fetchSiteSettings();
+    const data = await fetchSiteSettings()
     // 拉到 null 说明这次请求失败：不置 changed、不落指纹（下一轮重试）。
     // 修复「探测成功 + 全量失败」时每 3s 误判变化触发整页 reload 的循环。
     if (data) {
-      const nextDigest = ctx.generateDigest(JSON.stringify(data));
-      const contentChanged = ctx.meta.get(DIGEST_KEYS.settings) !== nextDigest;
-      ctx.meta.set(DIGEST_KEYS.settings, nextDigest);
-      commitStamps(ctx, digests, ['settings']);
-      changed = changed || contentChanged;
+      const nextDigest = ctx.generateDigest(JSON.stringify(data))
+      const contentChanged = ctx.meta.get(DIGEST_KEYS.settings) !== nextDigest
+      ctx.meta.set(DIGEST_KEYS.settings, nextDigest)
+      commitStamps(ctx, digests, ['settings'])
+      changed = changed || contentChanged
     }
   }
 
   if (stampDiffers(ctx, digests, 'nav')) {
-    const navItems = await fetchNavItems();
+    const navItems = await fetchNavItems()
     // 同上：失败（null）时保持旧指纹、不刷新；[] 是合法的「导航清空」，照常应用
     if (navItems) {
-      const nextDigest = ctx.generateDigest(JSON.stringify(navItems));
-      const contentChanged = ctx.meta.get(DIGEST_KEYS.nav) !== nextDigest;
-      ctx.meta.set(DIGEST_KEYS.nav, nextDigest);
-      commitStamps(ctx, digests, ['nav']);
-      changed = changed || contentChanged;
+      const nextDigest = ctx.generateDigest(JSON.stringify(navItems))
+      const contentChanged = ctx.meta.get(DIGEST_KEYS.nav) !== nextDigest
+      ctx.meta.set(DIGEST_KEYS.nav, nextDigest)
+      commitStamps(ctx, digests, ['nav'])
+      changed = changed || contentChanged
     }
   }
 
-  return changed;
+  return changed
 }
 
 /** 轮询随笔：指纹有变化时更新 store，仅当正文真的变了（或 alt 映射变了）才触发刷新 */
 async function pollNotes(ctx: LoaderContext): Promise<boolean> {
-  const digests = await peekStamps();
-  const mediaAltChanged = await refreshMediaAltMap(ctx, digests);
-  if (!stampDiffers(ctx, digests, 'notes') && !mediaAltChanged) return false;
+  const digests = await peekStamps()
+  const mediaAltChanged = await refreshMediaAltMap(ctx, digests)
+  if (!stampDiffers(ctx, digests, 'notes') && !mediaAltChanged) return false
 
-  const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>();
-  const entries = await fetchNotes();
+  const altMap = mediaAltPromise ? await mediaAltPromise : new Map<string, string>()
+  const entries = await fetchNotes()
   for (const e of entries) {
-    const cover = e.data?.cover;
+    const cover = e.data?.cover
     if (typeof cover === 'string' && cover) {
-      const alt = altMap.get(cover);
-      if (alt) e.data.coverAlt = alt;
+      const alt = altMap.get(cover)
+      if (alt) e.data.coverAlt = alt
     }
   }
-  const nextDigest = ctx.generateDigest(JSON.stringify(entries));
-  const contentChanged = ctx.meta.get(DIGEST_KEYS.notes) !== nextDigest;
-  await storeEntries(ctx, ctx.store, entries);
+  const nextDigest = ctx.generateDigest(JSON.stringify(entries))
+  const contentChanged = ctx.meta.get(DIGEST_KEYS.notes) !== nextDigest
+  await storeEntries(ctx, ctx.store, entries)
   // 与 posts 路径对齐：store 写成功后再落 digest，中途抛错下一轮会重拉而不是静默漏同步
-  ctx.meta.set(DIGEST_KEYS.notes, nextDigest);
-  commitStamps(ctx, digests, ['notes']);
-  return contentChanged || mediaAltChanged;
+  ctx.meta.set(DIGEST_KEYS.notes, nextDigest)
+  commitStamps(ctx, digests, ['notes'])
+  return contentChanged || mediaAltChanged
 }
 
-/** 轮询项目：指纹有变化时清空并重新写入，仅当正文真的变了才触发刷新 */async function pollProjects(ctx: LoaderContext): Promise<boolean> {
-  const digests = await peekStamps();
-  if (!stampDiffers(ctx, digests, 'projects')) return false;
-  const entries = await fetchProjects();
-  const nextDigest = ctx.generateDigest(JSON.stringify(entries));
-  const contentChanged = ctx.meta.get(DIGEST_KEYS.projects) !== nextDigest;
+/** 轮询项目：指纹有变化时清空并重新写入，仅当正文真的变了才触发刷新 */ async function pollProjects(
+  ctx: LoaderContext,
+): Promise<boolean> {
+  const digests = await peekStamps()
+  if (!stampDiffers(ctx, digests, 'projects')) return false
+  const entries = await fetchProjects()
+  const nextDigest = ctx.generateDigest(JSON.stringify(entries))
+  const contentChanged = ctx.meta.get(DIGEST_KEYS.projects) !== nextDigest
   // 先全部 parse 完，再 clear + 同步逐条 set：await 不夹在 clear 和 set 之间，
   // 避免「已清空但新数据还在逐条 await」的空窗期让并发读取拿到空仓库
-  const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = [];
+  const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = []
   for (const entry of entries) {
     // 单条脏数据跳过并计数，不让整批轮询失败（同 storeEntries 的策略）
     try {
-      parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) });
+      parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) })
     } catch (error) {
-      ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+      ctx.logger.warn(`[payload-loader] 项目数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`)
     }
   }
-  ctx.store.clear();
+  ctx.store.clear()
   for (const { id, data } of parsed) {
-    ctx.store.set({ id, data });
+    ctx.store.set({ id, data })
   }
-  ctx.meta.set(DIGEST_KEYS.projects, nextDigest);
-  commitStamps(ctx, digests, ['projects']);
-  return contentChanged;
+  ctx.meta.set(DIGEST_KEYS.projects, nextDigest)
+  commitStamps(ctx, digests, ['projects'])
+  return contentChanged
 }
 
 /** 轮询友链：指纹有变化时整体重建，仅当实际内容变了才触发刷新 */
 async function pollFriends(ctx: LoaderContext): Promise<boolean> {
-  const digests = await peekStamps();
-  if (!stampDiffers(ctx, digests, 'friends')) return false;
-  const entries = await fetchFriends();
-  const nextDigest = ctx.generateDigest(JSON.stringify(entries));
-  const contentChanged = ctx.meta.get(DIGEST_KEYS.friends) !== nextDigest;
+  const digests = await peekStamps()
+  if (!stampDiffers(ctx, digests, 'friends')) return false
+  const entries = await fetchFriends()
+  const nextDigest = ctx.generateDigest(JSON.stringify(entries))
+  const contentChanged = ctx.meta.get(DIGEST_KEYS.friends) !== nextDigest
   // 同 pollProjects：先 parse 完再 clear+set，避免中间空窗期读到空仓库
-  const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = [];
+  const parsed: Array<{ id: string; data: Awaited<ReturnType<typeof ctx.parseData>> }> = []
   for (const entry of entries) {
     try {
-      parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) });
+      parsed.push({ id: entry.id, data: await ctx.parseData({ id: entry.id, data: entry }) })
     } catch (error) {
-      ctx.logger.warn(`[payload-loader] 友链数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`);
+      ctx.logger.warn(`[payload-loader] 友链数据校验失败，跳过 ${entry.id}: ${(error as Error).message}`)
     }
   }
-  ctx.store.clear();
+  ctx.store.clear()
   for (const { id, data } of parsed) {
-    ctx.store.set({ id, data });
+    ctx.store.set({ id, data })
   }
-  ctx.meta.set(DIGEST_KEYS.friends, nextDigest);
-  commitStamps(ctx, digests, ['friends']);
-  return contentChanged;
+  ctx.meta.set(DIGEST_KEYS.friends, nextDigest)
+  commitStamps(ctx, digests, ['friends'])
+  return contentChanged
 }

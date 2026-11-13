@@ -33,8 +33,7 @@ function fingerprint(value: string | undefined): string {
 
 /** 1×1 透明 PNG，最小可解码图片，用于跑通 sharp 与上传管线 */
 const PROBE_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk' +
-    'YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk' + 'YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
 )
 
@@ -206,9 +205,7 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
     }
   }
 
-  const { S3Client, HeadBucketCommand, PutObjectCommand, DeleteObjectCommand } = await import(
-    '@aws-sdk/client-s3'
-  )
+  const { S3Client, HeadBucketCommand, PutObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3')
   const client = new S3Client({
     endpoint: cfg.endpoint,
     region: 'us-east-1',
@@ -261,10 +258,7 @@ export async function runStorageSelfTest(): Promise<StorageSelfTestResult> {
   let createdId: number | string | undefined
   const payloadCreate = await timed(async () => {
     try {
-      const [{ getPayload }, { default: config }] = await Promise.all([
-        import('payload'),
-        import('@payload-config'),
-      ])
+      const [{ getPayload }, { default: config }] = await Promise.all([import('payload'), import('@payload-config')])
       const payload = await getPayload({ config })
       const doc = await payload.create({
         collection: 'media',

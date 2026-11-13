@@ -21,9 +21,9 @@ mkdirSync(dirname(out), { recursive: true })
 writeFileSync(
   out,
   '// 由 scripts/generate-preview-css.mjs 生成，勿手改。\n' +
-  'export const markdownPreviewCss = `\n' +
-  escaped +
-  '\n`\n',
+    'export const markdownPreviewCss = `\n' +
+    escaped +
+    '\n`\n',
   'utf8',
 )
 console.log(`done -> ${out} (${css.length} chars)`)

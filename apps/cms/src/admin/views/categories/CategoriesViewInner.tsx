@@ -39,7 +39,7 @@ function buildTree(docs: CategoryDoc[]): TreeNode[] {
     else childMap.set(p, [...(childMap.get(p) ?? []), d])
   }
   const cmp = (a: CategoryDoc, b: CategoryDoc) =>
-    (Number(a.sort ?? 0) - Number(b.sort ?? 0)) || String(a.name).localeCompare(String(b.name), 'zh')
+    Number(a.sort ?? 0) - Number(b.sort ?? 0) || String(a.name).localeCompare(String(b.name), 'zh')
 
   const toNode = (d: CategoryDoc, seen: Set<number>): TreeNode => {
     seen.add(d.id)
@@ -252,7 +252,13 @@ export const CategoriesViewInner = () => {
             <button type="button" className="cat__tool-btn" onClick={expandAll} title="全部展开" aria-label="全部展开">
               ⇊
             </button>
-            <button type="button" className="cat__tool-btn" onClick={collapseAll} title="全部折叠" aria-label="全部折叠">
+            <button
+              type="button"
+              className="cat__tool-btn"
+              onClick={collapseAll}
+              title="全部折叠"
+              aria-label="全部折叠"
+            >
               ⇈
             </button>
             <button
@@ -325,9 +331,7 @@ export const CategoriesViewInner = () => {
                   ) : (
                     <span className="cat__disclosure-spacer" />
                   )}
-                  <span className="cat__name">
-                    {d.name}
-                  </span>
+                  <span className="cat__name">{d.name}</span>
                   {d.slug && <code className="cat__slug">{d.slug}</code>}
                   {d.visible === false && <i className="cat__tag cat__tag--hidden">已隐藏</i>}
                   <span className="cat__weight">{Number(d.sort ?? 0) || ''}</span>
@@ -335,11 +339,7 @@ export const CategoriesViewInner = () => {
                     <button type="button" className="drafts__op" onClick={() => setModal({ mode: 'edit', doc: d })}>
                       编辑
                     </button>
-                    <button
-                      type="button"
-                      className="drafts__op drafts__op--danger"
-                      onClick={() => setConfirmDel(d)}
-                    >
+                    <button type="button" className="drafts__op drafts__op--danger" onClick={() => setConfirmDel(d)}>
                       删除
                     </button>
                   </span>
@@ -368,9 +368,7 @@ export const CategoriesViewInner = () => {
         <div className="drafts__confirm-mask" onClick={() => setConfirmDel(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认删除</h3>
-            <p>
-              确定删除分类「{confirmDel.name}」吗？被内容引用或有子分类时会被拦截。
-            </p>
+            <p>确定删除分类「{confirmDel.name}」吗？被内容引用或有子分类时会被拦截。</p>
             <div className="drafts__confirm-actions">
               <button type="button" className="drafts__op" onClick={() => setConfirmDel(null)}>
                 取消
@@ -393,16 +391,19 @@ export const CategoriesViewInner = () => {
         <div className="drafts__confirm-mask" onClick={() => !batchBusy && setConfirmBatchDelete(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认批量删除</h3>
-            <p>
-              确定删除选中的 {confirmBatchDelete.length} 个分类吗？被内容引用或有子分类的分类会被拦截。
-            </p>
+            <p>确定删除选中的 {confirmBatchDelete.length} 个分类吗？被内容引用或有子分类的分类会被拦截。</p>
             {batchProgress && (
               <p className="manage__delete-progress">
                 删除中 {batchProgress.current} / {batchProgress.total}…
               </p>
             )}
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" disabled={batchBusy} onClick={() => setConfirmBatchDelete(null)}>
+              <button
+                type="button"
+                className="drafts__op"
+                disabled={batchBusy}
+                onClick={() => setConfirmBatchDelete(null)}
+              >
                 取消
               </button>
               <button

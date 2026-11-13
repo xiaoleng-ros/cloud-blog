@@ -93,9 +93,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const fetchFriends = () =>
-  requestJson<{ docs: FriendDoc[] }>('/api/friends?limit=0&sort=sortOrder&depth=0').then(
-    (json) => json.docs ?? [],
-  )
+  requestJson<{ docs: FriendDoc[] }>('/api/friends?limit=0&sort=sortOrder&depth=0').then((json) => json.docs ?? [])
 
 /**
  * Payload 的 POST / PATCH 返回的是 `{ doc, message }`，**不是文档本身**。
@@ -110,8 +108,7 @@ const patchFriend = (id: number, data: Record<string, unknown>) =>
     body: JSON.stringify(data),
   }).then((json) => json.doc)
 
-const removeFriend = (id: number) =>
-  requestJson<unknown>(`/api/friends/${id}`, { method: 'DELETE' })
+const removeFriend = (id: number) => requestJson<unknown>(`/api/friends/${id}`, { method: 'DELETE' })
 
 export const FriendsViewInner = () => {
   const [rows, setRows] = useState<FriendDoc[]>([])
@@ -121,9 +118,7 @@ export const FriendsViewInner = () => {
   const [busyId, setBusyId] = useState<number | null>(null)
   const [confirmDel, setConfirmDel] = useState<FriendDoc | null>(null)
   /** null = 弹窗关闭；mode=create 空表单，mode=edit 回填该记录 */
-  const [dialog, setDialog] = useState<{ mode: 'create' } | { mode: 'edit'; doc: FriendDoc } | null>(
-    null,
-  )
+  const [dialog, setDialog] = useState<{ mode: 'create' } | { mode: 'edit'; doc: FriendDoc } | null>(null)
 
   const { toast, show } = useToast()
 
@@ -137,8 +132,8 @@ export const FriendsViewInner = () => {
     } finally {
       setLoading(false)
     }
-    // show 来自 useToast，引用稳定，不必进依赖
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 依赖刻意留空：setRows/setLoading 是 useState 的稳定 setter，
+    // show 来自 useToast（内部 useRef 包裹，引用恒定），都不会让闭包过期。
   }, [])
 
   useEffect(() => {
@@ -161,9 +156,15 @@ export const FriendsViewInner = () => {
       if (status !== 'all' && String(row.status ?? 'pending') !== status) return false
       if (!kw) return true
       return (
-        String(row.name ?? '').toLowerCase().includes(kw) ||
-        String(row.url ?? '').toLowerCase().includes(kw) ||
-        String(row.description ?? '').toLowerCase().includes(kw)
+        String(row.name ?? '')
+          .toLowerCase()
+          .includes(kw) ||
+        String(row.url ?? '')
+          .toLowerCase()
+          .includes(kw) ||
+        String(row.description ?? '')
+          .toLowerCase()
+          .includes(kw)
       )
     })
   }, [rows, status, keyword])
@@ -177,11 +178,7 @@ export const FriendsViewInner = () => {
        * 界面上也必须立刻切过去。当前筛选不匹配时（比如在「已隐藏」里点通过），
        * rows 一变 filtered 就重算，这张卡片自然就从列表里消失了，不需要刷新。
        */
-      setRows((prev) =>
-        prev.map((item) =>
-          item.id === row.id ? { ...item, ...(updated ?? {}), status: next } : item,
-        ),
-      )
+      setRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, ...(updated ?? {}), status: next } : item)))
       show('success', `「${row.name}」已${STATUS_META[next].label.replace('已', '')}`)
     } catch (e) {
       show('error', describeApiError(e))
@@ -204,9 +201,7 @@ export const FriendsViewInner = () => {
       return
     }
     if (mode === 'create') {
-      setRows((prev) =>
-        [...prev, doc].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id),
-      )
+      setRows((prev) => [...prev, doc].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.id - b.id))
     } else {
       setRows((prev) => prev.map((item) => (item.id === doc.id ? { ...item, ...doc } : item)))
     }
@@ -233,11 +228,7 @@ export const FriendsViewInner = () => {
       <PageHeader
         title="友链管理"
         actions={
-          <button
-            type="button"
-            className="manage__action friends__new"
-            onClick={() => setDialog({ mode: 'create' })}
-          >
+          <button type="button" className="manage__action friends__new" onClick={() => setDialog({ mode: 'create' })}>
             + 新建友链
           </button>
         }
@@ -288,11 +279,7 @@ export const FriendsViewInner = () => {
           </span>
           <h3>还没有友链</h3>
           <p>访客在评论区留言或发邮件申请后，在这里审核通过就会出现在前台</p>
-          <button
-            type="button"
-            className="manage__action friends__new"
-            onClick={() => setDialog({ mode: 'create' })}
-          >
+          <button type="button" className="manage__action friends__new" onClick={() => setDialog({ mode: 'create' })}>
             新建第一条
           </button>
         </div>
@@ -419,9 +406,7 @@ export const FriendsViewInner = () => {
         <div className="drafts__confirm-mask" onClick={() => setConfirmDel(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认删除</h3>
-            <p>
-              确定删除友链「{confirmDel.name}」吗？删除后前台会立即消失，且无法恢复。
-            </p>
+            <p>确定删除友链「{confirmDel.name}」吗？删除后前台会立即消失，且无法恢复。</p>
             <div className="drafts__confirm-actions">
               <button type="button" className="drafts__op" onClick={() => setConfirmDel(null)}>
                 取消

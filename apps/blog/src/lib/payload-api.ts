@@ -11,12 +11,12 @@
  * 注意：node:http 只支持 http 协议，线上后台是 https，必须按协议选择对应模块，
  * 否则会报 `Protocol "https:" not supported. Expected "http:"` 导致构建时拉不到数据。
  */
-import { get as httpGet } from 'node:http';
-import { get as httpsGet } from 'node:https';
-import { safeHref } from 'cloud-blog/shared/html-safety';
-import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils';
-import { normalizeSiteHref } from 'cloud-blog/shared/free-text-lines';
-import { isExternalHref } from 'cloud-blog/shared/site-pages';
+import { get as httpGet } from 'node:http'
+import { get as httpsGet } from 'node:https'
+import { safeHref } from 'cloud-blog/shared/html-safety'
+import { DEFAULT_PROJECT_ICON, sanitizeTerm } from 'cloud-blog/shared/post-utils'
+import { normalizeSiteHref } from 'cloud-blog/shared/free-text-lines'
+import { isExternalHref } from 'cloud-blog/shared/site-pages'
 
 /**
  * 后台地址解析优先级：
@@ -29,137 +29,135 @@ import { isExternalHref } from 'cloud-blog/shared/site-pages';
  * 导致连接后台超时（TypeError: network error）。
  */
 function resolvePayloadUrl(): string {
-  const explicit = import.meta.env.PUBLIC_PAYLOAD_URL?.trim();
-  const siteUrl = import.meta.env.SITE_URL?.trim();
-  const base = explicit || siteUrl || 'http://localhost:9527';
-  return base
-    .trim()
-    .replace(/\/+$/, '')
-    // 容忍误填成 https://domain/api 的写法
-    .replace(/\/api$/i, '')
-    .replace(/localhost/gi, '127.0.0.1');
+  const explicit = import.meta.env.PUBLIC_PAYLOAD_URL?.trim()
+  const siteUrl = import.meta.env.SITE_URL?.trim()
+  const base = explicit || siteUrl || 'http://localhost:9527'
+  return (
+    base
+      .trim()
+      .replace(/\/+$/, '')
+      // 容忍误填成 https://domain/api 的写法
+      .replace(/\/api$/i, '')
+      .replace(/localhost/gi, '127.0.0.1')
+  )
 }
 
-export const PAYLOAD_URL = resolvePayloadUrl();
+export const PAYLOAD_URL = resolvePayloadUrl()
 
 /** 基于 node:http 的 GET+JSON 请求，超时或非 2xx 时抛错
  *  超时 30s：容忍后台 Turbopack 冷编译 + Supabase pooler 偶发慢查询（免费档连接池
  *  在并发下单查询可达 20s，20s 超时刚好踩在边界上会误杀正常请求） */
 function fetchJson<T>(path: string, timeoutMs = 30000): Promise<T> {
-  const url = `${PAYLOAD_URL}${path}`;
+  const url = `${PAYLOAD_URL}${path}`
   // http / https 共用同一套 options 与回调签名，按协议选择模块
-  const get = url.startsWith('https:') ? httpsGet : httpGet;
+  const get = url.startsWith('https:') ? httpsGet : httpGet
   return new Promise<T>((resolve, reject) => {
-    const req = get(
-      url,
-      { timeout: timeoutMs, headers: { accept: 'application/json' } },
-      (res) => {
-        let raw = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => (raw += chunk));
-        res.on('error', (error) => reject(error));
-        res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              resolve(JSON.parse(raw) as T);
-            } catch (error) {
-              reject(new Error(`Payload API JSON 解析失败: ${(error as Error).message}`));
-            }
-          } else {
-            reject(new Error(`Payload API HTTP ${res.statusCode}: ${path}`));
+    const req = get(url, { timeout: timeoutMs, headers: { accept: 'application/json' } }, (res) => {
+      let raw = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk) => (raw += chunk))
+      res.on('error', (error) => reject(error))
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(raw) as T)
+          } catch (error) {
+            reject(new Error(`Payload API JSON 解析失败: ${(error as Error).message}`))
           }
-        });
-      },
-    );
-    req.on('timeout', () => req.destroy(new Error(`Payload API 请求超时: ${path}`)));
-    req.on('error', (error) => reject(error));
+        } else {
+          reject(new Error(`Payload API HTTP ${res.statusCode}: ${path}`))
+        }
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error(`Payload API 请求超时: ${path}`)))
+    req.on('error', (error) => reject(error))
     // 保险：响应阶段 socket 可能在 req/res 之外发出 error，直接监听底层 socket
     req.once('socket', (socket) => {
-      socket.on('error', (error) => reject(error));
-    });
-  });
+      socket.on('error', (error) => reject(error))
+    })
+  })
 }
 
 /** Payload REST 集合响应 */
 interface PayloadListResponse<T> {
-  docs: T[];
-  totalDocs: number;
+  docs: T[]
+  totalDocs: number
 }
 
 /** Payload 文档的浅关系字段（depth=1 时展开为对象） */
 interface RefDoc {
-  id: number;
-  name: string;
-  slug?: string;
+  id: number
+  name: string
+  slug?: string
 }
 
 /** Payload posts 集合的 API 形状（categories 为单选关系） */
 interface ApiPost {
-  id: number;
-  title: string;
-  createdAt: string;
-  description?: string | null;
-  cover?: string | null;
-  categories?: RefDoc | number;
-  tags?: (RefDoc | number)[];
-  keywords?: string | null;
-  ai?: string | null;
-  sticky?: number | null;
-  status: 'draft' | 'published';
-  content?: string | null;
+  id: number
+  title: string
+  createdAt: string
+  description?: string | null
+  cover?: string | null
+  categories?: RefDoc | number
+  tags?: (RefDoc | number)[]
+  keywords?: string | null
+  ai?: string | null
+  sticky?: number | null
+  status: 'draft' | 'published'
+  content?: string | null
 }
 
 /** Payload notes 集合的 API 形状（categories 为单选关系） */
 interface ApiNote {
-  id: number;
-  date: string;
-  title?: string | null;
-  mood?: string | null;
-  categories?: RefDoc | number;
-  status?: string | null;
-  tags?: (RefDoc | number)[];
-  content?: string | null;
+  id: number
+  date: string
+  title?: string | null
+  mood?: string | null
+  categories?: RefDoc | number
+  status?: string | null
+  tags?: (RefDoc | number)[]
+  content?: string | null
 }
 
 /** 转换给 content schema 使用的 markdown 条目（id + data + body） */
 export interface MdEntry {
-  id: string;
-  data: Record<string, unknown>;
-  body: string;
+  id: string
+  data: Record<string, unknown>
+  body: string
 }
 
 /** Payload projects 集合的 API 形状 */
 interface ApiProject {
-  id: number;
-  group: string;
-  groupDescription?: string | null;
-  title: string;
-  owner?: string | null;
-  description?: string | null;
-  icon?: string | null;
-  href?: string | null;
-  articleHref?: string | null;
-  stars?: number | null;
-  tags?: string | null;
-  sortOrder?: number | null;
-  status: string;
+  id: number
+  group: string
+  groupDescription?: string | null
+  title: string
+  owner?: string | null
+  description?: string | null
+  icon?: string | null
+  href?: string | null
+  articleHref?: string | null
+  stars?: number | null
+  tags?: string | null
+  sortOrder?: number | null
+  status: string
 }
 
 /** 关于页项目条目（来自后台 projects 集合）。用 type 而非 interface：
  *  接口没有隐式索引签名，无法作为 Record<string, unknown> 传给 loader 的 ctx.parseData */
 export type ProjectEntry = {
-  id: string;
-  group: string;
-  groupDescription?: string;
-  title: string;
-  owner?: string;
-  description?: string;
-  icon: string;
-  href?: string;
-  articleHref?: string;
-  stars: number;
-  tags?: string[];
-  sortOrder: number;
+  id: string
+  group: string
+  groupDescription?: string
+  title: string
+  owner?: string
+  description?: string
+  icon: string
+  href?: string
+  articleHref?: string
+  stars: number
+  tags?: string[]
+  sortOrder: number
 }
 
 /**
@@ -168,13 +166,13 @@ export type ProjectEntry = {
  * 数字只当无效条目丢弃（不渲染为 "123" 假标签）；若同一条目还有已展开的 name，照常保留。
  */
 function namesOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] | undefined {
-  if (!refs) return undefined;
-  const arr = Array.isArray(refs) ? refs : [refs];
+  if (!refs) return undefined
+  const arr = Array.isArray(refs) ? refs : [refs]
   const names = arr
     .filter((r): r is RefDoc => typeof r === 'object' && r !== null && !Number.isNaN(r.id))
     .map((r) => r.name)
-    .filter((n): n is string => typeof n === 'string' && n.trim() !== '');
-  return names.length > 0 ? names : undefined;
+    .filter((n): n is string => typeof n === 'string' && n.trim() !== '')
+  return names.length > 0 ? names : undefined
 }
 
 /**
@@ -182,29 +180,30 @@ function namesOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] 
  * 文章 URL 里的分类段优先用 slug。slug 缺失的位置放空串（不是跳过），
  * 保证 categorySlugs[i] 永远对应 categories[i]；全空时返回 undefined。
  */
-function slugsOf(
-  refs?: (RefDoc | number)[] | RefDoc | number | null,
-): string[] | undefined {
-  if (!refs) return undefined;
-  const arr = Array.isArray(refs) ? refs : [refs];
+function slugsOf(refs?: (RefDoc | number)[] | RefDoc | number | null): string[] | undefined {
+  if (!refs) return undefined
+  const arr = Array.isArray(refs) ? refs : [refs]
   const slugs = arr
     .filter((r): r is RefDoc => typeof r === 'object' && r !== null && !Number.isNaN(r.id))
-    .map((r) => (typeof r.slug === 'string' ? r.slug : ''));
-  return slugs.some((s) => s.trim() !== '') ? slugs : undefined;
+    .map((r) => (typeof r.slug === 'string' ? r.slug : ''))
+  return slugs.some((s) => s.trim() !== '') ? slugs : undefined
 }
 
 /** 把「每行一个」的文本拆为数组 */
 function linesOf(text?: string | null): string[] | undefined {
-  if (!text) return undefined;
-  const list = text.split('\n').map((s) => s.trim()).filter(Boolean);
-  return list.length > 0 ? list : undefined;
+  if (!text) return undefined
+  const list = text
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return list.length > 0 ? list : undefined
 }
 
 /** Payload media 集合的 API 形状（只关心 url 与 alt） */
 interface ApiMedia {
-  id: number;
-  url?: string | null;
-  alt?: string | null;
+  id: number
+  url?: string | null
+  alt?: string | null
 }
 
 /**
@@ -213,15 +212,15 @@ interface ApiMedia {
  * @returns 归一化后的路径部分，供 altMap 二次命中
  */
 function basenameOfUrl(url: string): string {
-  let path = url;
+  let path = url
   try {
     if (/^https?:\/\//.test(path)) {
-      path = new URL(path).pathname;
+      path = new URL(path).pathname
     }
   } catch {
     // 非法 URL 时按原样处理
   }
-  return path.split('#')[0];
+  return path.split('#')[0]
 }
 
 /**
@@ -240,10 +239,10 @@ export interface SyncDigests {
  */
 export async function fetchSyncDigest(timeoutMs = 15000): Promise<SyncDigests | null> {
   try {
-    return await fetchJson<SyncDigests>('/api/blog-sync?digest=1', timeoutMs);
+    return await fetchJson<SyncDigests>('/api/blog-sync?digest=1', timeoutMs)
   } catch (error) {
-    console.warn(`[payload-api] 指纹探测失败: ${(error as Error).message}`);
-    return null;
+    console.warn(`[payload-api] 指纹探测失败: ${(error as Error).message}`)
+    return null
   }
 }
 
@@ -258,21 +257,21 @@ export async function fetchSyncDigest(timeoutMs = 15000): Promise<SyncDigests | 
  *  绝对 URL，都能命中 alt。原实现只存「原值 + basename」两形态，
  *  正文里带锚点/查询串的同图对不上，alt 缺失。 */
 function urlNormalizationKeys(url: string): string[] {
-  const noHash = url.split('#')[0];
-  const noQuery = noHash.split('?')[0];
-  let pathOnly = noQuery;
+  const noHash = url.split('#')[0]
+  const noQuery = noHash.split('?')[0]
+  let pathOnly = noQuery
   try {
-    if (/^https?:\/\//.test(noQuery)) pathOnly = new URL(noQuery).pathname;
+    if (/^https?:\/\//.test(noQuery)) pathOnly = new URL(noQuery).pathname
   } catch {
     // 非法 URL 时按原样处理
   }
-  const keys = new Set<string>([url, noHash, noQuery]);
-  if (pathOnly && pathOnly !== noQuery) keys.add(pathOnly);
-  return [...keys];
+  const keys = new Set<string>([url, noHash, noQuery])
+  if (pathOnly && pathOnly !== noQuery) keys.add(pathOnly)
+  return [...keys]
 }
 
 export async function fetchMediaAltMap(): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+  const map = new Map<string, string>()
   try {
     // ⚠ select 里必须带 filename：cloud-storage 插件的 url 字段是 afterRead 钩子
     // 按 data.filename 现算出来的虚拟字段，不是库里的列。只选 url/alt 时钩子拿不到
@@ -280,40 +279,37 @@ export async function fetchMediaAltMap(): Promise<Map<string, string>> {
     // 表现只是「正文图片永远没有 alt」。实测：不选 filename 时 6 条 media 里 0 条有 url。
     const { docs } = await fetchJson<PayloadListResponse<ApiMedia>>(
       '/api/media?limit=0&select[url]=url&select[alt]=alt&select[filename]=filename',
-    );
+    )
     for (const doc of docs) {
-      const url = doc?.url;
-      const alt = typeof doc?.alt === 'string' ? doc.alt.trim() : undefined;
-      if (!url || !alt) continue;
-      for (const key of urlNormalizationKeys(url)) map.set(key, alt);
+      const url = doc?.url
+      const alt = typeof doc?.alt === 'string' ? doc.alt.trim() : undefined
+      if (!url || !alt) continue
+      for (const key of urlNormalizationKeys(url)) map.set(key, alt)
       // 兜底：按 basename 再存一份，让 markdown 里的相对路径也能命中
-      map.set(basenameOfUrl(url), alt);
+      map.set(basenameOfUrl(url), alt)
     }
   } catch (error) {
     // 拉取失败不影响前台构建，回退为「无 alt」渲染
-    console.warn(
-      `[payload-api] Media alt 拉取失败: ${(error as Error).message}`,
-    );
+    console.warn(`[payload-api] Media alt 拉取失败: ${(error as Error).message}`)
   }
-  return map;
+  return map
 }
 
 /** 拉取文章列表并转为 markdown 条目（按数字主键作为 id，与前台路径 /posts/{分类标识}/{数字ID} 一致）
  * @param altMap Media 集合 url → alt 映射；若文章封面在 Media 表里配了 alt，一并写入 data.coverAlt
  */
 export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[]> {
-  const { docs } = await fetchJson<PayloadListResponse<ApiPost>>(
-    '/api/posts?depth=1&limit=0&sort=-sticky,-createdAt',
-  );
+  const { docs } = await fetchJson<PayloadListResponse<ApiPost>>('/api/posts?depth=1&limit=0&sort=-sticky,-createdAt')
 
   return docs
     .filter((doc) => doc.status === 'published')
     .map((doc) => {
-      const rawCover = doc.cover ?? undefined;
+      const rawCover = doc.cover ?? undefined
       // cover 会进 og:image / JSON-LD / <img>：过一次协议白名单，
       // 协议相对（//evil.com/x.png）/javascript: 之类的后台脏值回落默认封面
-      const cover = rawCover ? safeHref(rawCover, '/covers/default-cover.svg') : undefined;
-      const coverAlt = cover && altMap ? (rawCover ? altMap.get(rawCover) : undefined) ?? altMap.get(cover) ?? undefined : undefined;
+      const cover = rawCover ? safeHref(rawCover, '/covers/default-cover.svg') : undefined
+      const coverAlt =
+        cover && altMap ? ((rawCover ? altMap.get(rawCover) : undefined) ?? altMap.get(cover) ?? undefined) : undefined
       return {
         // id 使用数字主键：前台路径 /posts/{分类标识}/{数字ID}
         id: String(doc.id),
@@ -338,74 +334,74 @@ export async function fetchPosts(altMap?: Map<string, string>): Promise<MdEntry[
           sticky: doc.sticky ?? undefined,
         },
         body: doc.content ?? '',
-      };
-    });
+      }
+    })
 }
 
 /** 拉取随笔列表并转为 markdown 条目（以 date 作为 id） */
 export async function fetchNotes(): Promise<MdEntry[]> {
-  const { docs } = await fetchJson<PayloadListResponse<ApiNote>>(
-    '/api/notes?depth=1&limit=0&sort=date',
-  );
+  const { docs } = await fetchJson<PayloadListResponse<ApiNote>>('/api/notes?depth=1&limit=0&sort=date')
 
-  return docs
-    // 随笔同样区分草稿/已发布，前台只展示已发布
-    .filter((doc) => doc.status === 'published')
-    .map((doc) => ({
-      // 日期前 10 位保持与本地 markdown 文件命名一致，再拼接后台文档 id：
-      // 只用日期时同一天的多条随笔会共用同一个 id，后进 store 的会静默覆盖前一条
-      id: `${String(doc.date).slice(0, 10)}-${doc.id}`,
-      data: {
-        date: doc.date,
-        title: doc.title ?? undefined,
-        mood: doc.mood ?? undefined,
-        tags: namesOf(doc.tags)?.map(sanitizeTerm).filter(Boolean) || undefined,
-      },
-      body: doc.content ?? '',
-    }));
+  return (
+    docs
+      // 随笔同样区分草稿/已发布，前台只展示已发布
+      .filter((doc) => doc.status === 'published')
+      .map((doc) => ({
+        // 日期前 10 位保持与本地 markdown 文件命名一致，再拼接后台文档 id：
+        // 只用日期时同一天的多条随笔会共用同一个 id，后进 store 的会静默覆盖前一条
+        id: `${String(doc.date).slice(0, 10)}-${doc.id}`,
+        data: {
+          date: doc.date,
+          title: doc.title ?? undefined,
+          mood: doc.mood ?? undefined,
+          tags: namesOf(doc.tags)?.map(sanitizeTerm).filter(Boolean) || undefined,
+        },
+        body: doc.content ?? '',
+      }))
+  )
 }
 
 /** 站点设置（来自后台 Global 单例）；不可用时返回 null */
 export async function fetchSiteSettings(): Promise<Record<string, any> | null> {
   try {
-    const data = await fetchJson<Record<string, any>>('/api/globals/site-settings');
-    return data;
+    const data = await fetchJson<Record<string, any>>('/api/globals/site-settings')
+    return data
   } catch {
-    return null;
+    return null
   }
 }
 
 /** 「更多」面板条目（来自后台「导航管理」Global 的 morePanel 数组） */
 export interface MorePanelItem {
-  label: string;
-  href: string;
-  icon?: string;
-  external?: boolean;
+  label: string
+  href: string
+  icon?: string
+  external?: boolean
 }
 
 /** 顶部导航项：比更多面板少 icon，但同样带 external（决定是否新标签打开） */
 export interface NavLinkItem {
-  label: string;
-  href: string;
-  external?: boolean;
+  label: string
+  href: string
+  external?: boolean
 }
 
 /** 后台 navigation Global 的 API 形状（结构化数组，替代旧 textarea 方案） */
 interface NavigationGlobal {
   topNav?: Array<{
-    label?: string;
-    href?: string;
-    sort?: number;
-    visible?: boolean;
-  }> | null;
+    label?: string
+    href?: string
+    sort?: number
+    visible?: boolean
+  }> | null
   morePanel?: Array<{
-    label?: string;
-    href?: string;
-    icon?: string;
-    external?: boolean;
-    sort?: number;
-    visible?: boolean;
-  }> | null;
+    label?: string
+    href?: string
+    icon?: string
+    external?: boolean
+    sort?: number
+    visible?: boolean
+  }> | null
 }
 
 /**
@@ -418,7 +414,7 @@ interface NavigationGlobal {
  */
 export async function fetchNavItems(): Promise<NavLinkItem[] | null> {
   try {
-    const data = await fetchJson<NavigationGlobal>('/api/globals/navigation');
+    const data = await fetchJson<NavigationGlobal>('/api/globals/navigation')
     const items = (data?.topNav ?? [])
       .filter((i) => i.visible !== false && i.label?.trim() && i.href?.trim())
       .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
@@ -426,10 +422,10 @@ export async function fetchNavItems(): Promise<NavLinkItem[] | null> {
         href: normalizeSiteHref(i.href!.trim()),
         label: i.label!.trim(),
         external: isExternalHref(i.href!),
-      }));
-    return items;
+      }))
+    return items
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -440,7 +436,7 @@ export async function fetchNavItems(): Promise<NavLinkItem[] | null> {
  */
 export async function fetchMorePanelItems(): Promise<MorePanelItem[] | null> {
   try {
-    const data = await fetchJson<NavigationGlobal>('/api/globals/navigation');
+    const data = await fetchJson<NavigationGlobal>('/api/globals/navigation')
     const items = (data?.morePanel ?? [])
       .filter((i) => i.visible !== false && i.label?.trim())
       .sort((a, b) => Number(a.sort ?? 0) - Number(b.sort ?? 0))
@@ -449,74 +445,72 @@ export async function fetchMorePanelItems(): Promise<MorePanelItem[] | null> {
         href: normalizeSiteHref((i.href ?? '').trim()),
         icon: i.icon?.trim() || undefined,
         external: i.external === true,
-      }));
-    return items;
+      }))
+    return items
   } catch {
-    return null;
+    return null
   }
 }
 
 /** Payload friends 集合的 API 形状 */
 interface ApiFriend {
-  id: number;
-  name: string;
-  url: string;
-  description?: string | null;
-  avatar?: string | null;
-  group?: string | null;
-  groupDescription?: string | null;
-  note?: string | null;
-  sortOrder?: number | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  status: string;
+  id: number
+  name: string
+  url: string
+  description?: string | null
+  avatar?: string | null
+  group?: string | null
+  groupDescription?: string | null
+  note?: string | null
+  sortOrder?: number | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  status: string
 }
 
 /** 友链条目（/friends 页）。用 type 而非 interface：理由同 ProjectEntry（要能当 Record 传给 parseData） */
 export type FriendEntry = {
-  id: string;
-  name: string;
-  url: string;
-  description?: string;
-  avatar?: string;
-  group: string;
-  groupDescription?: string;
-  note?: string;
-  sortOrder: number;
-  createdAt?: string;
-  updatedAt?: string;
-};
+  id: string
+  name: string
+  url: string
+  description?: string
+  avatar?: string
+  group: string
+  groupDescription?: string
+  note?: string
+  sortOrder: number
+  createdAt?: string
+  updatedAt?: string
+}
 
 /** 拉取已通过的友链（按 sortOrder 升序） */
 export async function fetchFriends(): Promise<FriendEntry[]> {
-  const { docs } = await fetchJson<PayloadListResponse<ApiFriend>>(
-    '/api/friends?limit=0&sort=sortOrder&depth=0',
-  );
+  const { docs } = await fetchJson<PayloadListResponse<ApiFriend>>('/api/friends?limit=0&sort=sortOrder&depth=0')
 
-  return docs
-    // 后台 access 已过滤，这里再挡一次：匿名 Access-Control 配错时不会把待审内容带上线
-    .filter((doc) => doc.status === 'published')
-    .map((doc) => ({
-      id: String(doc.id),
-      name: String(doc.name ?? ''),
-      // 站外地址：协议白名单兜底，非法值退化成惰性 '#'（与 projects 的 href 同策略）
-      url: safeHref(doc.url, '#'),
-      description: doc.description ?? undefined,
-      avatar: doc.avatar ? safeHref(doc.avatar, '') || undefined : undefined,
-      group: doc.group?.trim() || '朋友们',
-      groupDescription: doc.groupDescription ?? undefined,
-      note: doc.note ?? undefined,
-      sortOrder: Number(doc.sortOrder ?? 0),
-      createdAt: doc.createdAt ?? undefined,
-      updatedAt: doc.updatedAt ?? undefined,
-    }));
+  return (
+    docs
+      // 后台 access 已过滤，这里再挡一次：匿名 Access-Control 配错时不会把待审内容带上线
+      .filter((doc) => doc.status === 'published')
+      .map((doc) => ({
+        id: String(doc.id),
+        name: String(doc.name ?? ''),
+        // 站外地址：协议白名单兜底，非法值退化成惰性 '#'（与 projects 的 href 同策略）
+        url: safeHref(doc.url, '#'),
+        description: doc.description ?? undefined,
+        avatar: doc.avatar ? safeHref(doc.avatar, '') || undefined : undefined,
+        group: doc.group?.trim() || '朋友们',
+        groupDescription: doc.groupDescription ?? undefined,
+        note: doc.note ?? undefined,
+        sortOrder: Number(doc.sortOrder ?? 0),
+        createdAt: doc.createdAt ?? undefined,
+        updatedAt: doc.updatedAt ?? undefined,
+      }))
+  )
 }
 
 /** 拉取项目列表（关于页项目区，按 sortOrder 升序） */
 export async function fetchProjects(): Promise<ProjectEntry[]> {
-  const { docs } = await fetchJson<PayloadListResponse<ApiProject>>(
-    '/api/projects?limit=0&sort=sortOrder',
-  );
+  const { docs } = await fetchJson<PayloadListResponse<ApiProject>>('/api/projects?limit=0&sort=sortOrder')
 
   return docs
     .filter((doc) => doc.status === 'published')
@@ -535,5 +529,5 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
       stars: Number(doc.stars ?? 0),
       tags: linesOf(doc.tags),
       sortOrder: Number(doc.sortOrder ?? 0),
-    }));
+    }))
 }

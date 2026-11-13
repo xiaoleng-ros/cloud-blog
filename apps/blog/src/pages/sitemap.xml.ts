@@ -1,8 +1,5 @@
-import { getCollection } from 'astro:content';
-import {
-  getArchivePagePath,
-  getArchiveTotalPages,
-} from 'cloud-blog/shared/post-utils';
+import { getCollection } from 'astro:content'
+import { getArchivePagePath, getArchiveTotalPages } from 'cloud-blog/shared/post-utils'
 import {
   absoluteUrl,
   getCategories,
@@ -12,17 +9,17 @@ import {
   getTags,
   getTagPath,
   sortPosts,
-} from '../lib/posts';
+} from '../lib/posts'
 
 // Sitemap 允许的值集合（Google 官方要求小写、无空格、无引号）
 // 用联合类型约束调用方，避免拼写错误进入 sitemap
-const CHANGE_FREQS = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'] as const;
+const CHANGE_FREQS = ['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never'] as const
 // 类型别名：避免 typeof X[number] 在编译后残留为运行时表达式（会报 ReferenceError: number is not defined）
-type Changefreq = (typeof CHANGE_FREQS)[number];
+type Changefreq = (typeof CHANGE_FREQS)[number]
 // 运行时校验集合（避免 as unknown as readonly string[] 二次断言）
-const CHANGE_FREQ_SET: ReadonlySet<string> = new Set(CHANGE_FREQS);
-const PRIORITY_MIN = 0;
-const PRIORITY_MAX = 1;
+const CHANGE_FREQ_SET: ReadonlySet<string> = new Set(CHANGE_FREQS)
+const PRIORITY_MIN = 0
+const PRIORITY_MAX = 1
 
 const escapeXml = (value: string) =>
   value
@@ -32,23 +29,20 @@ const escapeXml = (value: string) =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+    .replaceAll("'", '&apos;')
 
 // urlEntry 参数：除 url 外还支持 lastmod / changefreq / priority
 interface UrlEntryOptions {
-  lastmod?: Date;
-  changefreq?: Changefreq;
-  priority?: number;
+  lastmod?: Date
+  changefreq?: Changefreq
+  priority?: number
 }
 
 // 生成一个 <url> 节点；priority 越界会被裁剪到 [0,1]，非法值直接忽略
 const urlEntry = (path: string, options: UrlEntryOptions = {}) => {
-  const { lastmod, changefreq, priority } = options;
-  const safePriority =
-    typeof priority === 'number'
-      ? Math.max(PRIORITY_MIN, Math.min(PRIORITY_MAX, priority))
-      : null;
-  const validChangefreq = changefreq && CHANGE_FREQ_SET.has(changefreq) ? changefreq : null;
+  const { lastmod, changefreq, priority } = options
+  const safePriority = typeof priority === 'number' ? Math.max(PRIORITY_MIN, Math.min(PRIORITY_MAX, priority)) : null
+  const validChangefreq = changefreq && CHANGE_FREQ_SET.has(changefreq) ? changefreq : null
 
   return `
   <url>
@@ -56,8 +50,8 @@ const urlEntry = (path: string, options: UrlEntryOptions = {}) => {
     ${lastmod ? `<lastmod>${lastmod.toISOString()}</lastmod>` : ''}
     ${validChangefreq ? `<changefreq>${validChangefreq}</changefreq>` : ''}
     ${safePriority !== null ? `<priority>${safePriority.toFixed(1)}</priority>` : ''}
-  </url>`;
-};
+  </url>`
+}
 
 // 各类页面的变更频率与权重约定（按 SEO 通用经验）：
 // - 首页：daily / 1.0
@@ -66,9 +60,9 @@ const urlEntry = (path: string, options: UrlEntryOptions = {}) => {
 // - 归档 / 关于：yearly / 0.3（几乎不变更，权重低）
 // - 搜索：never / 0.2（对搜索引擎价值低）
 export async function GET() {
-  const posts = sortPosts(await getCollection('posts'));
-  const categories = getCategories(posts);
-  const tags = getTags(posts);
+  const posts = sortPosts(await getCollection('posts'))
+  const categories = getCategories(posts)
+  const tags = getTags(posts)
 
   const paths = [
     // 首页
@@ -81,9 +75,7 @@ export async function GET() {
       }),
     ),
     // 标签页
-    ...tags.map((tag) =>
-      urlEntry(getTagPath(tag.name), { changefreq: 'weekly', priority: 0.7 }),
-    ),
+    ...tags.map((tag) => urlEntry(getTagPath(tag.name), { changefreq: 'weekly', priority: 0.7 })),
     // 文章页
     ...posts.map((post) =>
       urlEntry(getPostPath(post), {
@@ -109,16 +101,16 @@ export async function GET() {
     urlEntry('/privacy', { changefreq: 'yearly', priority: 0.3 }),
     // 发展历程：会随每次留下记录而更新，权重与关于页齐平
     urlEntry('/timeline', { changefreq: 'monthly', priority: 0.4 }),
-  ];
+  ]
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${paths.join('')}
-</urlset>`;
+</urlset>`
 
   return new Response(body.trim(), {
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
     },
-  });
+  })
 }

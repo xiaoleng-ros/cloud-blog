@@ -1,6 +1,6 @@
-import type { CollectionEntry } from 'astro:content';
-import { getPostCategorySegment } from 'cloud-blog/shared/post-utils';
-import { SITE_DEFAULTS } from './site-defaults';
+import type { CollectionEntry } from 'astro:content'
+import { getPostCategorySegment } from 'cloud-blog/shared/post-utils'
+import { SITE_DEFAULTS } from './site-defaults'
 
 // 通用文章工具函数从共享包重导出，保证前台各页面调用不变
 export {
@@ -27,20 +27,20 @@ export {
   groupPostsByYear,
   sortPosts,
   sortPostsByDate,
-} from 'cloud-blog/shared/post-utils';
+} from 'cloud-blog/shared/post-utils'
 
-export type BlogPost = CollectionEntry<'posts'>;
+export type BlogPost = CollectionEntry<'posts'>
 
 export const site = {
   name: SITE_DEFAULTS.siteName,
   author: SITE_DEFAULTS.siteAuthor,
   url: SITE_DEFAULTS.siteUrl,
   description: SITE_DEFAULTS.siteDescription,
-};
+}
 
 /** 将相对路径转换为绝对 URL，便于 RSS / Sitemap / Open Graph 使用 */
 export function absoluteUrl(path: string): string {
-  return new URL(path, site.url).toString();
+  return new URL(path, site.url).toString()
 }
 
 /**
@@ -51,7 +51,7 @@ export function absoluteUrl(path: string): string {
  */
 function postCategoryName(post: BlogPost): string {
   // getPostCategorySegment 同时兼容 .data 与顶层、并做 URL 段清洗
-  return getPostCategorySegment(post);
+  return getPostCategorySegment(post)
 }
 
 /**
@@ -64,10 +64,7 @@ function postCategoryName(post: BlogPost): string {
  */
 export function getPostPath(post: BlogPost) {
   // 直接复用 getPostPathParams 再编码，保证「路由参数」与「链接」两条路永远一致
-  return `/posts/${getPostPathParams(post)
-    .split('/')
-    .map(encodeURIComponent)
-    .join('/')}`;
+  return `/posts/${getPostPathParams(post).split('/').map(encodeURIComponent).join('/')}`
 }
 
 /**
@@ -76,10 +73,10 @@ export function getPostPath(post: BlogPost) {
  * 而 CMS 的路由拿到的是解码后的分类段，两边对不上就会 404。
  */
 export function getPostPathParams(post: BlogPost) {
-  return `${postCategoryName(post)}/${String(post.id)}`;
+  return `${postCategoryName(post)}/${String(post.id)}`
 }
 
 /** 文章绝对 URL */
 export function getPostUrl(post: BlogPost) {
-  return absoluteUrl(getPostPath(post));
+  return absoluteUrl(getPostPath(post))
 }

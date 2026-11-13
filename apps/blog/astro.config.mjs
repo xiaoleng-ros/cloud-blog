@@ -1,17 +1,17 @@
-import { defineConfig } from 'astro/config';
-import path from 'node:path';
-import { existsSync, mkdirSync, cpSync, statSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { loadEnv } from 'vite';
+import { defineConfig } from 'astro/config'
+import path from 'node:path'
+import { existsSync, mkdirSync, cpSync, statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { loadEnv } from 'vite'
 // Markdown 插件经 cloud-blog 包名导入（该包 file: 指向仓库根，与 CMS 共用同一份实现）
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs';
-import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs';
-import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs';
-import { buildMdSanitizeSchema, mdIframeHostGuard } from 'cloud-blog/shared/md-sanitize-schema.mjs';
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import rehypeImgAttrs from 'cloud-blog/shared/rehype-img-attrs.mjs'
+import rehypeLegacyShortcodes from 'cloud-blog/shared/rehype-legacy-shortcodes.mjs'
+import remarkLegacyShortcodes from 'cloud-blog/shared/remark-legacy-shortcodes.mjs'
+import { buildMdSanitizeSchema, mdIframeHostGuard } from 'cloud-blog/shared/md-sanitize-schema.mjs'
 // Astro 7 的 markdown.processor：astro 自身的可选 peer 依赖，显式声明在 dependencies 里
-import { unified } from '@astrojs/markdown-remark';
+import { unified } from '@astrojs/markdown-remark'
 
 /**
  * Payload 后台数据 hot-reload：
@@ -27,24 +27,22 @@ function payloadHotReload() {
         // Vite 8 里 server.config.root 是普通字符串（不是 URL 对象），?.pathname 恒 undefined；
         // Windows 下 watcher 回调路径是正斜杠、path.join 产出反斜杠，两侧先归一再比较。
         const rootRaw =
-          typeof server.config.root === 'string'
-            ? server.config.root
-            : fileURLToPath(new URL('./', import.meta.url));
-        const toPosix = (p) => String(p).replace(/\\/g, '/');
-        const marker = toPosix(path.join(rootRaw, '.astro', 'payload-sync-touch'));
+          typeof server.config.root === 'string' ? server.config.root : fileURLToPath(new URL('./', import.meta.url))
+        const toPosix = (p) => String(p).replace(/\\/g, '/')
+        const marker = toPosix(path.join(rootRaw, '.astro', 'payload-sync-touch'))
 
-        logger.info('payload-hot-reload: 已启用「后台数据变化 → 前台自动刷新」');
+        logger.info('payload-hot-reload: 已启用「后台数据变化 → 前台自动刷新」')
         // loader 首次创建 marker 是 add 事件，只监听 change 会漏掉第一轮刷新
         server.watcher.on('all', (event, file) => {
-          if (event !== 'change' && event !== 'add') return;
-          const p = typeof file === 'string' ? file : file?.path;
+          if (event !== 'change' && event !== 'add') return
+          const p = typeof file === 'string' ? file : file?.path
           if (p && toPosix(p) === marker && existsSync(p)) {
-            server.ws.send({ type: 'full-reload' });
+            server.ws.send({ type: 'full-reload' })
           }
-        });
+        })
       },
     },
-  };
+  }
 }
 
 /**
@@ -56,31 +54,32 @@ function payloadHotReload() {
  */
 // Astro 在加载配置前已按命令设置 NODE_ENV（dev→development，build/preview→production）；
 // 未显式为 development 时一律按 production 处理，确保云端 `astro build` 能读到 .env.production。
-const MODE = process.env.NODE_ENV === 'development' ? 'development' : 'production';
-const LOCAL_ENV = loadEnv(MODE, process.cwd(), '');
-const SITE_URL = (LOCAL_ENV.SITE_URL || process.env.SITE_URL || '').trim();
+const MODE = process.env.NODE_ENV === 'development' ? 'development' : 'production'
+const LOCAL_ENV = loadEnv(MODE, process.cwd(), '')
+const SITE_URL = (LOCAL_ENV.SITE_URL || process.env.SITE_URL || '').trim()
 /** 运行时站点根地址：build 保证非空（否则下面集成抛错），dev 兜底本地避免 undefined */
-const SITE = SITE_URL || 'http://localhost:4321';
+const SITE = SITE_URL || 'http://localhost:4321'
 
 function siteUrlGuard() {
   return {
     name: 'site-url-guard',
     hooks: {
       'astro:config:setup'({ command, logger }) {
-        if (SITE_URL) return;
+        if (SITE_URL) return
         if (command === 'build') {
           throw new Error(
             '[astro.config] SITE_URL 未设置：build 会拒绝执行，避免占位域名 https://example.com 进入 sitemap / RSS / canonical。' +
               '请在 .env.production 或环境变量中配置真实站点根地址（不要带结尾斜杠）。',
-          );
+          )
         }
         logger.warn(
-          '[astro.config] SITE_URL 未设置，dev 回退 ' + SITE +
+          '[astro.config] SITE_URL 未设置，dev 回退 ' +
+            SITE +
             '（仅本地生效，不会污染构建产物）；正式构建必须配置真实域名。',
-        );
+        )
       },
     },
-  };
+  }
 }
 
 /**
@@ -108,42 +107,42 @@ function emptySiteGuard() {
       '[astro.config] 构建产物里没有任何文章详情页（/posts/*），已中止。' +
         '通常是 PUBLIC_PAYLOAD_URL 指错了域名导致静默回退本地 markdown（src/content/posts 为空）：' +
         '确认 PUBLIC_PAYLOAD_URL 指向的后台有已发布文章；本地刷新前台外壳请用 npm run sync:blog。',
-    );
+    )
   return {
     name: 'empty-site-guard',
     hooks: {
       'astro:build:done': async ({ pages, logger }) => {
         // pathname 不带前导斜杠（如 404/、posts/AI纪元/2/）；列表页是 posts/ 或 posts，
         // 详情页在 posts/ 之后还有内容
-        const detailPages = pages.filter((page) => /^\/?posts\/.+/.test(page.pathname ?? ''));
-        if (detailPages.length > 0) return;
+        const detailPages = pages.filter((page) => /^\/?posts\/.+/.test(page.pathname ?? ''))
+        if (detailPages.length > 0) return
         // process.env 在配置求值时读不到 .env 文件，必须走 loadEnv（见上方 LOCAL_ENV 注释）
-        const base = (LOCAL_ENV.PUBLIC_PAYLOAD_URL || process.env.PUBLIC_PAYLOAD_URL || '').trim();
-        if (!base) throw strictError();
-        let backendDown = false;
+        const base = (LOCAL_ENV.PUBLIC_PAYLOAD_URL || process.env.PUBLIC_PAYLOAD_URL || '').trim()
+        if (!base) throw strictError()
+        let backendDown = false
         try {
           const res = await fetch(`${base}/api/blog-sync?digest=1`, {
             signal: AbortSignal.timeout(8000),
-          });
-          backendDown = res.status >= 500;
+          })
+          backendDown = res.status >= 500
         } catch {
-          backendDown = true;
+          backendDown = true
         }
         if (backendDown) {
           logger?.error?.(
             '[empty-site-guard] ⚠️ 后台不可用（网络错误或 5xx）：本次放行空外壳部署，' +
               '避免「构建期依赖旧部署」死循环。后台恢复后请再触发一次构建，补齐 /posts/* 详情页。',
-          );
-          return;
+          )
+          return
         }
         // 后台可达但 0 篇已发布文章：空站是合法状态（尚未发布正式内容），只告警不中止。
         logger?.warn?.(
           '[empty-site-guard] ⚠️ 后台可达但没有已发布文章：本次放行空站部署。' +
             '若这不是预期状态，请检查后台文章是否已发布（status=published）。',
-        );
+        )
       },
     },
-  };
+  }
 }
 
 /**
@@ -151,29 +150,29 @@ function emptySiteGuard() {
  * 这里在 dev/build 启动时把 npm 依赖里的图包拷进 public/，运行时零外链。
  */
 function walineEmojiVendor() {
-  const src = path.join(process.cwd(), 'node_modules', '@waline', 'emojis', 'weibo');
-  const dest = path.join(process.cwd(), 'public', 'waline-emojis', 'weibo');
+  const src = path.join(process.cwd(), 'node_modules', '@waline', 'emojis', 'weibo')
+  const dest = path.join(process.cwd(), 'public', 'waline-emojis', 'weibo')
   const sync = (logger) => {
     if (!existsSync(src)) {
-      throw new Error(`[astro.config] 缺少 @waline/emojis（${src}），先 npm install；评论区表情依赖本地图包。`);
+      throw new Error(`[astro.config] 缺少 @waline/emojis（${src}），先 npm install；评论区表情依赖本地图包。`)
     }
     if (!existsSync(dest) || Date.now() - statSync(dest).mtimeMs > 60_000) {
-      mkdirSync(dest, { recursive: true });
-      cpSync(src, dest, { recursive: true });
-      logger?.info?.('waline-emoji-vendor: weibo 表情已落盘 public/waline-emojis/');
+      mkdirSync(dest, { recursive: true })
+      cpSync(src, dest, { recursive: true })
+      logger?.info?.('waline-emoji-vendor: weibo 表情已落盘 public/waline-emojis/')
     }
-  };
+  }
   return {
     name: 'waline-emoji-vendor',
     hooks: {
       'astro:server:setup'({ logger }) {
-        sync(logger);
+        sync(logger)
       },
       'astro:build:start'({ logger }) {
-        sync(logger);
+        sync(logger)
       },
     },
-  };
+  }
 }
 
 export default defineConfig({
@@ -189,7 +188,13 @@ export default defineConfig({
       remarkPlugins: [remarkLegacyShortcodes],
       // 顺序与 CMS blog-render 完全一致：短代码展开 → raw 解析 → 白名单净化 → 图片属性补齐，
       // 保证构建期与运行期(/api/blog-sync)两条链产出相同的净化结果。
-      rehypePlugins: [rehypeLegacyShortcodes, rehypeRaw, [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)], mdIframeHostGuard, rehypeImgAttrs],
+      rehypePlugins: [
+        rehypeLegacyShortcodes,
+        rehypeRaw,
+        [rehypeSanitize, buildMdSanitizeSchema(defaultSchema)],
+        mdIframeHostGuard,
+        rehypeImgAttrs,
+      ],
     }),
   },
   integrations: [payloadHotReload(), siteUrlGuard(), emptySiteGuard(), walineEmojiVendor()],
@@ -215,16 +220,26 @@ export default defineConfig({
       {
         name: 'cjs-externalize',
         configEnvironment(name, options) {
-          if (name === 'client') return;
-          const cjsPkgs = ['yaml', 'gray-matter', 'js-yaml', 'argparse', 'entities', 'mdast-util-to-string', 'micromark', 'decode-named-character-reference'];
-          const external = Array.isArray(options.resolve?.external) ? options.resolve.external : [];
-          const noExternal = options.resolve?.noExternal;
+          if (name === 'client') return
+          const cjsPkgs = [
+            'yaml',
+            'gray-matter',
+            'js-yaml',
+            'argparse',
+            'entities',
+            'mdast-util-to-string',
+            'micromark',
+            'decode-named-character-reference',
+          ]
+          const external = Array.isArray(options.resolve?.external) ? options.resolve.external : []
+          const noExternal = options.resolve?.noExternal
           // 只追加那些没被 noExternal 明确包含的 CJS 包
           const filtered = cjsPkgs.filter((p) => {
-            if (Array.isArray(noExternal)) return !noExternal.some((n) => typeof n === 'string' && (n === p || n.includes('*')));
-            return noExternal !== true;
-          });
-          return { resolve: { external: [...external, ...filtered] } };
+            if (Array.isArray(noExternal))
+              return !noExternal.some((n) => typeof n === 'string' && (n === p || n.includes('*')))
+            return noExternal !== true
+          })
+          return { resolve: { external: [...external, ...filtered] } }
         },
       },
       // 沙箱环境下，浏览器断开 HTTP / WebSocket 连接时 Node socket 会发出未处理的
@@ -233,23 +248,22 @@ export default defineConfig({
       {
         name: 'socket-error-swallower',
         configureServer(server) {
-          const httpServer = server.httpServer;
-          if (!httpServer) return;
+          const httpServer = server.httpServer
+          if (!httpServer) return
           httpServer.on('connection', (socket) => {
             socket.on('error', () => {
               // 连接被对端重置（浏览器关闭/刷新/网络中断），忽略即可，不要让进程崩溃
-            });
-          });
+            })
+          })
           // Vite HMR WebSocket 服务器的 socket 也要兜底
           if (server.ws && server.ws.wsServer) {
             server.ws.wsServer.on('connection', (ws, req) => {
-              const socket = req.socket;
-              if (socket) socket.on('error', () => {});
-            });
+              const socket = req.socket
+              if (socket) socket.on('error', () => {})
+            })
           }
         },
       },
     ],
   },
-});
-
+})

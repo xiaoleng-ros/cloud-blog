@@ -193,21 +193,9 @@ export function FeishuLoginLink() {
           <span>或</span>
         </div>
         <button type="button" className="feishu-login-link" onClick={handleOpen}>
-          <svg
-            className="feishu-login-icon"
-            viewBox="0 0 48 48"
-            width="20"
-            height="20"
-            aria-hidden="true"
-          >
+          <svg className="feishu-login-icon" viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
             <rect x="2" y="2" width="44" height="44" rx="10" fill="#00D6B9" />
-            <path
-              d="M14 20c4 0 6 2 8 6s4 6 8 6"
-              stroke="#fff"
-              strokeWidth="3"
-              strokeLinecap="round"
-              fill="none"
-            />
+            <path d="M14 20c4 0 6 2 8 6s4 6 8 6" stroke="#fff" strokeWidth="3" strokeLinecap="round" fill="none" />
             <circle cx="16" cy="18" r="2" fill="#fff" />
             <circle cx="32" cy="18" r="2" fill="#fff" />
           </svg>
@@ -220,12 +208,7 @@ export function FeishuLoginLink() {
           <div className="publish-modal feishu-qr-modal" onClick={(e) => e.stopPropagation()}>
             <header className="publish-modal__head">
               <h3 className="publish-modal__title">飞书扫码登录</h3>
-              <button
-                type="button"
-                className="publish-modal__close"
-                onClick={handleClose}
-                aria-label="关闭"
-              >
+              <button type="button" className="publish-modal__close" onClick={handleClose} aria-label="关闭">
                 ×
               </button>
             </header>
@@ -242,11 +225,7 @@ export function FeishuLoginLink() {
             </div>
 
             <footer className="publish-modal__foot">
-              <button
-                type="button"
-                className="publish-modal__btn publish-modal__btn--primary"
-                onClick={handleRefresh}
-              >
+              <button type="button" className="publish-modal__btn publish-modal__btn--primary" onClick={handleRefresh}>
                 刷新二维码
               </button>
             </footer>

@@ -50,10 +50,7 @@ export function avatarOf(mail: string | null | undefined): string {
  * 评论头像：优先邮箱；老评论（邮箱必填之前发的）没有邮箱，退回按昵称生成，
  * 至少保证每张图稳定且彼此不同，而不是所有人共用一张灰图或裂图。
  */
-export function avatarFor(
-  mail: string | null | undefined,
-  nick: string | null | undefined,
-): string {
+export function avatarFor(mail: string | null | undefined, nick: string | null | undefined): string {
   const byMail = avatarOf(mail)
   if (byMail) return byMail
   const name = (nick ?? '').trim()
@@ -97,11 +94,11 @@ export function parseUa(ua: string | null | undefined): ParsedUa {
 }
 
 /** 一次性算出除属地外的全部身份字段。 */
-export function identityOf(raw: {
-  mail?: string | null
-  ua?: string | null
-  nick?: string | null
-}): { avatar: string; browser: string; os: string } {
+export function identityOf(raw: { mail?: string | null; ua?: string | null; nick?: string | null }): {
+  avatar: string
+  browser: string
+  os: string
+} {
   const { browser, os } = parseUa(raw.ua)
   return { avatar: avatarFor(raw.mail, raw.nick), browser, os }
 }
@@ -157,10 +154,10 @@ export async function lookupAddr(ip: string | null | undefined): Promise<string>
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), ADDR_TIMEOUT)
-    const response = await fetch(
-      `https://ip.zxinc.org/api.php?type=json&ip=${encodeURIComponent(text)}`,
-      { signal: controller.signal, headers: { accept: 'application/json' } },
-    )
+    const response = await fetch(`https://ip.zxinc.org/api.php?type=json&ip=${encodeURIComponent(text)}`, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    })
     clearTimeout(timer)
     if (!response.ok) {
       cacheSet(text, '')
@@ -190,13 +187,7 @@ export async function lookupAddrs(
   limit = ADDR_CONCURRENCY,
   budget = ADDR_BUDGET,
 ): Promise<Map<string, string>> {
-  const unique = [
-    ...new Set(
-      ips
-        .map((ip) => (ip ?? '').trim())
-        .filter((ip) => ip && isPublicIp(ip)),
-    ),
-  ]
+  const unique = [...new Set(ips.map((ip) => (ip ?? '').trim()).filter((ip) => ip && isPublicIp(ip)))]
 
   const result = new Map<string, string>()
   if (!unique.length) return result

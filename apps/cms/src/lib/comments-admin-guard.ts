@@ -24,8 +24,7 @@ const CMS_ADMINS = (process.env.CMS_ADMIN_EMAILS ?? '')
 export const isCmsAdminUser = (user?: { email?: string | null } | null) =>
   !!user?.email && CMS_ADMINS.includes(user.email.toLowerCase())
 
-export const json = (data: unknown) =>
-  NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
+export const json = (data: unknown) => NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } })
 
 export const errorJson = (message: string, status: number) =>
   NextResponse.json({ errors: [{ message }] }, { status, headers: { 'Cache-Control': 'no-store' } })
@@ -34,9 +33,7 @@ export const errorJson = (message: string, status: number) =>
 // 原本这里「无 Origin 即放行」的分支是 CSRF 缺口（详见该文件头注释）。
 const sameOrigin = (request: Request) => isSameOriginRequest(request)
 
-type Guard =
-  | { ok: true; userId: string | number; payload: Payload }
-  | { ok: false; response: NextResponse }
+type Guard = { ok: true; userId: string | number; payload: Payload } | { ok: false; response: NextResponse }
 
 export async function requireAdmin(request: Request, write = false): Promise<Guard> {
   if (write && !sameOrigin(request)) {
@@ -70,9 +67,7 @@ async function canModerate(payload: Payload, user: { email?: string | null }): P
   try {
     const { totalDocs } = await payload.count({ collection: 'users', overrideAccess: true })
     if (totalDocs <= 1) return true
-    console.error(
-      '[comments] CMS_ADMIN_EMAILS 未配置且后台存在多个账号，已拒绝评论写操作；请配置管理员邮箱白名单',
-    )
+    console.error('[comments] CMS_ADMIN_EMAILS 未配置且后台存在多个账号，已拒绝评论写操作；请配置管理员邮箱白名单')
   } catch (err) {
     console.error('[comments] 校验管理员身份失败:', err)
   }

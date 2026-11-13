@@ -149,47 +149,44 @@ export function ChangelogViewInner() {
   /** 贡献热力图补拉已用次数（上限 3 次，避免上游真挂时无限轮询烧 GitHub 匿名配额） */
   const contribRetryRef = useRef(0)
 
-  const loadData = useCallback(
-    async (targetYear: number, force = false, keepOnError = false) => {
-      // 先查缓存：命中则直接渲染，不发请求。
-      // 注意：命中「贡献热力图缺失」的残缺缓存时也照样渲染（提交记录是好的，
-      // 立刻显示比白屏强），补拉由下方 effect 按 30 秒节奏静默进行。
-      if (!force) {
-        const cached = readCache(targetYear)
-        if (cached) {
-          setData(cached)
-          setError(null)
-          setLoading(false)
-          return
-        }
-      }
-      setLoading(true)
-      setError(null)
-      try {
-        const res = await fetch(`/api/changelog?year=${targetYear}`, { headers: { accept: 'application/json' } })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = (await res.json()) as ChangelogData
-        // map 成时间线需要的形态：{ label: 'MM-DD HH:mm', children: message }
-        const normalized: ChangelogData = {
-          ...json,
-          groups: (json.groups || []).map((group) => ({
-            ...group,
-            commits: (group.commits || []).map((c) => ({ ...c, date: c.date })),
-          })),
-        }
-        writeCache(targetYear, normalized)
-        setData(normalized)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
-        // keepOnError：后台静默补拉时不能清空已有数据 ——
-        // 补拉本来就是为了补热力图，失败却把已经正常的「仓库提交记录」一起清掉是倒退。
-        if (!keepOnError) setData(null)
-      } finally {
+  const loadData = useCallback(async (targetYear: number, force = false, keepOnError = false) => {
+    // 先查缓存：命中则直接渲染，不发请求。
+    // 注意：命中「贡献热力图缺失」的残缺缓存时也照样渲染（提交记录是好的，
+    // 立刻显示比白屏强），补拉由下方 effect 按 30 秒节奏静默进行。
+    if (!force) {
+      const cached = readCache(targetYear)
+      if (cached) {
+        setData(cached)
+        setError(null)
         setLoading(false)
+        return
       }
-    },
-    [],
-  )
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/changelog?year=${targetYear}`, { headers: { accept: 'application/json' } })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = (await res.json()) as ChangelogData
+      // map 成时间线需要的形态：{ label: 'MM-DD HH:mm', children: message }
+      const normalized: ChangelogData = {
+        ...json,
+        groups: (json.groups || []).map((group) => ({
+          ...group,
+          commits: (group.commits || []).map((c) => ({ ...c, date: c.date })),
+        })),
+      }
+      writeCache(targetYear, normalized)
+      setData(normalized)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败')
+      // keepOnError：后台静默补拉时不能清空已有数据 ——
+      // 补拉本来就是为了补热力图，失败却把已经正常的「仓库提交记录」一起清掉是倒退。
+      if (!keepOnError) setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     void loadData(year)
@@ -231,10 +228,7 @@ export function ChangelogViewInner() {
   const weeks = useMemo(() => buildWeeks(data?.contributions?.days ?? []), [data])
   const total = data?.contributions?.total ?? 0
   /** 两张卡片（前台 + 后台）合计提交条数，用于分隔标题右侧的提示 */
-  const totalCommits = useMemo(
-    () => (data?.groups ?? []).reduce((sum, g) => sum + (g.commits?.length ?? 0), 0),
-    [data],
-  )
+  const totalCommits = useMemo(() => (data?.groups ?? []).reduce((sum, g) => sum + (g.commits?.length ?? 0), 0), [data])
   const yearOptions = Array.from({ length: 5 }, (_, i) => nowYear - i)
 
   return (
@@ -250,13 +244,34 @@ export function ChangelogViewInner() {
               aria-haspopup="listbox"
               aria-expanded={yearOpen}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
                 <path d="M3.5 9.5h17M8 3v4M16 3v4" />
               </svg>
               <span className="changelog__year-label">年份</span>
               <span className="changelog__year-value">{year}</span>
-              <svg className="changelog__year-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                className="changelog__year-caret"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M6 9.5l6 6 6-6" />
               </svg>
             </button>
@@ -344,7 +359,15 @@ export function ChangelogViewInner() {
         ) : (
           <div className="changelog__empty changelog__empty--heat">
             <span className="changelog__empty-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              >
                 <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
                 <path d="M3.5 9.5h17M8.5 3v3M15.5 3v3" />
               </svg>
@@ -396,13 +419,33 @@ export function ChangelogViewInner() {
               <span className={`changelog__repo-badge changelog__repo-badge--${GROUP_TINT[index % GROUP_TINT.length]}`}>
                 {group.key === 'blog' ? (
                   // 前台：显示器
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
                     <rect x="3.5" y="4.5" width="17" height="12" rx="2" />
                     <path d="M9 19.5h6M12 16.5v3" />
                   </svg>
                 ) : (
                   // 后台：服务器机箱
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
                     <rect x="3.5" y="4" width="17" height="7" rx="1.8" />
                     <rect x="3.5" y="13" width="17" height="7" rx="1.8" />
                     <path d="M7 7.5h.01M7 16.5h.01" />
@@ -443,7 +486,16 @@ export function ChangelogViewInner() {
             ) : (
               <div className="changelog__empty">
                 <span className="changelog__empty-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M4 12h5l1.5 2.5h3L15 12h5" />
                     <path d="M6.5 5.5h11l2.5 6.5v5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 17v-5z" />
                   </svg>

@@ -224,9 +224,7 @@ export function resolveStorageConfig(): StorageConfig {
   const host = ref ? `${ref}.supabase.co` : undefined
 
   const endpoint = alignRef(
-    normalizeS3Endpoint(
-      process.env.SUPABASE_S3_ENDPOINT || (host ? `https://${host}/storage/v1/s3` : undefined),
-    ),
+    normalizeS3Endpoint(process.env.SUPABASE_S3_ENDPOINT || (host ? `https://${host}/storage/v1/s3` : undefined)),
     ref,
   )
   const publicBase = alignRef(

@@ -102,13 +102,13 @@ PUBLIC_NETEASE_PLAYLIST_ID=18387867575
 PUBLIC_MUSIC_API=https://meting.mikus.ink/api
 ```
 
-| 🎛️ 变量 | 💡 说明 |
-| --- | --- |
-| `SITE_URL` | 站点正式域名，用于 RSS、sitemap、canonical URL 和结构化数据 |
-| `PUBLIC_PAYLOAD_URL` | 后台 API 地址，默认 `http://localhost:9527`，构建时用于拉取内容 |
-| `PUBLIC_WALINE_URL` | Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置），跨域部署时填完整地址 |
-| `PUBLIC_NETEASE_PLAYLIST_ID` | 网易云音乐歌单 ID。留空则播放器整体不渲染（代码里没有模板默认歌单） |
-| `PUBLIC_MUSIC_API` | Meting 兼容的音乐 API 地址，默认 `https://meting.mikus.ink/api`，也可换成自建服务。注意**部分镜像只返回 30 秒试听切片**，换源前务必实测音频时长 |
+| 🎛️ 变量                      | 💡 说明                                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SITE_URL`                   | 站点正式域名，用于 RSS、sitemap、canonical URL 和结构化数据                                                                                     |
+| `PUBLIC_PAYLOAD_URL`         | 后台 API 地址，默认 `http://localhost:9527`，构建时用于拉取内容                                                                                 |
+| `PUBLIC_WALINE_URL`          | Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置），跨域部署时填完整地址                                                 |
+| `PUBLIC_NETEASE_PLAYLIST_ID` | 网易云音乐歌单 ID。留空则播放器整体不渲染（代码里没有模板默认歌单）                                                                             |
+| `PUBLIC_MUSIC_API`           | Meting 兼容的音乐 API 地址，默认 `https://meting.mikus.ink/api`，也可换成自建服务。注意**部分镜像只返回 30 秒试听切片**，换源前务必实测音频时长 |
 
 ---
 

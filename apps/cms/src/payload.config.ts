@@ -69,7 +69,11 @@ const SUPABASE_PUBLIC_BASE = STORAGE.publicBase
 
 /** S3/Supabase 对象存储凭据是否配齐（缺任何一项都不注入 s3Storage 插件） */
 const HAS_S3_CONFIG = Boolean(
-  SUPABASE_S3_ACCESS_KEY_ID && SUPABASE_S3_SECRET_ACCESS_KEY && SUPABASE_BUCKET && SUPABASE_S3_ENDPOINT && SUPABASE_PUBLIC_BASE,
+  SUPABASE_S3_ACCESS_KEY_ID &&
+  SUPABASE_S3_SECRET_ACCESS_KEY &&
+  SUPABASE_BUCKET &&
+  SUPABASE_S3_ENDPOINT &&
+  SUPABASE_PUBLIC_BASE,
 )
 
 /**
@@ -104,41 +108,40 @@ const generateFileURL = ({ filename, prefix }: { filename: string; prefix?: stri
  * "Property 's3Storage' does not exist on type 'ConfigureAppOptions'"。
  * 用 `as unknown as Plugin` 强制收敛，运行时行为完全不变。
  */
-const plugins: Plugin[] =
-  HAS_S3_CONFIG
-    ? [
-        // HAS_S3_CONFIG 已保证各 env 均非空，但 TS 无法据此收窄 process.env 类型，
-        // 故此处用非空断言。
-        s3Storage({
-          collections: {
-            media: {
-              // url 由下面的 generateFileURL 直接给出 Storage 公开地址，浏览器不再走 CMS 拉流。
-              // （实测：dev 下 /api/media/file/<filename> 仍会由 Payload 的 staticDir 磁盘服务兜底命中，
-              //  只要 media/ 里有旧文件就还能取到 —— 迁完旧图就该清那个目录，别依赖它）
-              disablePayloadAccessControl: true,
-              generateFileURL,
-            },
+const plugins: Plugin[] = HAS_S3_CONFIG
+  ? [
+      // HAS_S3_CONFIG 已保证各 env 均非空，但 TS 无法据此收窄 process.env 类型，
+      // 故此处用非空断言。
+      s3Storage({
+        collections: {
+          media: {
+            // url 由下面的 generateFileURL 直接给出 Storage 公开地址，浏览器不再走 CMS 拉流。
+            // （实测：dev 下 /api/media/file/<filename> 仍会由 Payload 的 staticDir 磁盘服务兜底命中，
+            //  只要 media/ 里有旧文件就还能取到 —— 迁完旧图就该清那个目录，别依赖它）
+            disablePayloadAccessControl: true,
+            generateFileURL,
           },
-          bucket: SUPABASE_BUCKET!,
-          // 不发 x-amz-acl：对象可读性由 bucket 的公开设置决定（blog-media 已是公开读桶），
-          // 逐对象 ACL 不是 Supabase S3 层的写法，带上只可能添一次失败点
-          config: {
-            endpoint: SUPABASE_S3_ENDPOINT!,
-            region: 'us-east-1', // Supabase 的 S3 兼容接口固定这个 region
-            credentials: {
-              accessKeyId: SUPABASE_S3_ACCESS_KEY_ID!,
-              secretAccessKey: SUPABASE_S3_SECRET_ACCESS_KEY!,
-            },
-            // Supabase 的 S3 兼容层用 v4 签名，AWS SDK 默认即 v4，无需显式配置。
-            // forcePathStyle 必须为 true：虚拟主机风格要 <bucket>.<ref>.supabase.co，
-            // 这个域名根本不解析（实测 Could not resolve host），只能走 path 风格。
-            forcePathStyle: true,
+        },
+        bucket: SUPABASE_BUCKET!,
+        // 不发 x-amz-acl：对象可读性由 bucket 的公开设置决定（blog-media 已是公开读桶），
+        // 逐对象 ACL 不是 Supabase S3 层的写法，带上只可能添一次失败点
+        config: {
+          endpoint: SUPABASE_S3_ENDPOINT!,
+          region: 'us-east-1', // Supabase 的 S3 兼容接口固定这个 region
+          credentials: {
+            accessKeyId: SUPABASE_S3_ACCESS_KEY_ID!,
+            secretAccessKey: SUPABASE_S3_SECRET_ACCESS_KEY!,
           },
-          // 禁用本地磁盘副本，避免每次上传都落一份到容器临时目录
-          disableLocalStorage: true,
-        }) as unknown as Plugin,
-      ]
-    : []
+          // Supabase 的 S3 兼容层用 v4 签名，AWS SDK 默认即 v4，无需显式配置。
+          // forcePathStyle 必须为 true：虚拟主机风格要 <bucket>.<ref>.supabase.co，
+          // 这个域名根本不解析（实测 Could not resolve host），只能走 path 风格。
+          forcePathStyle: true,
+        },
+        // 禁用本地磁盘副本，避免每次上传都落一份到容器临时目录
+        disableLocalStorage: true,
+      }) as unknown as Plugin,
+    ]
+  : []
 
 /**
  * PAYLOAD_SECRET 处理策略（生产 fail-fast vs. 本地零配置）：
@@ -183,8 +186,7 @@ const LEGACY_LEAKED_SECRET = 'clay-blog-dev-secret-key-2026-random-string-change
 
 /** 判断给定 secret 是否"看起来像默认占位值"（含 change-in-production / please-change-me 等关键词） */
 const isPlaceholderSecret = (value: string) =>
-  value === LEGACY_LEAKED_SECRET ||
-  /change-in-production|please-change-me|xxxx|test-secret/i.test(value)
+  value === LEGACY_LEAKED_SECRET || /change-in-production|please-change-me|xxxx|test-secret/i.test(value)
 
 /** 校验 secret 是否符合生产要求，返回首个错误原因；null 表示通过 */
 const validateSecret = (value: string): string | null => {
@@ -255,14 +257,18 @@ if (IS_PRODUCTION && !HAS_S3_CONFIG) {
   const banner = '='.repeat(64)
   console.error(`\n${banner}`)
   console.error('[payload] 生产环境未配置对象存储，拒绝启动')
-  console.error('[payload]   原因：SUPABASE_S3_ACCESS_KEY_ID / SUPABASE_S3_SECRET_ACCESS_KEY / SUPABASE_BUCKET 未配齐。')
+  console.error(
+    '[payload]   原因：SUPABASE_S3_ACCESS_KEY_ID / SUPABASE_S3_SECRET_ACCESS_KEY / SUPABASE_BUCKET 未配齐。',
+  )
   console.error('[payload]   后果：图片上传会静默落容器临时盘，实例回收即全部丢失。')
   console.error('[payload]   修复：在部署平台配置上述变量（endpoint 缺省时可从 POSTGRES_URL 的项目 ref 推导）。')
   console.error(`${banner}\n`)
   // 同 PAYLOAD_SECRET 分支：顶层 throw 在 RSC import 上下文可能被 Next 吞成静默白屏，
   // 下一拍强制退出，保证平台记录到非零退出码与明确原因。
   if (!suppressFailFastExit) setTimeout(() => process.exit(1), 0)
-  throw new Error('[payload] 生产环境必须配置对象存储（SUPABASE_S3_ACCESS_KEY_ID + SUPABASE_S3_SECRET_ACCESS_KEY + SUPABASE_BUCKET）')
+  throw new Error(
+    '[payload] 生产环境必须配置对象存储（SUPABASE_S3_ACCESS_KEY_ID + SUPABASE_S3_SECRET_ACCESS_KEY + SUPABASE_BUCKET）',
+  )
 }
 
 /**
@@ -493,10 +499,7 @@ export default buildConfig({
       },
       // 登录页注入器（品牌文案 / 密码显隐 / 飞书入口归位 / 提交过渡态）
       // AdminShell：全局壳子（固定顶栏 + 多标签 + 命令面板 + 明暗切换）
-      providers: [
-        '/src/admin/components/LoginBrand.tsx#LoginBrand',
-        '/src/admin/shell/AdminShell.tsx#AdminShell',
-      ],
+      providers: ['/src/admin/components/LoginBrand.tsx#LoginBrand', '/src/admin/shell/AdminShell.tsx#AdminShell'],
       views: {
         // 自定义仪表盘：统计卡片 + 最近内容（数据来自 Payload REST API）
         dashboard: {
@@ -549,7 +552,13 @@ export default buildConfig({
     meta: {
       icons: [
         { url: '/cloud-icons/cloud-dark.png', rel: 'icon', type: 'image/png', sizes: '32x32' },
-        { url: '/cloud-icons/cloud-dark.png', rel: 'icon', type: 'image/png', sizes: '32x32', media: '(prefers-color-scheme: dark)' },
+        {
+          url: '/cloud-icons/cloud-dark.png',
+          rel: 'icon',
+          type: 'image/png',
+          sizes: '32x32',
+          media: '(prefers-color-scheme: dark)',
+        },
       ],
     },
     // 全局日期格式：年月日全部用阿拉伯数字，例如 2026-08-25
@@ -580,9 +589,7 @@ export default buildConfig({
   //
   // 注意 csrf 与 cors 同源：前后台一体化部署（/ 前台、/admin 与 /api 后台），
   // 后台的写操作全部由同一个域名发起，加白名单不会误伤任何既有链路。
-  ...(serverUrl
-    ? { serverURL: serverUrl, cors: [serverUrl], csrf: [serverUrl] }
-    : {}),
+  ...(serverUrl ? { serverURL: serverUrl, cors: [serverUrl], csrf: [serverUrl] } : {}),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

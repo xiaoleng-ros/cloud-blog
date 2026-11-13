@@ -33,7 +33,17 @@ type Tab = 'info' | 'password'
 
 /** 17px 线性图标，风格与站点设置目录一致 */
 const icon = (path: ReactNode) => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    width="17"
+    height="17"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     {path}
   </svg>
 )
@@ -244,11 +254,28 @@ export const AccountView = () => {
           <div className={`account-view__toast account-view__toast--${notice.type}`} role="status">
             <span className="account-view__toast-icon" aria-hidden="true">
               {notice.type === 'success' ? (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
               ) : (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                >
                   <path d="M12 7v6M12 17.2h.01" />
                 </svg>
               )}
@@ -297,9 +324,7 @@ export const AccountView = () => {
                   {user ? user.name?.slice(0, 1) || user.email.slice(0, 1).toUpperCase() : '…'}
                 </span>
                 <div className="account-view__identity-text">
-                  <span className="account-view__identity-name">
-                    {user ? user.name || '未设置昵称' : '加载中…'}
-                  </span>
+                  <span className="account-view__identity-name">{user ? user.name || '未设置昵称' : '加载中…'}</span>
                   <span className="account-view__identity-email">{user ? user.email : '—'}</span>
                 </div>
               </div>

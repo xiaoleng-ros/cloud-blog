@@ -115,11 +115,7 @@ function encodeImage(decoded: Decoded, w: number, h: number, type: string, quali
   }
   decoded.draw(ctx, w, h)
   return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('图片压缩失败'))),
-      type,
-      quality,
-    )
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('图片压缩失败'))), type, quality)
   })
 }
 

@@ -132,8 +132,12 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
 
   // 分类 / 标签下拉选项：进入页面拉一次
   useEffect(() => {
-    void fetchTerms('categories').then(setCats).catch(() => setCats([]))
-    void fetchTerms('tags').then(setTags).catch(() => setTags([]))
+    void fetchTerms('categories')
+      .then(setCats)
+      .catch(() => setCats([]))
+    void fetchTerms('tags')
+      .then(setTags)
+      .catch(() => setTags([]))
   }, [])
 
   /** 组装当前筛选 where（供列表与导出复用） */
@@ -416,13 +420,11 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
       }
 
       // 导入可能新建了标签，刷新标签下拉
-      void fetchTerms('tags').then(setTags).catch(() => undefined)
+      void fetchTerms('tags')
+        .then(setTags)
+        .catch(() => undefined)
       await load()
-      show(
-        'success',
-        `导入完成：成功 ${ok} 条` +
-          (skipped.length ? `，跳过 ${skipped.length} 条` : ''),
-      )
+      show('success', `导入完成：成功 ${ok} 条` + (skipped.length ? `，跳过 ${skipped.length} 条` : ''))
     } catch (error) {
       show('error', `导入失败：${(error as Error).message}`)
     } finally {
@@ -500,12 +502,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
 
         <div className="manage__actions">
           <div className="manage__export">
-            <button
-              type="button"
-              className="manage__action"
-              disabled={busy}
-              onClick={() => setExportOpen((v) => !v)}
-            >
+            <button type="button" className="manage__action" disabled={busy} onClick={() => setExportOpen((v) => !v)}>
               导出 ▾
             </button>
             {exportOpen && (
@@ -513,11 +510,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
                 <button type="button" onClick={() => void exportAll()}>
                   导出全部（当前筛选）
                 </button>
-                <button
-                  type="button"
-                  disabled={selected.size === 0}
-                  onClick={() => void exportSelected()}
-                >
+                <button type="button" disabled={selected.size === 0} onClick={() => void exportSelected()}>
                   导出选中（{selected.size}）
                 </button>
               </div>
@@ -558,12 +551,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
           <thead>
             <tr>
               <th className="manage__check-col">
-                <input
-                  type="checkbox"
-                  checked={allOnPageSelected}
-                  onChange={toggleSelectAll}
-                  aria-label="全选本页"
-                />
+                <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} aria-label="全选本页" />
               </th>
               <th>{meta.hasCover ? '封面' : '日期'}</th>
               <th>标题</th>
@@ -620,11 +608,7 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
                   <td className="drafts__muted">—</td>
                   <td className="drafts__muted">—</td>
                   <td className="drafts__cell-ops">
-                    <Link
-                      href={`${adminRoute}/${meta.writePath}?id=${row.id}`}
-                      prefetch={false}
-                      className="drafts__op"
-                    >
+                    <Link href={`${adminRoute}/${meta.writePath}?id=${row.id}`} prefetch={false} className="drafts__op">
                       编辑
                     </Link>
                     <button
@@ -676,7 +660,12 @@ export const ManageViewInner = ({ collection }: { collection: Collection }) => {
               </p>
             )}
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" disabled={deleting !== null} onClick={() => setConfirmIds(null)}>
+              <button
+                type="button"
+                className="drafts__op"
+                disabled={deleting !== null}
+                onClick={() => setConfirmIds(null)}
+              >
                 取消
               </button>
               <button

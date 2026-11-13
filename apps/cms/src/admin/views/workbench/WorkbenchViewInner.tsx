@@ -145,7 +145,9 @@ export const WorkbenchViewInner = () => {
 
         const [posts, notes, comments] = await Promise.all([
           toJson<ListResponse<{ id: number; title?: string; description?: string; createdAt?: string }>>(postsRes),
-          toJson<ListResponse<{ id: number; title?: string; mood?: string; description?: string; date?: string }>>(notesRes),
+          toJson<ListResponse<{ id: number; title?: string; mood?: string; description?: string; date?: string }>>(
+            notesRes,
+          ),
           toJson<CommentsResponse>(commentsRes),
         ])
 
@@ -292,13 +294,7 @@ export const WorkbenchViewInner = () => {
                 aria-label="搜索待处理事项"
               />
             </label>
-            <button
-              type="button"
-              className="comments__reset"
-              onClick={resetFilters}
-              aria-label="重置筛选"
-              title="重置"
-            >
+            <button type="button" className="comments__reset" onClick={resetFilters} aria-label="重置筛选" title="重置">
               <ShellIcon name="close" size={16} />
             </button>
             <span className="comments__hint">点击行查看详情与入口</span>
@@ -404,9 +400,7 @@ export const WorkbenchViewInner = () => {
             <>
               <header className="comments__card-head">
                 <h3 className="comments__card-title">{selected.title}</h3>
-                <i className={`comments__pill ${KIND_META[selected.kind].pill}`}>
-                  {KIND_META[selected.kind].label}
-                </i>
+                <i className={`comments__pill ${KIND_META[selected.kind].pill}`}>{KIND_META[selected.kind].label}</i>
               </header>
               <div className="comments__detail-body">
                 <p className="comments__detail-text">{selected.detailText}</p>

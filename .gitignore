@@ -67,6 +67,9 @@ pnpm-debug.log*
 **/*方案*.md
 **/*改造*.md
 **/*规范*.md
+# 例外：架构决策记录（ADR）是「为什么这么定」的唯一长期载体，
+# 代码注释只能解释局部，跨模块的取舍与踩坑经验会随文件重写一起消失，必须入库。
+!docs/adr/**
 
 # Waline 表情图包：dev/build 启动时从 node_modules 落盘，运行时产物不入库
 apps/blog/public/waline-emojis/

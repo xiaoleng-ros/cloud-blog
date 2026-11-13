@@ -1,13 +1,6 @@
-import { getCollection } from 'astro:content';
-import {
-  absoluteUrl,
-  getPostDescription,
-  getPostUpdatedDate,
-  getPostUrl,
-  site,
-  sortPosts,
-} from '../lib/posts';
-import { getSiteSettings } from '../lib/site-settings';
+import { getCollection } from 'astro:content'
+import { absoluteUrl, getPostDescription, getPostUpdatedDate, getPostUrl, site, sortPosts } from '../lib/posts'
+import { getSiteSettings } from '../lib/site-settings'
 
 const escapeXml = (value: string) =>
   value
@@ -17,28 +10,28 @@ const escapeXml = (value: string) =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
+    .replaceAll("'", '&apos;')
 
 export async function GET() {
   // 站点名/作者/描述：构建期取一次后台 SiteSettings，失败（null）回退 SITE_DEFAULTS；RSS 限最近 50 条
-  const settings = await getSiteSettings();
-  const siteName = settings?.siteName ?? site.name;
-  const siteAuthor = settings?.siteAuthor ?? site.author;
-  const siteDescription = settings?.siteDescription ?? site.description;
-  const posts = sortPosts(await getCollection('posts')).slice(0, 50);
+  const settings = await getSiteSettings()
+  const siteName = settings?.siteName ?? site.name
+  const siteAuthor = settings?.siteAuthor ?? site.author
+  const siteDescription = settings?.siteDescription ?? site.description
+  const posts = sortPosts(await getCollection('posts')).slice(0, 50)
   const latestDate = posts
     .map(getPostUpdatedDate)
     .filter((d): d is Date => Boolean(d))
-    .sort((a, b) => b.getTime() - a.getTime())[0];
+    .sort((a, b) => b.getTime() - a.getTime())[0]
 
   // 站点作者：Feedly / NetNewsWire 等客户端识别 author 时需要 email，用 site.url 派生的伪 email 兜底
-  const authorEmail = 'noreply@' + new URL(site.url).hostname;
+  const authorEmail = 'noreply@' + new URL(site.url).hostname
 
   const items = posts
     .map((post) => {
-      const url = getPostUrl(post);
-      const date = getPostUpdatedDate(post);
-      const postAuthor = post.data.author ?? siteAuthor;
+      const url = getPostUrl(post)
+      const date = getPostUpdatedDate(post)
+      const postAuthor = post.data.author ?? siteAuthor
 
       return `
         <item>
@@ -48,9 +41,9 @@ export async function GET() {
           ${date ? `<pubDate>${date.toUTCString()}</pubDate>` : ''}
           <description>${escapeXml(getPostDescription(post))}</description>
           <author>${escapeXml(`${postAuthor} (${authorEmail})`)}</author>
-        </item>`;
+        </item>`
     })
-    .join('');
+    .join('')
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -66,11 +59,11 @@ export async function GET() {
     ${latestDate ? `<lastBuildDate>${latestDate.toUTCString()}</lastBuildDate>` : ''}
     ${items}
   </channel>
-</rss>`;
+</rss>`
 
   return new Response(body.trim(), {
     headers: {
       'Content-Type': 'application/rss+xml; charset=utf-8',
     },
-  });
+  })
 }

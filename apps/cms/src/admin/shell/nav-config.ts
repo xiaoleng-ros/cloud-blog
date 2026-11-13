@@ -66,7 +66,12 @@ export const navSections: NavSection[] = [
       { label: '分类管理', path: '/collections/categories', icon: 'categories', keywords: 'categories fenlei' },
       { label: '标签管理', path: '/collections/tags', icon: 'tags', keywords: 'tags biaoqian' },
       { label: '图片管理', path: '/collections/media', icon: 'media', keywords: 'media image tupian' },
-      { label: '友链管理', path: '/collections/friends', icon: 'friends', keywords: 'friends link youlian shenhe exchange' },
+      {
+        label: '友链管理',
+        path: '/collections/friends',
+        icon: 'friends',
+        keywords: 'friends link youlian shenhe exchange',
+      },
       { label: '评论管理', path: '/comments', icon: 'comments', keywords: 'comments reply pinglun shenhe' },
       { label: '导航管理', path: '/globals/navigation', icon: 'navigation', keywords: 'navigation daohang' },
     ],
@@ -78,7 +83,12 @@ export const navSections: NavSection[] = [
       { label: '工作台', path: '/workbench', icon: 'workbench', keywords: 'workbench gongzuotai daiban pending' },
       { label: '站点设置', path: '/globals/site-settings', icon: 'settings', keywords: 'settings site shezhi' },
       // 更新日志：GitHub 贡献热力图 + 三个仓库的近期提交（紧挨站点设置，同属「系统」）
-      { label: '更新日志', path: '/changelog', icon: 'changelog', keywords: 'changelog update log git commit gengxin rizhi' },
+      {
+        label: '更新日志',
+        path: '/changelog',
+        icon: 'changelog',
+        keywords: 'changelog update log git commit gengxin rizhi',
+      },
       { label: '账号设置', path: '/account', icon: 'account', keywords: 'account profile zhanghao' },
     ],
   },
@@ -88,8 +98,7 @@ export const navSections: NavSection[] = [
 export const flatNavItems: NavItem[] = navSections.flatMap((section) => section.items)
 
 /** 拼出完整后台 URL：'/' -> /admin，'/collections/posts' -> /admin/collections/posts */
-export const buildAdminHref = (path: string, adminRoute: string) =>
-  path === '/' ? adminRoute : `${adminRoute}${path}`
+export const buildAdminHref = (path: string, adminRoute: string) => (path === '/' ? adminRoute : `${adminRoute}${path}`)
 
 /**
  * 路径反查菜单项。

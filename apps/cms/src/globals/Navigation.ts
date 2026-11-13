@@ -43,7 +43,13 @@ export const Navigation: GlobalConfig = {
       labels: { singular: '导航项', plural: '导航项' },
       fields: [
         { name: 'label', type: 'text', required: true, label: '导航文字' },
-        { name: 'href', type: 'text', required: true, label: '链接', admin: { description: '站内路径如 /archive，或外链如 https://...' } },
+        {
+          name: 'href',
+          type: 'text',
+          required: true,
+          label: '链接',
+          admin: { description: '站内路径如 /archive，或外链如 https://...' },
+        },
         { name: 'sort', type: 'number', defaultValue: 0, label: '排序权重', admin: { description: '数字越小越靠前' } },
         { name: 'visible', type: 'checkbox', defaultValue: true, label: '前台可见' },
       ],
@@ -55,8 +61,19 @@ export const Navigation: GlobalConfig = {
       labels: { singular: '条目', plural: '条目' },
       fields: [
         { name: 'label', type: 'text', required: true, label: '标题' },
-        { name: 'href', type: 'text', required: true, label: '链接', admin: { description: '站内路径如 /stats，或外链如 https://...' } },
-        { name: 'icon', type: 'text', label: '图标', admin: { description: '图标名，与前台 Icon 组件一致，如 github / tag / globe' } },
+        {
+          name: 'href',
+          type: 'text',
+          required: true,
+          label: '链接',
+          admin: { description: '站内路径如 /stats，或外链如 https://...' },
+        },
+        {
+          name: 'icon',
+          type: 'text',
+          label: '图标',
+          admin: { description: '图标名，与前台 Icon 组件一致，如 github / tag / globe' },
+        },
         { name: 'external', type: 'checkbox', defaultValue: false, label: '外链（新标签打开）' },
         { name: 'sort', type: 'number', defaultValue: 0, label: '排序权重', admin: { description: '数字越小越靠前' } },
         { name: 'visible', type: 'checkbox', defaultValue: true, label: '前台可见' },

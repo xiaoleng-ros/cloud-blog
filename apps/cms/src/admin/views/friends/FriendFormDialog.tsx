@@ -121,8 +121,7 @@ export function FriendFormDialog({ open, initial, onClose, onSaved }: FriendForm
   }, [open, onClose])
 
   const patch = useCallback(
-    <K extends keyof FormState>(key: K, value: FormState[K]) =>
-      setForm((prev) => ({ ...prev, [key]: value })),
+    <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [key]: value })),
     [],
   )
 
@@ -170,9 +169,7 @@ export function FriendFormDialog({ open, initial, onClose, onSaved }: FriendForm
           const first = json.errors?.[0]?.message
           if (first) {
             // 唯一索引冲突的原始文案太长，换成人话
-            message = /duplicate key|unique/i.test(first)
-              ? '这个站点地址已经收录过了，换一个再试'
-              : first
+            message = /duplicate key|unique/i.test(first) ? '这个站点地址已经收录过了，换一个再试' : first
           }
         } catch {
           /* 非 JSON 响应保留状态码 */
@@ -203,29 +200,24 @@ export function FriendFormDialog({ open, initial, onClose, onSaved }: FriendForm
         if (event.target === event.currentTarget && !saving) onClose()
       }}
     >
-      <div
-        className="friends__dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="friends-dialog-title"
-      >
+      <div className="friends__dialog" role="dialog" aria-modal="true" aria-labelledby="friends-dialog-title">
         <header className="friends__dialog-head">
           <div>
             <h2 className="friends__dialog-title" id="friends-dialog-title">
               {isEdit ? '编辑友链' : '新建友链'}
             </h2>
-            <p className="friends__dialog-sub">
-              名称、地址、描述和头像决定卡片长什么样，保存后前台立即更新
-            </p>
+            <p className="friends__dialog-sub">名称、地址、描述和头像决定卡片长什么样，保存后前台立即更新</p>
           </div>
-          <button
-            type="button"
-            className="friends__dialog-close"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="关闭"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <button type="button" className="friends__dialog-close" onClick={onClose} disabled={saving} aria-label="关闭">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            >
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
           </button>
@@ -258,9 +250,7 @@ export function FriendFormDialog({ open, initial, onClose, onSaved }: FriendForm
                 placeholder="https://example.com"
                 inputMode="url"
               />
-              <span className="friends__form-hint">
-                必须是 http(s) 开头的完整地址，同一地址不能重复收录
-              </span>
+              <span className="friends__form-hint">必须是 http(s) 开头的完整地址，同一地址不能重复收录</span>
             </label>
 
             <label className="friends__form-field">
@@ -329,9 +319,7 @@ export function FriendFormDialog({ open, initial, onClose, onSaved }: FriendForm
                  * rejected（早期接口写的），补一个禁用项，避免 select 落成空白、
                  * 一保存就把状态改成别的。
                  */}
-                {form.status === 'rejected' && (
-                  <option value="rejected">已拒绝（历史记录）</option>
-                )}
+                {form.status === 'rejected' && <option value="rejected">已拒绝（历史记录）</option>}
                 <option value="published">已通过（前台展示）</option>
                 <option value="pending">待审核</option>
                 <option value="hidden">已隐藏</option>

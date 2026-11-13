@@ -17,17 +17,11 @@ export const fmt = (v?: string | null) => {
  * 兼容三形态：数组（对象或裸 id）/ 单对象 / 裸 id
  */
 export function extractNames(
-  value: Array<{ id: number; name?: string } | number>
-    | { id: number; name?: string }
-    | number
-    | null
-    | undefined,
+  value: Array<{ id: number; name?: string } | number> | { id: number; name?: string } | number | null | undefined,
 ): string[] {
   if (!value) return []
   if (Array.isArray(value)) {
-    return value
-      .map((v) => (typeof v === 'object' ? v.name ?? String(v.id) : String(v)))
-      .filter(Boolean)
+    return value.map((v) => (typeof v === 'object' ? (v.name ?? String(v.id)) : String(v))).filter(Boolean)
   }
   if (typeof value === 'object') return [value.name ?? String(value.id)]
   return [String(value)]
@@ -38,7 +32,9 @@ export const tagPill = (names: string[]) =>
   names.length ? (
     <span className="drafts__tags">
       {names.slice(0, 3).map((n, i) => (
-        <i key={`${n}-${i}`} className="drafts__tag">{n}</i>
+        <i key={`${n}-${i}`} className="drafts__tag">
+          {n}
+        </i>
       ))}
       {names.length > 3 && <i className="drafts__tag drafts__tag--more">+{names.length - 3}</i>}
     </span>

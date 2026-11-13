@@ -14,7 +14,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import { Toast, useToast } from '../../components/Toast'
-import { createTerm, deleteTag, describeApiError, fetchTagUsage, fetchTerms, updateTag, type TermOption } from '../lib/api'
+import {
+  createTerm,
+  deleteTag,
+  describeApiError,
+  fetchTagUsage,
+  fetchTerms,
+  updateTag,
+  type TermOption,
+} from '../lib/api'
 
 export const TagsViewInner = () => {
   const [docs, setDocs] = useState<TermOption[]>([])
@@ -58,7 +66,11 @@ export const TagsViewInner = () => {
   const filtered = useMemo(() => {
     const kw = keyword.trim().toLowerCase()
     if (!kw) return docs
-    return docs.filter((d) => String(d.name ?? '').toLowerCase().includes(kw))
+    return docs.filter((d) =>
+      String(d.name ?? '')
+        .toLowerCase()
+        .includes(kw),
+    )
   }, [docs, keyword])
 
   const resetPanel = () => {
@@ -348,11 +360,7 @@ export const TagsViewInner = () => {
                       <button type="button" className="drafts__op" onClick={() => startEdit(d)}>
                         编辑
                       </button>
-                      <button
-                        type="button"
-                        className="drafts__op drafts__op--danger"
-                        onClick={() => setConfirmDel(d)}
-                      >
+                      <button type="button" className="drafts__op drafts__op--danger" onClick={() => setConfirmDel(d)}>
                         删除
                       </button>
                     </td>
@@ -391,9 +399,7 @@ export const TagsViewInner = () => {
               if (e.key === 'Enter' && !busy) void submit()
             }}
           />
-          {editingId == null && (
-            <p className="tag__hint">一次可填多个，用顿号（、）隔开，提交后逐个创建</p>
-          )}
+          {editingId == null && <p className="tag__hint">一次可填多个，用顿号（、）隔开，提交后逐个创建</p>}
           {error && <p className="tag__error">{error}</p>}
           <button type="button" className="tag__submit" disabled={busy} onClick={() => void submit()}>
             {createProgress
@@ -444,9 +450,7 @@ export const TagsViewInner = () => {
             <h3>确认批量删除</h3>
             <p>
               确定删除选中的 {confirmBatchDelete.length} 个标签吗？
-              {batchDelCount > 0
-                ? `这些标签正被 ${batchDelCount} 篇内容使用，删除后将自动从内容上移除。`
-                : ''}
+              {batchDelCount > 0 ? `这些标签正被 ${batchDelCount} 篇内容使用，删除后将自动从内容上移除。` : ''}
             </p>
             {batchProgress && (
               <p className="manage__delete-progress">
@@ -454,7 +458,12 @@ export const TagsViewInner = () => {
               </p>
             )}
             <div className="drafts__confirm-actions">
-              <button type="button" className="drafts__op" disabled={batchBusy} onClick={() => setConfirmBatchDelete(null)}>
+              <button
+                type="button"
+                className="drafts__op"
+                disabled={batchBusy}
+                onClick={() => setConfirmBatchDelete(null)}
+              >
                 取消
               </button>
               <button

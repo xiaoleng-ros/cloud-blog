@@ -79,7 +79,12 @@ export const Projects: CollectionConfig = {
       label: '标签',
       admin: { description: '每行一个' },
     },
-    { name: 'sortOrder', type: 'number', label: '组内排序', admin: { position: 'sidebar', description: '数字越小越靠前' } },
+    {
+      name: 'sortOrder',
+      type: 'number',
+      label: '组内排序',
+      admin: { position: 'sidebar', description: '数字越小越靠前' },
+    },
     {
       name: 'status',
       type: 'select',

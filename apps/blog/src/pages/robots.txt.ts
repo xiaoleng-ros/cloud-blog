@@ -1,4 +1,4 @@
-import { absoluteUrl } from '../lib/posts';
+import { absoluteUrl } from '../lib/posts'
 
 /**
  * robots.txt 生成
@@ -19,11 +19,11 @@ export function GET() {
     'Disallow: /__blog/',
     '',
     `Sitemap: ${absoluteUrl('/sitemap.xml')}`,
-  ].join('\n');
+  ].join('\n')
 
   return new Response(body, {
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',
     },
-  });
+  })
 }

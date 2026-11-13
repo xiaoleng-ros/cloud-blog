@@ -9,32 +9,32 @@
  * 为什么必须集中在一处：blog 的 Astro 层与 cms 的 blog-render 注入层各自抄了一份字面量，
  * 删掉一边、另一边还在，于是出现「后台页脚群组明明是空的，前台却长出 QQ / 微信」的幽灵兜底。
  */
-import { formatAboutLine, type NoteItem, type SkillItem } from './about-format';
+import { formatAboutLine, type NoteItem, type SkillItem } from './about-format'
 
 /** 页脚一行：name 用于展示与找图标，href 空串表示纯文字标签 */
 export interface FooterLinkItem {
-  name: string;
-  icon: string;
-  href: string;
+  name: string
+  icon: string
+  href: string
 }
 
 export interface OfflineHero {
-  greeting: string;
-  name: string;
-  subtitle: string;
-  bio: string;
+  greeting: string
+  name: string
+  subtitle: string
+  bio: string
 }
 
 export interface OfflineFooter {
-  subtitle: string;
-  channels: FooterLinkItem[];
-  groups: FooterLinkItem[];
+  subtitle: string
+  channels: FooterLinkItem[]
+  groups: FooterLinkItem[]
 }
 
 export interface OfflineAbout {
-  paragraphs: string[];
-  notes: NoteItem[];
-  skills: SkillItem[];
+  paragraphs: string[]
+  notes: NoteItem[]
+  skills: SkillItem[]
 }
 
 /**
@@ -43,7 +43,7 @@ export interface OfflineAbout {
  * 已接后台：真实来源是站点设置的 siteCreatedAt（后台留空则整块不渲染）。
  * 这个常量只在「后台整体不可用」时兜底，保证宕机时这块不至于空掉。
  */
-export const PLACEHOLDER_SITE_SINCE = '2026-10-06';
+export const PLACEHOLDER_SITE_SINCE = '2026-10-06'
 
 /**
  * ICP 备案号的离线兜底 —— 默认留空。
@@ -53,14 +53,14 @@ export const PLACEHOLDER_SITE_SINCE = '2026-10-06';
  * 旧值曾硬编码一份 ICP 号：宕机兜底时后台没起来，前台却显示一个可能已变更/错误的备案号，
  * 比「空白」更危险（合规风险 > 可用性损失）。
  */
-export const OFFLINE_ICP = '';
+export const OFFLINE_ICP = ''
 
 export const OFFLINE_HERO: OfflineHero = {
   greeting: '嗨，我是',
   name: '云岫',
   subtitle: '又名 YUN XIU · 爱折腾的剪辑创作者',
   bio: '小冷的个人空间 · 记录剪辑、AI 与代码\nSystem.out.print("有些梦虽然遥不可及，但并不是不可能实现!");',
-};
+}
 
 /**
  * 平台/名称 → 图标名（shared/icon-paths 里的键）。
@@ -71,7 +71,7 @@ export const OFFLINE_HERO: OfflineHero = {
  */
 const ICON_ALIASES: Record<string, string> = {
   bilibili: 'bilibili',
-  'b站': 'bilibili',
+  b站: 'bilibili',
   哔哩哔哩: 'bilibili',
   douyin: 'douyin',
   抖音: 'douyin',
@@ -93,21 +93,21 @@ const ICON_ALIASES: Record<string, string> = {
   邮箱: 'mail',
   邮件: 'mail',
   电子邮件: 'mail',
-};
+}
 
 function resolveIconName(raw: string): string {
-  const key = String(raw).trim().toLowerCase();
-  return ICON_ALIASES[key] ?? key;
+  const key = String(raw).trim().toLowerCase()
+  return ICON_ALIASES[key] ?? key
 }
 
 /** 页脚「名称」→ 图标名 */
 export function footerIconFor(name: string): string {
-  return resolveIconName(name);
+  return resolveIconName(name)
 }
 
 /** 社交链接「平台」→ 图标名 */
 export function socialIconFor(platform: string): string {
-  return resolveIconName(platform);
+  return resolveIconName(platform)
 }
 
 export const OFFLINE_SOCIALS: Array<{ platform: string; href: string; label: string }> = [
@@ -116,7 +116,7 @@ export const OFFLINE_SOCIALS: Array<{ platform: string; href: string; label: str
   { platform: 'github', href: 'https://github.com/xiaoleng-ros', label: 'GitHub' },
   { platform: '邮箱', href: 'mailto:1873048956@qq.com', label: '邮箱' },
   { platform: 'rss', href: '/rss.xml', label: 'RSS 订阅' },
-];
+]
 
 /** 群组没有兜底：后台不填，前台就不该出现任何群组标签 */
 export const OFFLINE_FOOTER: OfflineFooter = {
@@ -128,7 +128,7 @@ export const OFFLINE_FOOTER: OfflineFooter = {
     { name: 'RSS', icon: 'rss', href: '/rss.xml' },
   ],
   groups: [],
-};
+}
 
 export const OFFLINE_ABOUT: OfflineAbout = {
   // 与在线路径同源的 ==高亮== 记号，渲染交给 formatAboutLine，避免默认值成为唯一一段裸 HTML
@@ -149,4 +149,4 @@ export const OFFLINE_ABOUT: OfflineAbout = {
     { label: 'AI 工具', sublabel: '听之任之', value: 75, color: 'pink' },
     { label: 'JavaScript', sublabel: '会点魔术', value: 65, color: 'yellow' },
   ],
-};
+}

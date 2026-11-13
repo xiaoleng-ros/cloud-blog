@@ -1,20 +1,25 @@
-import { defineCollection } from 'astro:content';
+import { defineCollection } from 'astro:content'
 // `z` 从 astro:content 导入已废弃（Astro 7 移除），改为直连 astro/zod（同源 zod v4）
-import { z } from 'astro/zod';
-import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils';
-import { payloadNotesLoader, payloadPostsLoader, payloadProjectsLoader, payloadFriendsLoader } from './lib/payload-loader';
+import { z } from 'astro/zod'
+import { DEFAULT_PROJECT_ICON } from 'cloud-blog/shared/post-utils'
+import {
+  payloadNotesLoader,
+  payloadPostsLoader,
+  payloadProjectsLoader,
+  payloadFriendsLoader,
+} from './lib/payload-loader'
 
 const stringList = z.preprocess((value) => {
   if (value === undefined || value === null) {
-    return undefined;
+    return undefined
   }
 
   if (Array.isArray(value)) {
-    return value.map(String);
+    return value.map(String)
   }
 
-  return [String(value)];
-}, z.array(z.string()).optional());
+  return [String(value)]
+}, z.array(z.string()).optional())
 
 const posts = defineCollection({
   loader: payloadPostsLoader,
@@ -38,7 +43,7 @@ const posts = defineCollection({
       author: z.string().optional(),
     })
     .loose(),
-});
+})
 
 const notes = defineCollection({
   loader: payloadNotesLoader,
@@ -50,7 +55,7 @@ const notes = defineCollection({
       tags: stringList,
     })
     .loose(),
-});
+})
 
 const projects = defineCollection({
   loader: payloadProjectsLoader,
@@ -69,7 +74,7 @@ const projects = defineCollection({
       sortOrder: z.coerce.number().default(0),
     })
     .loose(),
-});
+})
 
 const friends = defineCollection({
   loader: payloadFriendsLoader,
@@ -89,6 +94,6 @@ const friends = defineCollection({
       updatedAt: z.string().optional(),
     })
     .loose(),
-});
+})
 
-export const collections = { posts, notes, projects, friends };
+export const collections = { posts, notes, projects, friends }

@@ -10,82 +10,85 @@
 //   avatar-80.webp       80×80   WebP  → 页脚头像（显示 40×40，2x 高清屏）
 //
 // 另外顺带做装饰图（P0-4）：apps/blog/public/images/footer-animals.png
-//   1948×236 / 379KB PNG → 同尺寸 WebP q82（实测约 60KB，−84%）
+//   1948×236 / 379KB PNG → 同尺寸 WebP q82（实测 56KB，−85%）
+//   注：源 PNG 已移出仓库（见 optimizeFooterAnimals 注释），此步已是可选兼容分支。
 //
 // 输入源优先级：
 //   1) apps/blog/public/avatars/avatar.png（仓库内默认图标）
 //   2) settings.siteIcon 指向的 Supabase 远程图（SITE_ICON_URL 环境变量注入，
 //      避免在构建脚本里连数据库）
 // 二者都没有时跳过（保留现有引用，不破坏构建）。
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const BLOG_PUBLIC = join(import.meta.dirname, '../../blog/public');
-const BLOG_DIST = join(import.meta.dirname, '../../blog/dist');
-const SOURCE = join(BLOG_PUBLIC, 'avatars/avatar.png');
+const BLOG_PUBLIC = join(import.meta.dirname, '../../blog/public')
+const BLOG_DIST = join(import.meta.dirname, '../../blog/dist')
+const SOURCE = join(BLOG_PUBLIC, 'avatars/avatar.png')
 
 async function main() {
-  let inputBuf;
-  let sourceDesc;
+  let inputBuf
+  let sourceDesc
   if (existsSync(SOURCE)) {
-    inputBuf = readFileSync(SOURCE);
-    sourceDesc = 'public/avatars/avatar.png';
+    inputBuf = readFileSync(SOURCE)
+    sourceDesc = 'public/avatars/avatar.png'
   } else if (process.env.SITE_ICON_URL) {
-    sourceDesc = process.env.SITE_ICON_URL;
-    process.stderr.write(`[optimize-icons] 尝试从 ${sourceDesc} 拉取站点图标…\n`);
-    const res = await fetch(process.env.SITE_ICON_URL, { signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) throw new Error(`拉取站点图标失败：HTTP ${res.status}`);
-    inputBuf = Buffer.from(await res.arrayBuffer());
+    sourceDesc = process.env.SITE_ICON_URL
+    process.stderr.write(`[optimize-icons] 尝试从 ${sourceDesc} 拉取站点图标…\n`)
+    const res = await fetch(process.env.SITE_ICON_URL, { signal: AbortSignal.timeout(10_000) })
+    if (!res.ok) throw new Error(`拉取站点图标失败：HTTP ${res.status}`)
+    inputBuf = Buffer.from(await res.arrayBuffer())
   } else {
-    process.stderr.write('[optimize-icons] 未找到图标源（public/avatars/avatar.png 或 SITE_ICON_URL），跳过\n');
-    return;
+    process.stderr.write('[optimize-icons] 未找到图标源（public/avatars/avatar.png 或 SITE_ICON_URL），跳过\n')
+    return
   }
 
-  const sharp = (await import('sharp')).default;
-  const image = sharp(inputBuf, { failOn: 'none' });
-  const meta = await image.metadata();
+  const sharp = (await import('sharp')).default
+  const image = sharp(inputBuf, { failOn: 'none' })
+  const meta = await image.metadata()
 
   const targets = [
     { file: 'favicon-32.png', size: 32, format: 'png' },
     { file: 'apple-touch-icon.png', size: 180, format: 'png' },
     { file: 'avatar-80.webp', size: 80, format: 'webp' },
-  ];
+  ]
 
-  const outDir = join(BLOG_DIST, 'avatars');
-  mkdirSync(outDir, { recursive: true });
+  const outDir = join(BLOG_DIST, 'avatars')
+  mkdirSync(outDir, { recursive: true })
 
   for (const { file, size, format } of targets) {
     const buf = await sharp(inputBuf, { failOn: 'none' })
       .resize(size, size, { fit: 'cover', withoutEnlargement: true })
       [format](format === 'webp' ? { quality: 82 } : { compressionLevel: 9, palette: true })
-      .toBuffer();
-    writeFileSync(join(outDir, file), buf);
-    process.stdout.write(`[optimize-icons] ${file} ← ${sourceDesc} (${meta.width}×${meta.height}) → ${buf.length}B\n`);
+      .toBuffer()
+    writeFileSync(join(outDir, file), buf)
+    process.stdout.write(`[optimize-icons] ${file} ← ${sourceDesc} (${meta.width}×${meta.height}) → ${buf.length}B\n`)
   }
 
-  await optimizeFooterAnimals(sharp);
+  await optimizeFooterAnimals(sharp)
 }
 
 /**
- * 页脚装饰条（P0-4）：1948×236 PNG 379KB 纯装饰图 → 同尺寸 WebP。
+ * 页脚装饰条（P0-4）：1948×236 PNG 379KB 纯装饰图 → 同尺寸 WebP（实测 56KB，−85%）。
  * 尺寸不变（CSS 按 width:100% 铺满虚线），只换编码。
+ *
+ * 源 PNG 已从仓库删除（只保留 WebP 入库）：它只用于这条装饰线，转码一次后可丢弃，
+ * 留着 379KB 只会让人误以为它是线上资源。因此这里改为：
+ *   - 有 PNG（本地临时放回的情况）→ 生成 WebP
+ *   - 只有 WebP → 什么都不做（apps/blog/public/images/footer-animals.webp
+ *     会被 astro build 原样复制进 dist，不需要脚本参与）
+ * 两种情况都不再打印「未找到」告警，避免正常构建出现无意义噪音。
  */
 async function optimizeFooterAnimals(sharp) {
-  const src = join(BLOG_PUBLIC, 'images/footer-animals.png');
-  if (!existsSync(src)) {
-    process.stderr.write('[optimize-icons] 未找到 footer-animals.png，跳过装饰图\n');
-    return;
-  }
-  const outDir = join(BLOG_DIST, 'images');
-  mkdirSync(outDir, { recursive: true });
-  const buf = await sharp(src, { failOn: 'none' }).webp({ quality: 82 }).toBuffer();
-  writeFileSync(join(outDir, 'footer-animals.webp'), buf);
-  process.stdout.write(
-    `[optimize-icons] footer-animals.webp ← public/images/footer-animals.png → ${buf.length}B\n`,
-  );
+  const src = join(BLOG_PUBLIC, 'images/footer-animals.png')
+  if (!existsSync(src)) return
+  const outDir = join(BLOG_DIST, 'images')
+  mkdirSync(outDir, { recursive: true })
+  const buf = await sharp(src, { failOn: 'none' }).webp({ quality: 82 }).toBuffer()
+  writeFileSync(join(outDir, 'footer-animals.webp'), buf)
+  process.stdout.write(`[optimize-icons] footer-animals.webp ← public/images/footer-animals.png → ${buf.length}B\n`)
 }
 
 main().catch((err) => {
   // 图标优化失败不阻塞构建：线上退化为现有引用（大图），下次构建再修
-  process.stderr.write(`[optimize-icons] 失败（不阻塞构建）：${err?.message ?? err}\n`);
-});
+  process.stderr.write(`[optimize-icons] 失败（不阻塞构建）：${err?.message ?? err}\n`)
+})

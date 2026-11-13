@@ -59,12 +59,7 @@ export function diagnose(result: StorageSelfTestResult): string {
   // `InvalidAccessKeyId` 只出现在 putObject 的响应体里。早先这里取的是
   // `headBucket.ok ? putObject : headBucket`（「哪个步骤失败了」的逻辑，不是
   // 「哪段错误有信息量」的逻辑），结果只要 headBucket 失败就永远落到兜底那句。
-  const text = [
-    result.putObject.error,
-    result.headBucket.error,
-    result.putObject.code,
-    result.headBucket.code,
-  ]
+  const text = [result.putObject.error, result.headBucket.error, result.putObject.code, result.headBucket.code]
     .filter(Boolean)
     .join(' ')
 

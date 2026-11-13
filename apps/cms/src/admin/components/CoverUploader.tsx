@@ -40,7 +40,14 @@ export interface CoverUploaderProps {
  */
 type ImgStatus = 'unknown' | 'ok' | 'fail'
 
-export const CoverUploader: React.FC<CoverUploaderProps> = ({ value, onChange, disabled, id, className, placeholder = '请输入图片地址' }) => {
+export const CoverUploader: React.FC<CoverUploaderProps> = ({
+  value,
+  onChange,
+  disabled,
+  id,
+  className,
+  placeholder = '请输入图片地址',
+}) => {
   // 上传中状态：禁用按钮 + 按钮文案切换
   const [uploading, setUploading] = useState(false)
   // 上传错误提示（3-4 秒后自动清空，不打断填写节奏）
@@ -100,13 +107,7 @@ export const CoverUploader: React.FC<CoverUploaderProps> = ({ value, onChange, d
   return (
     <div className={className ? `cover-uploader ${className}` : 'cover-uploader'}>
       {/* 隐藏的 file input：由「选择」按钮程序化触发 */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
 
       {/* 单框样式：图片小图标 + 地址输入 + 「选择」上传按钮合并为一个描边框 */}
       <div className="cover-uploader__combo">

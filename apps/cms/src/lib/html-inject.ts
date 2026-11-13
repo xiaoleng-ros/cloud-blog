@@ -32,7 +32,7 @@
  * 只有外层被匹配（parse5 DOM 树本身区分层级），彻底消除旧版 depth 计数误配的可能。
  */
 
-import { parse } from 'parse5';
+import { parse } from 'parse5'
 
 /**
  * parse5 v7 不再从主模块直接导出 Element / Node / ParentNode 类型，
@@ -44,41 +44,66 @@ import { parse } from 'parse5';
  * #text、#comment、#document 等不同分支里字段差异较大，统一收敛成一个宽类型最简单。
  */
 type Attr = { name: string; value?: string }
+
+/**
+ * parse5 的源位置信息（仅在 `sourceCodeLocationInfo: true` 时才挂在节点上）。
+ * 只声明本文件真正读取的字段；@types/parse5 没把该字段拓宽到基础 Element 上，
+ * 所以由这里的宽类型自己补齐，避免到处 `as any`。
+ * 偏移量语义：`startOffset` 闭区间起点，`endOffset` 是**开区间**终点（即 `>` 之后一位）。
+ */
+type SourceCodeLocation = {
+  startOffset: number
+  endOffset: number
+  startTag?: { startOffset: number; endOffset: number }
+  endTag?: { startOffset: number; endOffset: number }
+}
+
 type AnyNode = {
   nodeName: string
   tagName?: string
   attrs?: Attr[]
   childNodes?: AnyNode[]
   value?: string
+  sourceCodeLocation?: SourceCodeLocation
 }
 
 /** HTML 空元素：没有闭合标签，不能作为锚点容器（防御性过滤，parse5 已内建处理） */
 const VOID_TAGS = new Set([
-  'area', 'base', 'br', 'col', 'embed', 'hr', 'img',
-  'input', 'link', 'meta', 'param', 'source', 'track', 'wbr',
-]);
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+])
 
 /** 这些区块不是页面元素，由 <title> 单独处理 */
-const NON_ELEMENT_BLOCKS = new Set(['pageTitle']);
+const NON_ELEMENT_BLOCKS = new Set(['pageTitle'])
 
 /** 给属性值转义，兼容 " 出现在后台数据里的场景 */
-const escapeAttrValue = (value: string) =>
-  String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+const escapeAttrValue = (value: string) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
 
 /** 给文本内容转义，避免后台 title 里若含 < > 破坏 HTML 结构 */
-const escapeText = (value: string) =>
-  String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeText = (value: string) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /** 单个锚点的源字符索引（相对原始 html 字符串） */
 interface AnchorRegion {
   /** 开标签的 '<' 位置 */
-  tagStart: number;
+  tagStart: number
   /** 开标签的 '>' 位置（不含 >） */
-  openEnd: number;
+  openEnd: number
   /** innerHTML 起点 = openEnd + 1 */
-  innerStart: number;
+  innerStart: number
   /** innerHTML 终点 = 闭合标签 '<' 的起始位置 */
-  innerEnd: number;
+  innerEnd: number
 }
 
 /** 判断节点是否为元素节点 */
@@ -117,22 +142,15 @@ function withVersionAttr(openTag: string, version: string): string {
  * @param anchors - 输出容器：blockId -> AnchorRegion
  * @param html - 原始 HTML 字符串，用于读取 openTag 原文片段
  */
-function collectAnchors(
-  node: AnyNode,
-  wantedIds: Set<string>,
-  anchors: Map<string, AnchorRegion>,
-  html: string,
-): void {
+function collectAnchors(node: AnyNode, wantedIds: Set<string>, anchors: Map<string, AnchorRegion>, html: string): void {
   // 遇到已记录过的锚点直接跳过（避免同名锚点重复触发）
   if (isElementNode(node)) {
     const blockId = getAttr(node, 'data-sync-block')
     const tagName = node.tagName?.toLowerCase() ?? ''
     if (blockId && wantedIds.has(blockId) && !VOID_TAGS.has(tagName)) {
-      // parse5 只启用 sourceCodeLocationInfo 时才会给 element 挂 sourceCodeLocation 字段；
+      // parse5 只在启用 sourceCodeLocationInfo 时才给 element 挂 sourceCodeLocation；
       // 若缺省（旧版 parse5 或意外分支），跳过以免污染输出。
-      // 通过 any 断言是因为 @types/parse5 未在基础 Element 上声明该字段。
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const loc = (node as any).sourceCodeLocation
+      const loc = node.sourceCodeLocation
       if (loc && loc.startTag) {
         // parse5 v7: startTag.endOffset 是开区间（`>` 之后一位），即 innerHTML 首字符索引
         // 因此 openEnd（闭区间末位，含 `>`）= endOffset - 1，innerStart = endOffset。
@@ -141,15 +159,9 @@ function collectAnchors(
         const tagStart: number = loc.startTag.startOffset
         const openEnd: number = loc.startTag.endOffset - 1
         const innerStart: number = loc.startTag.endOffset
-        const innerEnd: number = loc.endTag
-          ? loc.endTag.startOffset
-          : loc.endOffset
+        const innerEnd: number = loc.endTag ? loc.endTag.startOffset : loc.endOffset
         // 防御：解析器返回的索引必须在 [0, html.length] 内且区间合法
-        if (
-          tagStart >= 0 &&
-          innerEnd <= html.length &&
-          innerEnd >= innerStart
-        ) {
+        if (tagStart >= 0 && innerEnd <= html.length && innerEnd >= innerStart) {
           anchors.set(blockId, { tagStart, openEnd, innerStart, innerEnd })
         }
       }
@@ -203,8 +215,7 @@ function findTitleLocation(root: AnyNode): { start: number; end: number } | null
   const walk = (node: AnyNode): { start: number; end: number } | null => {
     if (isElementNode(node)) {
       if (node.tagName === 'title') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const loc = (node as any).sourceCodeLocation
+        const loc = node.sourceCodeLocation
         if (loc) {
           return { start: loc.startOffset, end: loc.endOffset }
         }
@@ -320,10 +331,7 @@ export function injectSyncBlocks(
       skipped.push(blockId)
       continue
     }
-    const openTag = withVersionAttr(
-      html.slice(anchor.tagStart, anchor.openEnd + 1),
-      version,
-    )
+    const openTag = withVersionAttr(html.slice(anchor.tagStart, anchor.openEnd + 1), version)
     hits.push({
       openStart: anchor.tagStart,
       innerEnd: anchor.innerEnd,
@@ -337,21 +345,14 @@ export function injectSyncBlocks(
   hits.sort((a, b) => b.innerEnd - a.innerEnd)
   let output = html
   for (const hit of hits) {
-    output =
-      output.slice(0, hit.openStart) +
-      hit.openTag +
-      hit.blockHtml +
-      output.slice(hit.innerEnd)
+    output = output.slice(0, hit.openStart) + hit.openTag + hit.blockHtml + output.slice(hit.innerEnd)
   }
 
   // 6) 更新 <title>
   if (title) {
     const loc = findTitleLocation(doc)
     if (loc) {
-      output =
-        output.slice(0, loc.start) +
-        `<title>${escapeText(title)}</title>` +
-        output.slice(loc.end)
+      output = output.slice(0, loc.start) + `<title>${escapeText(title)}</title>` + output.slice(loc.end)
     }
   }
 

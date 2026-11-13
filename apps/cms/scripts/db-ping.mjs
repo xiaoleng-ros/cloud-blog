@@ -83,9 +83,7 @@ const caPath = [
 const pgCa = caPath ? fs.readFileSync(caPath, 'utf-8') : undefined
 
 if (!pgCa) {
-  console.warn(
-    `[ca] 未找到 ${CA_RELATIVE}，strict 探测会因缺 CA 而失败（这不代表数据库不可用）。`,
-  )
+  console.warn(`[ca] 未找到 ${CA_RELATIVE}，strict 探测会因缺 CA 而失败（这不代表数据库不可用）。`)
 }
 
 async function pgProbe(mode) {
@@ -93,9 +91,7 @@ async function pgProbe(mode) {
   const client = new pg.Client({
     connectionString: conn,
     ssl:
-      mode === 'strict'
-        ? { rejectUnauthorized: true, ...(pgCa ? { ca: pgCa } : {}) }
-        : { rejectUnauthorized: false },
+      mode === 'strict' ? { rejectUnauthorized: true, ...(pgCa ? { ca: pgCa } : {}) } : { rejectUnauthorized: false },
     connectionTimeoutMillis: 8000,
   })
   try {

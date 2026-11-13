@@ -26,7 +26,7 @@ export const MD_EXTRA_TAGS = [
   // 首次服务端渲染正常，一旦 SSE 实时同步重放该区块就会塌。
   // nav 只是语义容器，不承载任何可执行内容，放行无额外风险。
   'nav',
-];
+]
 
 /**
  * iframe 允许嵌入的 host 白名单（精确匹配或子域）。
@@ -40,7 +40,7 @@ export const MD_IFRAME_HOSTS = [
   'player.bilibili.com', // B 站官方外链播放器
   'www.youtube.com',
   'youtube.com',
-];
+]
 
 /** iframe src 必须是白名单 host 的绝对 http(s) 地址；非白名单 host 的 src 会被净化器剥掉 */
 export const MD_IFRAME_SRC_PATTERN = new RegExp(
@@ -48,7 +48,7 @@ export const MD_IFRAME_SRC_PATTERN = new RegExp(
     MD_IFRAME_HOSTS.map((host) => host.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') +
     ')(?:[/?#:]|$)',
   'i',
-);
+)
 
 export const MD_EXTRA_ATTRIBUTES = {
   a: ['href', 'title', 'target', 'rel'],
@@ -77,46 +77,38 @@ export const MD_EXTRA_ATTRIBUTES = {
   del: ['cite', 'datetime'],
   ins: ['cite', 'datetime'],
   time: ['datetime'],
-};
+}
 
 export const MD_EXTRA_PROTOCOLS = {
   href: ['http', 'https', 'mailto', 'tel'],
   src: ['http', 'https'],
-};
+}
 
 /** 客户端兜底净化需要按 URL 语义校验的属性（DOM 小写名）；srcset/formaction 明确纳入 */
-export const MD_URL_ATTRIBUTES = [
-  'href',
-  'src',
-  'srcset',
-  'formaction',
-  'action',
-  'cite',
-  'longdesc',
-  'poster',
-];
+export const MD_URL_ATTRIBUTES = ['href', 'src', 'srcset', 'formaction', 'action', 'cite', 'longdesc', 'poster']
 
 const camelToHtmlAttr = (name) => {
-  const lower = name.toLowerCase();
-  if (lower === 'classname') return 'class';
-  if (lower === 'htmlfor') return 'for';
-  return lower;
-};
+  const lower = name.toLowerCase()
+  if (lower === 'classname') return 'class'
+  if (lower === 'htmlfor') return 'for'
+  return lower
+}
 
 /** 把 defaultSchema + 本文件扩展合并成净化器最终用的 attributes（工厂与列表导出共用这一份派生） */
 const mergedAttributes = (defaultSchema) => ({
   ...defaultSchema?.attributes,
   '*': [...(defaultSchema?.attributes?.['*'] ?? []), 'className'],
   ...MD_EXTRA_ATTRIBUTES,
-});
+})
 
-const flattenAttrNames = (definitions) =>
-  [...new Set(
+const flattenAttrNames = (definitions) => [
+  ...new Set(
     (definitions ?? [])
       .map((entry) => (typeof entry === 'string' ? entry : Array.isArray(entry) ? entry[0] : null))
       .filter(Boolean)
       .map(camelToHtmlAttr),
-  )];
+  ),
+]
 
 /**
  * @param defaultSchema 调用方从自己的 rehype-sanitize 依赖里取到的默认白名单
@@ -136,14 +128,14 @@ export const buildMdSanitizeSchema = (defaultSchema) => ({
     ...defaultSchema?.required,
     iframe: { sandbox: 'allow-scripts', referrerpolicy: 'no-referrer' },
   },
-});
+})
 
 /**
  * 客户端兜底净化的纯数据白名单视图（Astro 构建期把 JSON 注入前台脚本）。
  * 与 buildMdSanitizeSchema 从同一份定义派生，避免两份白名单漂移。
  */
 export const getMdSanitizeLists = (defaultSchema) => {
-  const attributes = mergedAttributes(defaultSchema);
+  const attributes = mergedAttributes(defaultSchema)
   return {
     tags: [...new Set([...(defaultSchema?.tagNames ?? []), ...MD_EXTRA_TAGS])],
     attributes: Object.fromEntries(
@@ -156,8 +148,8 @@ export const getMdSanitizeLists = (defaultSchema) => {
     },
     iframeHosts: MD_IFRAME_HOSTS,
     iframeSrcPattern: MD_IFRAME_SRC_PATTERN.source,
-  };
-};
+  }
+}
 
 /**
  * hast 树级 iframe 守卫：白名单之外的 iframe（含 src 已被剥掉的）整节点丢弃。
@@ -166,7 +158,7 @@ export const getMdSanitizeLists = (defaultSchema) => {
  */
 export const mdIframeHostGuard = () => (tree) => {
   const cleanChildren = (node) => {
-    if (!node || !Array.isArray(node.children)) return;
+    if (!node || !Array.isArray(node.children)) return
     node.children = node.children.filter(
       (child) =>
         !(
@@ -174,8 +166,8 @@ export const mdIframeHostGuard = () => (tree) => {
           child.tagName === 'iframe' &&
           !(typeof child.properties?.src === 'string' && MD_IFRAME_SRC_PATTERN.test(child.properties.src))
         ),
-    );
-    for (const child of node.children) cleanChildren(child);
-  };
-  cleanChildren(tree);
-};
+    )
+    for (const child of node.children) cleanChildren(child)
+  }
+  cleanChildren(tree)
+}

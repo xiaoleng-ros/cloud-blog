@@ -2,13 +2,7 @@ import { Client } from 'pg'
 import { resolvePgTls } from './pg-tls'
 import { identityOf, lookupAddrs } from './comment-identity'
 import { commentToPlainText } from './comment-markdown'
-import {
-  WalineServerError,
-  ensureAdminAccount,
-  table,
-  withDb,
-  type RawComment,
-} from './waline-server'
+import { WalineServerError, ensureAdminAccount, table, withDb, type RawComment } from './waline-server'
 
 /**
  * 后台评论管理 —— 直接操作 wl_* 表，不再通过 HTTP 转发 Waline。
@@ -149,9 +143,7 @@ function isPostComment(url: string): boolean {
   } catch {
     /* 解析失败按原串 */
   }
-  return MANAGED_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  )
+  return MANAGED_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
 }
 
 /**
@@ -226,8 +218,7 @@ export async function listComments(options: {
     })
   }
 
-  const threadHit = (node: WalineCommentNode): boolean =>
-    matchesFilters(node) || node.replies.some(threadHit)
+  const threadHit = (node: WalineCommentNode): boolean => matchesFilters(node) || node.replies.some(threadHit)
 
   const matched = buildThreads(posts).filter(threadHit)
 
@@ -286,12 +277,7 @@ export async function removeComment(id: number) {
 /**
  * 以站长身份回复评论（直接 approved）。
  */
-export async function replyToComment(options: {
-  parentId: number
-  url: string
-  content: string
-  nick: string
-}) {
+export async function replyToComment(options: { parentId: number; url: string; content: string; nick: string }) {
   const content = options.content.trim()
   if (!content) throw new WalineServerError('回复内容不能为空', 400)
   if (!options.url.trim()) throw new WalineServerError('这条评论缺少所属文章地址，无法回复', 400)
@@ -300,10 +286,7 @@ export async function replyToComment(options: {
 
   return withDb(async (client) => {
     // 查父评论取 rid（根评论 id）
-    const parent = await client.query(
-      `SELECT id, rid, url FROM ${table('comment')} WHERE id = $1`,
-      [options.parentId],
-    )
+    const parent = await client.query(`SELECT id, rid, url FROM ${table('comment')} WHERE id = $1`, [options.parentId])
     if (!parent.rowCount) throw new WalineServerError('被回复的评论不存在', 404)
     const rid = parent.rows[0].rid ?? parent.rows[0].id
 
@@ -327,9 +310,7 @@ export async function replyToComment(options: {
  * 导出文章评论为 CSV（功能 #25）。
  * 供后台「导出」按钮调用，返回 CSV 文本。
  */
-export async function exportCommentsCsv(options: {
-  status?: WalineStatus
-}): Promise<string> {
+export async function exportCommentsCsv(options: { status?: WalineStatus }): Promise<string> {
   const all = await withDb(async (client) => {
     let query = `SELECT id, nick, mail, link, url, comment, status, "like", insertedat, createdat, pid, rid, ua
                  FROM ${table('comment')} ORDER BY createdat DESC`
@@ -350,19 +331,23 @@ export async function exportCommentsCsv(options: {
   }
   const lines = [header.join(',')]
   for (const row of all) {
-    lines.push([
-      row.id,
-      row.nick,
-      row.mail,
-      row.link,
-      row.url,
-      commentToPlainText(row.comment ?? ''),
-      row.status,
-      row.like,
-      row.insertedat ?? row.createdat,
-      row.pid,
-      row.rid,
-    ].map(escape).join(','))
+    lines.push(
+      [
+        row.id,
+        row.nick,
+        row.mail,
+        row.link,
+        row.url,
+        commentToPlainText(row.comment ?? ''),
+        row.status,
+        row.like,
+        row.insertedat ?? row.createdat,
+        row.pid,
+        row.rid,
+      ]
+        .map(escape)
+        .join(','),
+    )
   }
   return lines.join('\n')
 }

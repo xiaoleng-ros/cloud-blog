@@ -82,10 +82,7 @@ function stripIds<T extends { id?: string }>(items: T[]): Omit<T, 'id'>[] {
   return items.map(({ id: _id, ...rest }) => rest)
 }
 
-const ICON_OPTIONS = [
-  ...Object.keys(LINE_ICONS),
-  ...Object.keys(BRAND_ICONS),
-]
+const ICON_OPTIONS = [...Object.keys(LINE_ICONS), ...Object.keys(BRAND_ICONS)]
 
 /**
  * 在后台画一个图标。
@@ -182,9 +179,7 @@ export const NavigationEditView = () => {
 
   // 删除确认：先弹卡片问一句，避免误点「删除」直接把导航项打掉（删除是立即落库，没有撤销）
   const [confirmDel, setConfirmDel] = useState<
-    | { kind: 'top'; item: TopNavItem }
-    | { kind: 'more'; item: MorePanelItem }
-    | null
+    { kind: 'top'; item: TopNavItem } | { kind: 'more'; item: MorePanelItem } | null
   >(null)
 
   const load = useCallback(async () => {
@@ -281,9 +276,7 @@ export const NavigationEditView = () => {
   }
   const saveTop = (item: TopNavItem) => {
     const exists = topNavRef.current.some((i) => i.id === item.id)
-    const nextTop = exists
-      ? topNavRef.current.map((i) => (i.id === item.id ? item : i))
-      : [...topNavRef.current, item]
+    const nextTop = exists ? topNavRef.current.map((i) => (i.id === item.id ? item : i)) : [...topNavRef.current, item]
     setModal(null)
     commit(nextTop, morePanelRef.current, exists ? '已保存' : '已新增')
   }
@@ -310,8 +303,7 @@ export const NavigationEditView = () => {
     commit(topNavRef.current, nextMore, exists ? '已保存' : '已新增')
   }
 
-  const sortItems = <T extends { sort: number }>(items: T[]) =>
-    [...items].sort((a, b) => a.sort - b.sort)
+  const sortItems = <T extends { sort: number }>(items: T[]) => [...items].sort((a, b) => a.sort - b.sort)
 
   return (
     <div className="drafts cat">
@@ -345,23 +337,17 @@ export const NavigationEditView = () => {
         ) : loadFailed ? (
           <p className="drafts__empty">未能读取导航配置。{error}</p>
         ) : tab === 'top' ? (
-          <TopNavList
-            items={sortItems(topNav)}
-            onAdd={addTop}
-            onEdit={editTop}
-            onDelete={removeTop}
-          />
+          <TopNavList items={sortItems(topNav)} onAdd={addTop} onEdit={editTop} onDelete={removeTop} />
         ) : (
-          <MorePanelList
-            items={sortItems(morePanel)}
-            onAdd={addMore}
-            onEdit={editMore}
-            onDelete={removeMore}
-          />
+          <MorePanelList items={sortItems(morePanel)} onAdd={addMore} onEdit={editMore} onDelete={removeMore} />
         )}
       </div>
 
-      {error && <p className="cat__error" style={{ marginTop: 12 }}>{error}</p>}
+      {error && (
+        <p className="cat__error" style={{ marginTop: 12 }}>
+          {error}
+        </p>
+      )}
 
       {modal && modal.kind === 'top' && (
         <TopNavModal
@@ -387,7 +373,10 @@ export const NavigationEditView = () => {
         <div className="drafts__confirm-mask" onClick={() => setConfirmDel(null)}>
           <div className="drafts__confirm" onClick={(e) => e.stopPropagation()}>
             <h3>确认删除</h3>
-            <p>{confirmDel.kind === 'top' ? '顶部导航项' : '更多面板条目'}「{confirmDel.item.label || '未命名'}」将被删除，前台会立即消失。确定继续吗？</p>
+            <p>
+              {confirmDel.kind === 'top' ? '顶部导航项' : '更多面板条目'}「{confirmDel.item.label || '未命名'}
+              」将被删除，前台会立即消失。确定继续吗？
+            </p>
             <div className="drafts__confirm-actions">
               <button type="button" className="drafts__op" onClick={() => setConfirmDel(null)}>
                 取消
@@ -460,11 +449,7 @@ function TopNavList({
                 <button type="button" className="drafts__op" onClick={() => onEdit(item)}>
                   编辑
                 </button>
-                <button
-                  type="button"
-                  className="drafts__op drafts__op--danger"
-                  onClick={() => onDelete(item.id)}
-                >
+                <button type="button" className="drafts__op drafts__op--danger" onClick={() => onDelete(item.id)}>
                   删除
                 </button>
               </span>
@@ -527,11 +512,7 @@ function MorePanelList({
                 <button type="button" className="drafts__op" onClick={() => onEdit(item)}>
                   编辑
                 </button>
-                <button
-                  type="button"
-                  className="drafts__op drafts__op--danger"
-                  onClick={() => onDelete(item.id)}
-                >
+                <button type="button" className="drafts__op drafts__op--danger" onClick={() => onDelete(item.id)}>
                   删除
                 </button>
               </span>
@@ -603,8 +584,7 @@ function NavigationLinkFields({
           aria-label={slugLabel}
         />
         <span className="cat__hint">
-          新页面自己起的英文标识（随笔是 <code>notes</code>），保存后地址是{' '}
-          <code>{slugToHref(slug)}</code>
+          新页面自己起的英文标识（随笔是 <code>notes</code>），保存后地址是 <code>{slugToHref(slug)}</code>
         </span>
       </label>
 
@@ -677,16 +657,13 @@ function TopNavModal({
   const [slug, setSlug] = useState(() =>
     initial?.href && !isExternalHref(initial.href) ? hrefToSlug(initial.href) : '',
   )
-  const [externalHref, setExternalHref] = useState(
-    initial?.href && isExternalHref(initial.href) ? initial.href : '',
-  )
+  const [externalHref, setExternalHref] = useState(initial?.href && isExternalHref(initial.href) ? initial.href : '')
   const [sort, setSort] = useState<string>(String(initial?.sort ?? 0))
   const [visible, setVisible] = useState<boolean>(initial?.visible !== false)
   const [error, setError] = useState('')
 
   /** 当前本次提交最终会写入的 href（供预览与校验共用） */
-  const resolvedHref =
-    linkType === 'external' ? externalHref.trim() : slugToHref(slug)
+  const resolvedHref = linkType === 'external' ? externalHref.trim() : slugToHref(slug)
 
   const submit = () => {
     if (!label.trim()) {
@@ -737,7 +714,12 @@ function TopNavModal({
         <div className="cat__form">
           <label className="cat__field">
             <span className="cat__label">导航文字</span>
-            <input className="cat__input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="例如：首页" />
+            <input
+              className="cat__input"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="例如：首页"
+            />
           </label>
 
           <NavigationLinkFields
@@ -755,17 +737,35 @@ function TopNavModal({
               <span className="cat__label">
                 排序权重 <i>（可选）</i>
               </span>
-              <input className="cat__input" type="number" value={sort} onChange={(e) => setSort(e.target.value)} placeholder="0" />
+              <input
+                className="cat__input"
+                type="number"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                placeholder="0"
+              />
             </label>
             <label className="cat__field">
               <span className="cat__label">
                 前台可见 <i>（可选）</i>
               </span>
               <div className="cat__segmented" role="radiogroup" aria-label="前台可见">
-                <button type="button" role="radio" aria-checked={visible} className={`cat__seg${visible ? ' cat__seg--active' : ''}`} onClick={() => setVisible(true)}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={visible}
+                  className={`cat__seg${visible ? ' cat__seg--active' : ''}`}
+                  onClick={() => setVisible(true)}
+                >
                   显示
                 </button>
-                <button type="button" role="radio" aria-checked={!visible} className={`cat__seg${!visible ? ' cat__seg--active' : ''}`} onClick={() => setVisible(false)}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!visible}
+                  className={`cat__seg${!visible ? ' cat__seg--active' : ''}`}
+                  onClick={() => setVisible(false)}
+                >
                   隐藏
                 </button>
               </div>
@@ -803,22 +803,17 @@ function MorePanelModal({
 }) {
   const [label, setLabel] = useState(initial?.label ?? '')
   // 与顶部导航同一套二选一：站内页面 vs 外部链接
-  const [linkType, setLinkType] = useState<LinkType>(() =>
-    initial?.external ? 'external' : 'page',
-  )  // 导航英文：站内地址去掉前导斜杠（/notes → notes，/ → 空）
+  const [linkType, setLinkType] = useState<LinkType>(() => (initial?.external ? 'external' : 'page')) // 导航英文：站内地址去掉前导斜杠（/notes → notes，/ → 空）
   const [slug, setSlug] = useState(() =>
     initial?.href && !isExternalHref(initial.href) ? hrefToSlug(initial.href) : '',
   )
-  const [externalHref, setExternalHref] = useState(
-    initial?.href && isExternalHref(initial.href) ? initial.href : '',
-  )
+  const [externalHref, setExternalHref] = useState(initial?.href && isExternalHref(initial.href) ? initial.href : '')
   const [icon, setIcon] = useState(initial?.icon ?? '')
   const [sort, setSort] = useState<string>(String(initial?.sort ?? 0))
   const [visible, setVisible] = useState<boolean>(initial?.visible !== false)
   const [error, setError] = useState('')
 
-  const resolvedHref =
-    linkType === 'external' ? externalHref.trim() : slugToHref(slug)
+  const resolvedHref = linkType === 'external' ? externalHref.trim() : slugToHref(slug)
 
   const submit = () => {
     if (!label.trim()) {
@@ -876,7 +871,12 @@ function MorePanelModal({
         <div className="cat__form">
           <label className="cat__field">
             <span className="cat__label">导航文字</span>
-            <input className="cat__input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="例如：统计" />
+            <input
+              className="cat__input"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="例如：统计"
+            />
           </label>
 
           <NavigationLinkFields
@@ -939,17 +939,35 @@ function MorePanelModal({
               <span className="cat__label">
                 排序权重 <i>（可选）</i>
               </span>
-              <input className="cat__input" type="number" value={sort} onChange={(e) => setSort(e.target.value)} placeholder="0" />
+              <input
+                className="cat__input"
+                type="number"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                placeholder="0"
+              />
             </label>
             <label className="cat__field">
               <span className="cat__label">
                 前台可见 <i>（可选）</i>
               </span>
               <div className="cat__segmented" role="radiogroup" aria-label="前台可见">
-                <button type="button" role="radio" aria-checked={visible} className={`cat__seg${visible ? ' cat__seg--active' : ''}`} onClick={() => setVisible(true)}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={visible}
+                  className={`cat__seg${visible ? ' cat__seg--active' : ''}`}
+                  onClick={() => setVisible(true)}
+                >
                   显示
                 </button>
-                <button type="button" role="radio" aria-checked={!visible} className={`cat__seg${!visible ? ' cat__seg--active' : ''}`} onClick={() => setVisible(false)}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!visible}
+                  className={`cat__seg${!visible ? ' cat__seg--active' : ''}`}
+                  onClick={() => setVisible(false)}
+                >
                   隐藏
                 </button>
               </div>

@@ -54,9 +54,7 @@ const CMS_PREFIXES = ['/admin', '/_next', '/api', '/cloud-icons']
  * @returns {boolean} true 表示转发到 CMS，false 表示转发到 Astro
  */
 function isCmsPath(url) {
-  return CMS_PREFIXES.some(
-    (prefix) => url === prefix || url.startsWith(prefix + '/') || url.startsWith(prefix + '?')
-  )
+  return CMS_PREFIXES.some((prefix) => url === prefix || url.startsWith(prefix + '/') || url.startsWith(prefix + '?'))
 }
 
 /**
@@ -126,14 +124,11 @@ function forwardUpgrade(req, clientSocket, head, targetUrl) {
     const headerLines = Object.entries(proxyRes.headers)
       .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
       .join('\r\n')
-    clientSocket.write(
-      `HTTP/1.1 101 Switching Protocols\r\n${headerLines}\r\n\r\n`,
-      () => {
-        if (upstreamHead?.length) clientSocket.write(upstreamHead)
-        upstreamSocket.pipe(clientSocket)
-        clientSocket.pipe(upstreamSocket)
-      },
-    )
+    clientSocket.write(`HTTP/1.1 101 Switching Protocols\r\n${headerLines}\r\n\r\n`, () => {
+      if (upstreamHead?.length) clientSocket.write(upstreamHead)
+      upstreamSocket.pipe(clientSocket)
+      clientSocket.pipe(upstreamSocket)
+    })
     clientSocket.on('error', () => upstreamSocket.destroy())
     upstreamSocket.on('error', () => clientSocket.destroy())
     clientSocket.on('close', () => upstreamSocket.destroy())

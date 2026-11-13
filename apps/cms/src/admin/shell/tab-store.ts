@@ -37,13 +37,11 @@ const persist = () => {
   if (typeof window === 'undefined') return
   try {
     const tabs = allowedPaths ? state.tabs.filter((tab) => allowedPaths!.has(tab.path)) : state.tabs
-    const active = allowedPaths && tabs.length > 0 && tabs.some((tab) => tab.path === state.active)
-      ? state.active
-      : tabs[0]?.path ?? ''
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ tabs, active, savedAt: Date.now() }),
-    )
+    const active =
+      allowedPaths && tabs.length > 0 && tabs.some((tab) => tab.path === state.active)
+        ? state.active
+        : (tabs[0]?.path ?? '')
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs, active, savedAt: Date.now() }))
   } catch {
     // 隐私模式/配额写不进去不影响功能，只是刷新会丢标签
   }

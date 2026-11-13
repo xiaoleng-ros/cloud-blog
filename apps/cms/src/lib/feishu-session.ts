@@ -53,10 +53,7 @@ interface UserCacheEntry {
 }
 const userCache = new Map<string, UserCacheEntry>()
 
-export async function verifyRequestUser(
-  request: Request,
-  payload: Payload,
-): Promise<VerifiedUser | null> {
+export async function verifyRequestUser(request: Request, payload: Payload): Promise<VerifiedUser | null> {
   const cookiePrefix = (payload.config as { cookiePrefix?: string }).cookiePrefix ?? 'payload'
   const token = readCookie(request, `${cookiePrefix}-token`)
   if (!token) return null
@@ -86,11 +83,11 @@ export async function verifyRequestUser(
   }
 
   // useSessions 开启时，令牌必须携带仍然存在的 sid（等同「可吊销」）
-  const useSessions = (payload.collections.users?.config.auth as { useSessions?: boolean } | undefined)
-    ?.useSessions
+  const useSessions = (payload.collections.users?.config.auth as { useSessions?: boolean } | undefined)?.useSessions
   if (useSessions) {
-    const sessions = ((user as unknown as { sessions?: Array<{ id: string; expiresAt: string | Date }> })
-      .sessions ?? []).filter((s) => new Date(s.expiresAt) > new Date())
+    const sessions = (
+      (user as unknown as { sessions?: Array<{ id: string; expiresAt: string | Date }> }).sessions ?? []
+    ).filter((s) => new Date(s.expiresAt) > new Date())
     if (!decoded.sid || !sessions.some((s) => s.id === decoded.sid)) {
       userCache.set(cacheKey, { result: null, ts: now })
       return null

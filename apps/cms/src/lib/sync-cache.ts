@@ -337,9 +337,7 @@ export function ensureSseSweepLoop(): void {
  * source 由 Payload 传入的钩子参数推断（集合钩子带 `collection`，全局钩子带 `global`），
  * 因此各 collection/global 配置文件里的 `[syncInvalidateHook]` 写法无需改动。
  */
-export async function syncInvalidateHook(
-  args?: SyncInvalidateHookArgs,
-): Promise<void> {
+export async function syncInvalidateHook(args?: SyncInvalidateHookArgs): Promise<void> {
   invalidateAll(guessMutationSource(args))
   broadcastSse('update', { at: Date.now() })
 }

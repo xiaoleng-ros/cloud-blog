@@ -21,9 +21,9 @@
 > [!IMPORTANT]
 > 本项目不是从零开始写的，它站在两个开源项目之上。**代码与素材的来龙去脉如下，请一并遵守其许可。**
 
-| 🙏 项目 | 关系 | 许可 |
-| --- | --- | --- |
-| [**clay-blog**](https://github.com/laogou717/clay-blog)（神烦老狗） | **前台基底**：`apps/blog` 的 Astro 骨架、组件与样式源自它，本项目在其上大幅重构（内容全部改由 Payload 提供、加实时同步、重做页面与版式） | MIT ✅ |
+| 🙏 项目                                                                        | 关系                                                                                                                                                                                                                                                               | 许可       |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| [**clay-blog**](https://github.com/laogou717/clay-blog)（神烦老狗）            | **前台基底**：`apps/blog` 的 Astro 骨架、组件与样式源自它，本项目在其上大幅重构（内容全部改由 Payload 提供、加实时同步、重做页面与版式）                                                                                                                           | MIT ✅     |
 | [**ThriveX-Blog**](https://github.com/LiuYuYang01/ThriveX-Blog)（LiuYuYang01） | **版式与交互参考**：后台卡片式外壳、两级缩进导航、标签页记忆、数据概览页与部分前台布局，均参考其设计后自行实现（**未复制其源代码**）；外加**一张静态素材**——页脚动物插画 `apps/blog/public/images/footer-animals.png` 与其 `Footer/images/animals.webp` 为同一文件 | GPL-3.0 ⚠️ |
 
 - `apps/cms`（Payload CMS 后台）为本项目自行编写，基于 Payload 官方脚手架模板。
@@ -36,10 +36,10 @@
 
 两个应用相互独立、各自带 `package.json` 与 lockfile；**部署时作为同一个 EdgeOne Makers 项目**（根目录 `apps/cms`）一起上线，前后台同域名：
 
-| 📦 目录 | 🚀 应用 | 🧰 技术栈 | 💡 说明 |
-| --- | --- | --- | --- |
-| `apps/blog` | 博客前端 | 🌠 Astro 7（静态站） | 文章 / 随笔 / 归档 / 搜索 / RSS / 关于页，构建时从后台拉取内容 |
-| `apps/cms` | 内容后台 | 💼 Payload CMS 3.88 + Next.js 16 | 文章 / 随笔 / 项目 / 分类标签 / 站点设置 / 导航管理，是内容的**唯一数据源** |
+| 📦 目录     | 🚀 应用  | 🧰 技术栈                        | 💡 说明                                                                     |
+| ----------- | -------- | -------------------------------- | --------------------------------------------------------------------------- |
+| `apps/blog` | 博客前端 | 🌠 Astro 7（静态站）             | 文章 / 随笔 / 归档 / 搜索 / RSS / 关于页，构建时从后台拉取内容              |
+| `apps/cms`  | 内容后台 | 💼 Payload CMS 3.91 + Next.js 16 | 文章 / 随笔 / 项目 / 分类标签 / 站点设置 / 导航管理，是内容的**唯一数据源** |
 
 ```
 cloud/
@@ -68,12 +68,16 @@ cloud/
 │       ├── src/app/[[...path]]/route.ts        # catch-all：返回静态外壳并注入最新数据
 │       ├── src/migrations/                     # Postgres 迁移（含 projects 集合）
 │       ├── next.config.mjs
-│       ├── scripts/                            # copy-blog-to-public / sync-blog-shells / pg 启停 / warmup 等
+│       ├── scripts/                            # copy-blog-to-public / prerender-blog-shells / verify-* / pg 启停 / warmup 等
+│       ├── src/lib/render/                     # 服务端渲染层：按页面拆分的区块渲染器（门面是 src/lib/blog-render.tsx）
 │       ├── package.json                        # 独立依赖 + lockfile
 │       └── tsconfig.json
 ├── 📦 shared/                       # 跨应用共享模块（html-safety / post-utils / remark-rehype 插件等）
-├── 📄 package.json                # 根编排脚本（私有，无第三方依赖），exports 暴露 ./shared/*
+├── 📄 package.json                # 根编排脚本（唯一 devDependency：prettier），exports 暴露 ./shared/*
 ├── 📌 .gitignore
+├── 🎨 .prettierrc.json / .editorconfig   # 格式化规则（两端同源，编辑器与 CLI 结果一致）
+├── 🤖 .github/workflows/ci.yml    # 提交门禁：typecheck ×2 + 注入断言 + 格式检查
+├── 📚 docs/adr/                   # 架构决策记录（唯一允许入库的 docs 子目录）
 ├── 📜 LICENSE                      # GPL-3.0 全文
 └── 🙏 THIRD-PARTY-NOTICES.md       # 第三方来源与署名（clay-blog / ThriveX）
 ```
@@ -117,6 +121,7 @@ flowchart LR
 > **本地开发默认连的是**线上 Supabase** Postgres 库（`apps/cms/.env.local` 已配好），
 > 与生产共用同一个数据库 —— 这是有意设计，不是失误：本地看到的内容/评论就是线上真实数据。
 > 因此：
+>
 > - **直接 `npm run dev:cms` 起后台即可，无需本地 PG**（本地绿色版 PG 的 `dev:cms:warm` 仍保留，
 >   但需要本机装好 `D:\pglocal`，默认路径未安装时不要用它）。
 > - 本地改动（后台改文案、发文章、评论、建标签）**会直接写进线上库**，前台轮询也会把线上改动拉进本地，属正常现象。
@@ -170,24 +175,24 @@ npm run dev:local --prefix apps/cms
 
 `apps/blog/.env`（参考 `apps/blog/.env.example`）：
 
-| 🎛️ 变量 | 💡 用途 |
-| --- | --- |
-| `SITE_URL` | 站点正式域名（RSS / sitemap / canonical），构建时写入静态产物 |
-| `PUBLIC_PAYLOAD_URL` | Payload 后台地址，本地默认 `http://localhost:9527`；线上填**真实域名**（不带 `/api`） |
-| `PUBLIC_WALINE_URL` | 💬 Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置） |
-| `PUBLIC_NETEASE_PLAYLIST_ID` / `PUBLIC_MUSIC_API` | 🎵 音乐播放器歌单 |
+| 🎛️ 变量                                           | 💡 用途                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `SITE_URL`                                        | 站点正式域名（RSS / sitemap / canonical），构建时写入静态产物                         |
+| `PUBLIC_PAYLOAD_URL`                              | Payload 后台地址，本地默认 `http://localhost:9527`；线上填**真实域名**（不带 `/api`） |
+| `PUBLIC_WALINE_URL`                               | 💬 Waline 评论服务地址；留空默认同域 `/api/waline`（前后台同域部署无需配置）          |
+| `PUBLIC_NETEASE_PLAYLIST_ID` / `PUBLIC_MUSIC_API` | 🎵 音乐播放器歌单                                                                     |
 
 > 前台取数地址的优先级：`PUBLIC_PAYLOAD_URL` → `SITE_URL`（一体化部署前后台同域）→ `http://localhost:9527`。
 
 `apps/cms` 环境变量（复制 `apps/cms/.env.example` 为 `.env`；本地开发同样默认 postgres）：
 
-| 🎛️ 变量 | 💡 用途 |
-| --- | --- |
-| `DATABASE_DRIVER` | `postgres`（默认，本地与生产一致）/ `sqlite`（保留的历史分支，迁移是 Postgres 方言，不推荐） |
-| `POSTGRES_URL` | 连接串：`.env.local` 已配**线上 Supabase**（本地默认即连线上库）；要物理隔离时改成本地 `postgresql://postgres@127.0.0.1:5433/blog_dev` |
+| 🎛️ 变量                                     | 💡 用途                                                                                                                                                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_DRIVER`                           | `postgres`（默认，本地与生产一致）/ `sqlite`（保留的历史分支，迁移是 Postgres 方言，不推荐）                                                                                                                                                     |
+| `POSTGRES_URL`                              | 连接串：`.env.local` 已配**线上 Supabase**（本地默认即连线上库）；要物理隔离时改成本地 `postgresql://postgres@127.0.0.1:5433/blog_dev`                                                                                                           |
 | `POSTGRES_HOST/PORT/USER/PASSWORD/DATABASE` | Waline（进程内 `@waline/vercel`）用的**拆分变量组**：与 `POSTGRES_URL` 分离，各读各的。`.env.local` 已把这套指向线上 Supabase（含 `POSTGRES_PREFIX=wl_` + `POSTGRES_SSL=true`）；本地 PG 模式下回落 `.env` 里的 `127.0.0.1:5433` + `waline_user` |
-| `PAYLOAD_SECRET` | Payload 加密密钥（生产必填） |
-| `PAYLOAD_FORCE_PUSH=0` | 连**线上库**时保持 `0`：dev 的 push 会改生产库 schema。首次向全新库建表时才临时设 `1` |
+| `PAYLOAD_SECRET`                            | Payload 加密密钥（生产必填）                                                                                                                                                                                                                     |
+| `PAYLOAD_FORCE_PUSH=0`                      | 连**线上库**时保持 `0`：dev 的 push 会改生产库 schema。首次向全新库建表时才临时设 `1`                                                                                                                                                            |
 
 > [!NOTE]
 > 本地 `.env`（绿色版 PG）与 `.env.local`（线上 Supabase）**同时存在**时，`.env.local` 覆盖 `.env`。
@@ -199,27 +204,28 @@ npm run dev:local --prefix apps/cms
 
 前后台部署在**同一个 EdgeOne Makers 项目**里，同域名：`/` 是博客，`/admin`、`/api` 是 Payload 后台。
 
-| 🧭 配置项 | 🔧 值 |
-| --- | --- |
-| 仓库根目录 | `apps/cms` |
-| 框架预设 | `Next.js`（必须是这个，否则 catch-all 路由与 SSR 不生效） |
-| 构建命令 | 见 `apps/cms/edgeone.json`（装 blog 依赖 → `astro build` → `next build` → 复制产物到 `public/`） |
-| 输出目录 | `.next` |
-| Node 版本 | 22.21.1 |
+| 🧭 配置项  | 🔧 值                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| 仓库根目录 | `apps/cms`                                                                                                        |
+| 框架预设   | `Next.js`（必须是这个，否则 catch-all 路由与 SSR 不生效）                                                         |
+| 构建命令   | 见 `apps/cms/edgeone.json`（装依赖 → `astro build` → 图标优化 → `next build` → 复制产物 → 静态化页面 → 注入断言） |
+| 输出目录   | `.next`                                                                                                           |
+| Node 版本  | 22.21.1                                                                                                           |
 
 **环境变量要配在 cms 项目上：**
 
-| 🎛️ 变量 | 💡 用途 |
-| --- | --- |
-| `DATABASE_DRIVER` | `postgres` |
-| `POSTGRES_URL` | Supabase / Neon 连接串 |
-| `PAYLOAD_SECRET` | Payload 加密密钥 |
-| `NEXT_PUBLIC_SERVER_URL` | 站点正式域名（如 `https://blog.iceuu.icu`） |
-| `SITE_URL` | 同上（Astro 构建用：canonical / RSS / sitemap） |
-| `PUBLIC_PAYLOAD_URL` | **只要域名**（如 `https://blog.iceuu.icu`），不要带 `/api` |
-| `PAYLOAD_FORCE_PUSH=1` | 仅首次建表用，建完请删掉 |
+| 🎛️ 变量                  | 💡 用途                                                    |
+| ------------------------ | ---------------------------------------------------------- |
+| `DATABASE_DRIVER`        | `postgres`                                                 |
+| `POSTGRES_URL`           | Supabase / Neon 连接串                                     |
+| `PAYLOAD_SECRET`         | Payload 加密密钥                                           |
+| `NEXT_PUBLIC_SERVER_URL` | 站点正式域名（如 `https://blog.iceuu.icu`）                |
+| `SITE_URL`               | 同上（Astro 构建用：canonical / RSS / sitemap）            |
+| `PUBLIC_PAYLOAD_URL`     | **只要域名**（如 `https://blog.iceuu.icu`），不要带 `/api` |
+| `PAYLOAD_FORCE_PUSH=1`   | 仅首次建表用，建完请删掉                                   |
 
 > [!WARNING]
+>
 > - `PUBLIC_PAYLOAD_URL` / `SITE_URL` 必须是**真实线上域名**。若留占位域名，Astro 构建时拉不到后台数据，
 >   会退化成「模板默认文案 + 0 篇文章」，并且**不会生成任何文章详情页**（`/posts/*` 全部 404）。
 >   构建日志里会打印明确的 `[payload-loader] ⚠️` 提示。
@@ -237,22 +243,101 @@ npm run dev:local --prefix apps/cms
 > - **运行时常量**：SSE 与内存缓存均为单实例级；EdgeOne 多实例时靠 5s TTL 快照 + 前台轮询兜底，最终一致。
 > - 代码更新后需**重新部署**才会生效；若仓库有新迁移，请在部署时执行（`payload migrate`）。
 
+### 📌 部署后必做的一次验收：HTML 是否真的走了静态层
+
+`build:all` / `edgeone.json` 里的 `prerender-blog-shells.mjs` 会把 13 个页面写成
+`apps/cms/public/<path>/index.html`（真正的静态文件，带 100 KB 内的完整首屏内容）。
+EdgeOne 的规则是「静态资源优先于函数」，所以这些页面本应直接由 CDN 直出，
+不再每次都进云函数。**但 `public/index.html` 会不会被 `/` 命中，本机无法验证**（无外网），
+部署后请用下面两条命令确认：
+
+```bash
+# 1) 首页：期望 eo-cache-status: Cache Hit、content-encoding: br、≈40-100KB
+curl -s -D - -o /dev/null -H 'accept-encoding: br, gzip' https://blog.iceuu.icu/
+
+# 2) 子页面对照（这一条在修复前就已确认有效，可作基线）
+curl -s -D - -o /dev/null -H 'accept-encoding: br, gzip' https://blog.iceuu.icu/about
+```
+
+判定与处置：
+
+| 结果                                        | 含义                           | 处置                                                                                              |
+| ------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `Cache Hit` + `br` + 数字明显变小           | 静态层直出，改造生效           | 无需操作                                                                                          |
+| 仍是 `Cache Miss` + `content-encoding` 缺失 | `/` 没命中 `public/index.html` | 在 `apps/cms/edgeone.json` 加 `rewrites: [{"source":"/","destination":"/index.html"}]` 后重新部署 |
+| `Cache Hit` 但内容不是最新文章              | 静态副本老化                   | 正常，客户端 SSE + 30s 轮询会自动换成最新区块，下次构建会刷新文件                                 |
+
+> 未直接预置 `rewrites` 的原因：EdgeOne Makers 的 `edgeone.json` 是否支持该字段
+> 无法在本地确认（文档未覆盖，仓库内也无先例）。先在没有任何 `rewrites` 的干净状态下
+> 部署一次，让事实来决定要不要加，比盲加一个可能让部署直接失败的字段更稳妥。
+
+---
+
+## 🛡️ 安全基线：CSP 现在是 Report-Only
+
+全站已下发 `Content-Security-Policy-Report-Only`，**观察模式，不拦截任何请求**。后台
+（Payload + vditor + lexical）内联脚本、内联样式、`eval` 都很多，直接上强制模式会白屏，
+所以先用观察模式收集真实违规分布，跑几天再收紧、再切强制。
+
+### 一份策略，两处下发
+
+这是这套配置最容易踩的地方：**同一份 CSP 必须在两个地方各写一遍**。
+
+| 位置                       | 覆盖谁                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| `apps/cms/next.config.mjs` | 走 Node 函数的响应：`/admin`、`/api/*`，以及没有被静态化命中的页面                        |
+| `apps/cms/edgeone.json`    | 静态层直出的文件：静态化后的 `public/<path>/index.html`、`/_astro/*`——**根本不经过 Next** |
+
+只改一处的话，页面会一半有 CSP 一半没有，而"没有"在浏览器里毫无报错。所以策略字符串的
+唯一来源是 `apps/cms/csp-policy.mjs`，两处引用它，并由
+`apps/cms/scripts/verify-csp-sync.mjs` 在 CI 与构建链里逐字比对。这个脚本同时校验
+`frame-src` 覆盖了 `shared/md-sanitize-schema.mjs` 的 `MD_IFRAME_HOSTS` ——
+净化器放行、CSP 拦掉，会表现为"审核通过但内容不显示"，极难从现象反推。
+
+### 看收集到的违规
+
+```bash
+# 生产环境必须配 CSP_REPORT_TOKEN，否则 GET 一律 404（不暴露端点存在）
+curl -s -H "x-csp-token: $CSP_REPORT_TOKEN" https://blog.iceuu.icu/api/csp-report | jq
+```
+
+返回按 `指令 + 被拦 host` 聚合的 top 100。`total` 一直在涨但 `keys` 卡在 1000，
+说明聚合表满了、出现了新类型，需要提高 `MAX_KEYS`（`apps/cms/src/app/api/csp-report/route.ts`）。
+
+计数是单实例内存（与 `sync-cache` 同口径），多实例各算各的、冷启动清零 —— 用途是看趋势，
+不是精确审计。
+
+### 切强制模式的条件
+
+1. 收集到的违规全部落在策略已放宽的项里（`unsafe-inline`、`unsafe-eval`、`https:` media 等）；
+2. 没有任何 `inline` / `eval` 类违规出现在非预期页面；
+3. 届时把 `csp-policy.mjs` 的 `CSP_HEADER_NAME` 改成 `Content-Security-Policy`，
+   两处（`next.config.mjs` 与 `edgeone.json`）一起生效，`verify-csp-sync.mjs` 会拦住漏改。
+
+逐步收紧的现实路径是先给**前台**（静态页 + 已定稿的内联脚本）上 nonce、后台继续保持宽松；
+后台的内联是 vditor/lexical 的固有形态，短期收不掉。
+
 ---
 
 ## 🧰 脚本说明
 
-| 📜 脚本 | ✨ 作用 |
-| --- | --- |
-| `npm run dev:cms` | 起后台（默认 `.env.local` 连线上 Supabase） |
-| `npm run dev:cms:warm` | 本地一键：起**本地** PG → 起后台 → 预热常用接口（需 `D:\pglocal`；不装本地 PG 就用 `dev:cms`） |
-| `npm run build:all` | 构建前台 + 后台，并把博客产物复制进 CMS 的 `public/` |
-| `npm run sync:blog` | 把最新博客外壳同步到 CMS（`apps/cms/scripts/sync-blog-shells.mjs`） |
-| `apps/cms/scripts/copy-blog-to-public.mjs` | 构建站点后把博客产物复制到 CMS public 目录（`build:all` 时执行） |
-| `apps/cms/scripts/generate-preview-css.mjs` | 读取 `apps/blog/src/styles/global.css` 生成后台 Markdown 预览样式 |
-| `apps/cms/scripts/warmup.mjs` | 部署后 / 开发期预热后台接口 |
-| `apps/cms/scripts/pg.mjs` | 本地绿色版 Postgres 的 `start` / `stop` / `status` |
-| `apps/cms/src/scripts/import-markdown.ts` | 把历史 `apps/blog/src/content` 的 Markdown 导入后台（`npm run import:data`），用于一次性数据迁移，日常维护均在后台完成 |
-| `npm run typecheck` | 两个应用的类型检查（`astro check` + `tsc --noEmit`） |
+| 📜 脚本                                      | ✨ 作用                                                                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev:cms`                            | 起后台（默认 `.env.local` 连线上 Supabase）                                                                            |
+| `npm run dev:cms:warm`                       | 本地一键：起**本地** PG → 起后台 → 预热常用接口（需 `D:\pglocal`；不装本地 PG 就用 `dev:cms`）                         |
+| `npm run build:all`                          | 构建前台 + 后台，把博客产物复制进 CMS 的 `public/`，再静态化页面并跑注入断言                                           |
+| `npm run sync:blog`                          | 把最新博客外壳同步到 CMS（`apps/cms/scripts/sync-blog-shells.mjs`）                                                    |
+| `apps/cms/scripts/copy-blog-to-public.mjs`   | 构建站点后把博客产物复制到 CMS public 目录（`build:all` 时执行）                                                       |
+| `apps/cms/scripts/prerender-blog-shells.mjs` | 把外壳复制成可直接被静态层命中的页面（`public/<path>/index.html`），绕过函数渲染直出                                   |
+| `apps/cms/scripts/verify-html-inject.mjs`    | 53 条断言校验 `data-sync-block` 注入逻辑（`npm run verify:html-inject`，CI 与构建均执行）                              |
+| `apps/cms/scripts/verify-csp-sync.mjs`       | 校验 CSP 策略在 `next.config.mjs` 与 `edgeone.json` 两处逐字一致（`npm run verify:csp`，CI 与构建均执行）              |
+| `apps/cms/scripts/verify-render-parity.mjs`  | 45 个页面用例比对渲染输出与基线是否逐字相同（`npm run verify:render`，CI 与构建均执行；`--update` 重算基线）           |
+| `apps/cms/scripts/generate-preview-css.mjs`  | 读取 `apps/blog/src/styles/global.css` 生成后台 Markdown 预览样式                                                      |
+| `apps/cms/scripts/warmup.mjs`                | 部署后 / 开发期预热后台接口                                                                                            |
+| `apps/cms/scripts/pg.mjs`                    | 本地绿色版 Postgres 的 `start` / `stop` / `status`                                                                     |
+| `apps/cms/src/scripts/import-markdown.ts`    | 把历史 `apps/blog/src/content` 的 Markdown 导入后台（`npm run import:data`），用于一次性数据迁移，日常维护均在后台完成 |
+| `npm run typecheck`                          | 两个应用的类型检查（`astro check` + `tsc --noEmit`）                                                                   |
+| `npm run fmt`                                | 用 Prettier 格式化全仓（`fmt:check` 只检查、`fmt:changed` 只看 git 改动）                                              |
 
 ---
 
