@@ -78,11 +78,31 @@ const age = siteAge(since);
     margin: 0 auto;
     padding: 1.05rem 1.25rem 1.3rem;
     text-align: center;
-    background: var(--surface);
+    /* 卡片要像「压在米黄纸上的一张白卡」，必须比页底更亮才浮得起来。
+       原来用的是 --surface (#fffefb)，只比页底亮 0.06 明度，远看就是
+       一个黑框 —— 边界全靠那 2px 描边吊着。这里给纯白，再配一层更实
+       的投影，让「亮 + 影」先交代体积，描边退回它该干的手绘感。
+       注意别换成 --surface-muted：它比页底还暗，卡片会直接陷进背景。
+       深色态另有一档（见下面的 html[data-theme='dark'] 覆盖），
+       纯白在夜里会变成一块发光的板子。 */
+    background: #ffffff;
     border: 2px solid var(--ink);
     border-radius: 15px 245px 15px 235px / 235px 15px 255px 15px;
-    box-shadow: var(--shadow);
+    /* 比 --shadow 更沉一档：纸片要"翘"起来，光靠 2px 描边压不住。
+       描边管手绘感，投影管"它浮在纸上"，两者分工。 */
+    box-shadow:
+      4px 6px 0 rgba(120, 98, 56, 0.22),
+      10px 14px 28px rgba(120, 98, 56, 0.14);
     transform: rotate(0.5deg);
+  }
+
+  /* 夜里不用纯白：深色底 (#1e2229) 上贴一块 #fff 是块发光板，
+     刺眼且抢焦点。改用比 --bg 略亮一档的 --surface，投影也换成纯黑。 */
+  html[data-theme='dark'] .site-age__card {
+    background: var(--surface);
+    box-shadow:
+      4px 6px 0 rgba(0, 0, 0, 0.34),
+      10px 14px 28px rgba(0, 0, 0, 0.28);
   }
 
   .site-age__head {
