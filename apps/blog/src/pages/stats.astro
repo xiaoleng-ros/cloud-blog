@@ -56,13 +56,15 @@ const donutStops = stats.categories
 
 // 标签墙配色：与 /tags/ 页同一套算法（同色同源），同一标签在两个页面颜色一致。
 // 散列起始色 + 相邻去重：保证刷新稳定、且不会出现相邻两颗同色。
+// 末位不再放 --brand：胶囊字色是深墨 --on-sticky，压在中饱和粉上只有
+// 4.1:1，比其它四色的 8~10:1 差一档；换成第二个 --sticky-pink 保持一致。
 const TAG_COLORS = [
   'var(--sticky-yellow)',
   'var(--sticky-green)',
   'var(--sticky-cyan)',
   'var(--sticky-pink)',
   'var(--sticky-purple)',
-  'var(--brand)',
+  'var(--sticky-pink)',
 ];
 
 function hashOf(name: string): number {

@@ -229,7 +229,8 @@ const moodIcon = (mood?: string) => {
     border: 2px solid var(--ink, #2b2620);
     border-radius: 255px 15px 255px 15px / 15px 255px 15px 255px;
     background: var(--surface, #fffdf6);
-    color: inherit;
+    /* 与首页「加载更多」同一层级：次要操作，走 --text-soft */
+    color: var(--text-soft);
     font: inherit;
     font-weight: 700;
     cursor: pointer;

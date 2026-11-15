@@ -5,8 +5,18 @@
   --surface: #fffefb;
   --surface-muted: #f7f2e4;
   --text: #3a3226;
-  --text-muted: #6e6350;
-  --text-faint: #998d78;
+  /* 次级控件专用：导航胶囊、加载更多、卡片抬头这类「要能扫到、但不该抢
+     正文」的字。原来它们和正文共用 var(--text)，导致 12.6px 的导航和
+     44px 的标题是同一种黑 —— 字号差 3.5 倍、颜色却一样，导航反而不输。
+     这里降一档到 10:1，保留「实心」的手感，但不跟标题平起平坐。 */
+  --text-soft: #453c2e;
+  --text-muted: #5f5646;
+  /* 日期 / 年份 / 占位这些最小号文字。原来 #998d78 压米黄底只有 3.05:1，
+     10px 上下的小字基本靠猜。取 #746a5a：页底 4.97:1、卡片 5.27:1、
+     略深一层的 --surface-muted 4.75:1 —— 三处都过 AA。
+     它和 --text-muted（6.8:1）差 1.36 倍：页脚版权、日期这类「只扫一眼」
+     的元信息本来就该比摘要轻，再往下压会掉出 AA，所以停在这儿。 */
+  --text-faint: #746a5a;
   --border: #d9ccb0;
   --border-strong: #bfae86;
   --accent: #3a3226;
@@ -16,6 +26,24 @@
   /* 参考图中「林一」名字高亮为粉色，品牌强调色同步偏粉 */
   --brand: #e85a7a;
   --brand-soft: rgba(232, 90, 122, 0.13);
+  /* 品牌色的「文字版」。--brand / --sticky-* 是按色块设计的：它们铺在标签、
+     圆点、荧光笔上时只需要撑住 3:1，明度高才轻快。但同一支颜色直接当
+     10~13px 的小字用，压在白卡上只有 3.2:1（粉）/ 2.4:1（青），跟旁边
+     12.5:1 的近黑正文并排放，层级就变成「黑得发亮 + 淡得看不见」。
+     所以色块继续用 --brand / --sticky-*，只要是「字」就走 -ink 这一档：
+     色相不变，明度压到能过 WCAG AA（≥4.5:1）。
+
+     全站文字的浓度阶梯（对页底 #fbf7ed 的对比度，越小越淡）：
+       text       11.8  标题、正文            —— 要读
+       text-soft  10.1  导航、加载更多、卡片抬头 —— 要扫，别抢标题
+       text-muted  6.8  简介、摘要、说明       —— 要读，但比正文轻
+       brand-ink   5.3  分类标签（最小的字号）  —— 锚点，该跳
+       cyan-ink    5.3  手写副标题            —— 标题的延伸
+       text-faint  5.0  日期、页脚、版权       —— 只扫一眼
+     相邻档位至少差 1.05 倍，关键分界（正文 ↔ 摘要）差到 1.5 倍：
+     差距太小的话，页脚版权和文章摘要在视觉上会变成同一层。 */
+  --brand-ink: #b83652;
+  --cyan-ink: #2a726b;
   /* 手账便利贴色块（黄 / 青 / 粉 / 绿） */
   --sticky-yellow: #ffdf8a;
   --sticky-cyan: #7ddbd3;
@@ -91,8 +119,9 @@ html[data-theme='dark'] {
   --surface: #272d36;
   --surface-muted: #2f363f;
   --text: #eceff4;
-  --text-muted: #b8c0cc;
-  --text-faint: #8b95a3;
+  --text-soft: #d6dce5;
+  --text-muted: #a6b0be;
+  --text-faint: #98a2b0;
   --border: #3a4250;
   --border-strong: #4d5766;
   --accent: #eceff4;
@@ -101,6 +130,9 @@ html[data-theme='dark'] {
   --accent-line: rgba(236, 239, 244, 0.32);
   --brand: #f0a3b8;
   --brand-soft: rgba(240, 163, 184, 0.2);
+  /* 夜景的 -ink 是反过来往亮里走：深底上要提明度才够对比 */
+  --brand-ink: #eeaabf;
+  --cyan-ink: #85c6bc;
   /* 夜色便利贴：降饱和、提亮，夜里看仍能分辨色相又不刺眼 */
   --sticky-yellow: #c9b382;
   --sticky-cyan: #7cb8bd;
@@ -525,7 +557,7 @@ p {
 }
 
 .theme-toggle.is-switching {
-  color: var(--brand) !important;
+  color: var(--brand-ink) !important;
 }
 
 /* ---------- Hero (intro left + picks right, vertically balanced) ---------- */
@@ -580,7 +612,7 @@ p {
   }
 
   .about__lead em {
-    -webkit-text-fill-color: var(--brand);
+    -webkit-text-fill-color: var(--brand-ink);
   }
 }
 
@@ -606,7 +638,7 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -628,7 +660,7 @@ p {
 }
 
 .text-link:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .text-link:hover svg {
@@ -652,7 +684,7 @@ p {
 }
 
 .section__more:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .section__more:hover svg {
@@ -831,7 +863,7 @@ p {
 }
 
 .pick-hero:hover .pick-hero__title {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .pick-hero__desc {
@@ -909,7 +941,7 @@ p {
 }
 
 .pick-side__item:hover .pick-side__title {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .pick-side__date {
@@ -935,7 +967,7 @@ p {
 }
 
 .post-meta span:first-child {
-  color: var(--brand);
+  color: var(--brand-ink);
   letter-spacing: 0.01em;
 }
 
@@ -1026,14 +1058,14 @@ p {
 
 .post-row__cat {
   flex: none;
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .post-row a:hover h3 {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .post-row p {
@@ -1102,7 +1134,7 @@ p {
 
 .taxonomy-panel h2 svg,
 .taxonomy-panel h3 svg {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .term-list,
@@ -1202,7 +1234,7 @@ p {
 }
 
 .term-toggle:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .term-toggle__chev {
@@ -1563,7 +1595,7 @@ html.is-search-open {
 }
 
 .palette__link {
-  color: var(--brand);
+  color: var(--brand-ink);
   font-weight: 700;
   text-underline-offset: 2px;
 }
@@ -1859,7 +1891,7 @@ html.is-search-open {
 
 .about__lead em {
   font-style: normal;
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .about__sub {
@@ -1873,7 +1905,7 @@ html.is-search-open {
 .about__sub em {
   font-style: normal;
   font-weight: 600;
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 /* Quiet facts strip under the lead — anchors the page with a few numbers */
@@ -1930,7 +1962,7 @@ html.is-search-open {
 
 .proj-section__label {
   margin-bottom: 0.6rem;
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -1983,7 +2015,7 @@ html.is-search-open {
 }
 
 .proj:hover .proj__icon {
-  color: var(--brand);
+  color: var(--brand-ink);
   border-color: var(--brand);
   scale: 1.08;
   rotate: -3deg;
@@ -2005,7 +2037,7 @@ html.is-search-open {
   align-items: center;
   gap: 0.22rem;
   margin-left: 0.4rem;
-  color: var(--brand);
+  color: var(--brand-ink);
   font-weight: 700;
 }
 
@@ -2044,11 +2076,11 @@ html.is-search-open {
 }
 
 .proj:hover .proj__title a {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .proj:hover .proj__go {
-  color: var(--brand);
+  color: var(--brand-ink);
   transform: translate(2px, -2px);
 }
 
@@ -2073,7 +2105,10 @@ html.is-search-open {
 }
 
 .proj__tags small {
-  color: var(--text-faint);
+  /* 下面 3n+1 / 3n+2 / 3n 会把胶囊染成黄 / 青 / 粉，这里再用页面级的
+     浅灰 --text-faint 写 11px 小字，压上去只有 2~3:1。便签色块上的字
+     一律走 --on-sticky —— 它才是为「压在色块上」设计的那一支。 */
+  color: var(--on-sticky);
   font-size: 0.78rem;
   font-weight: 600;
 }
@@ -2090,7 +2125,7 @@ html.is-search-open {
 }
 
 .proj__note:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 /* ---------- Article ---------- */
@@ -2172,13 +2207,13 @@ html.is-search-open {
 }
 
 .toc a:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
   border-color: var(--brand);
 }
 
 /* Active: the rail stays one continuous line — only the text nudges right */
 .toc a.is-active {
-  color: var(--brand);
+  color: var(--brand-ink);
   border-color: var(--brand);
   font-weight: 700;
   padding-left: 1.03rem;
@@ -2283,7 +2318,7 @@ html.is-search-open {
 }
 
 .post-content li::marker {
-  color: var(--brand);
+  color: var(--brand-ink);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -2299,8 +2334,8 @@ html.is-search-open {
 }
 
 .post-content a:hover {
-  color: var(--brand);
-  text-decoration-color: var(--brand);
+  color: var(--brand-ink);
+  text-decoration-color: var(--brand-ink);
 }
 
 .post-content img {
@@ -2384,7 +2419,7 @@ html.is-search-open {
 }
 
 .to-top.is-visible:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
   border-color: var(--brand);
   transform: translateY(-3px) scale(1);
 }
@@ -2521,7 +2556,7 @@ body.is-dragging-floating {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 1.9rem;
   line-height: 1;
-  color: var(--brand);
+  color: var(--brand-ink);
   opacity: 0.5;
 }
 
@@ -2765,7 +2800,7 @@ html[data-theme='dark'] .post-nav__mask {
 }
 
 .related-posts__grid span {
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -2781,7 +2816,7 @@ html[data-theme='dark'] .post-nav__mask {
 }
 
 .related-posts__grid a:hover strong {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .related-posts__grid small {
@@ -2847,19 +2882,19 @@ html[data-theme='dark'] .post-nav__mask {
 
 /* 作者名做成粉色斜体：和参考图一致，也是整条里唯一的强调 */
 .post-license__author {
-  color: var(--brand);
+  color: var(--brand-ink);
   font-style: italic;
   font-weight: 600;
 }
 
 .post-license__title-link {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 /* 标题和链接都可能很长：允许任意位置断行，否则窄屏会把信息条撑破。
    常态不加下划线（参考图也没有），悬停才出现，避免三行里全是横线。 */
 .post-license a {
-  color: var(--brand);
+  color: var(--brand-ink);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   overflow-wrap: anywhere;
@@ -3262,7 +3297,7 @@ html[data-theme='dark'] .post-nav__mask {
 
 .site-footer__links a svg,
 .site-footer__item svg {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .site-footer__item {
@@ -3272,7 +3307,7 @@ html[data-theme='dark'] .post-nav__mask {
 .site-footer__links a:hover {
   border-color: var(--brand);
   background: var(--brand-soft);
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .site-footer__sep {
@@ -3302,7 +3337,7 @@ html[data-theme='dark'] .post-nav__mask {
 }
 
 .site-footer__bar a:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 /* 版权行右侧的固定入口（隐私政策 / 发展历程）：前面加一个小圆点当分隔（比再塞
@@ -3468,7 +3503,7 @@ html[data-theme='dark'] .post-nav__mask {
 
 .note__mood svg {
   flex: none;
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .note__mood-text {
@@ -3540,9 +3575,15 @@ html[data-theme='dark'] .post-nav__mask {
   border-top: 1px solid var(--border);
 }
 
-/* 官方组件配色映射到手账纸面色板；主题绿保持官方默认（与验收截图一致）。
+/* 官方组件配色映射到手账纸面色板。
+   主题绿（--waline-theme-color，官方默认 #27ae60）原来没接进来：
+   「提交」是白字压在它上面（2.87:1），表情票数用它写 10.5px 小字
+   （2.85:1），是全站唯一没被纸面色板覆盖的一块。这里换成 --brand-ink：
+   同一个「可点」的语义，但按文字级对比度定过值，白字压上去有 5.6:1。
    站点变量本身随 html[data-theme] 切换，深色模式无需 Waline 自带 dark 逻辑 */
 .cbox [data-waline] {
+  --waline-theme-color: var(--brand-ink);
+  --waline-theme-color-light: var(--brand-ink);
   --waline-color: var(--text);
   --waline-bg-color: var(--surface);
   --waline-bg-color-light: var(--surface-muted);
@@ -3555,7 +3596,8 @@ html[data-theme='dark'] .post-nav__mask {
   --waline-info-color: var(--text-faint);
   --waline-light-grey: var(--text-faint);
   --waline-dark-grey: var(--text-muted);
-  --waline-badge-color: var(--brand);
+  /* 徽章是白字压底色，同样走品牌文字色（白字 5.7:1）；--brand 只有 3.4:1 */
+  --waline-badge-color: var(--brand-ink);
 }
 
 /* 头像：官方默认是正圆，这里改成与封面卡同族的轻微圆角方块，
@@ -4303,10 +4345,10 @@ html.theme-anim body {
 }
 
 .note__body a {
-  color: var(--brand);
+  color: var(--brand-ink);
   text-decoration: underline;
   text-decoration-style: wavy;
-  text-decoration-color: var(--brand);
+  text-decoration-color: var(--brand-ink);
   text-underline-offset: 0.15em;
 }
 
@@ -4340,7 +4382,7 @@ html.theme-anim body {
 }
 
 .note__body li::marker {
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 1.1em;
 }
 
@@ -4393,7 +4435,7 @@ html.theme-anim body {
 
 .notes-index__year.is-active > a,
 .notes-index__year > a:hover {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 /* 精选封面：撕纸毛边照片 */
@@ -4625,23 +4667,27 @@ html.theme-anim body {
 }
 
 .hero__name {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .hero__subtitle {
   margin-top: 0.8rem;
-  color: var(--sticky-cyan);
-  color: color-mix(in srgb, var(--sticky-cyan) 75%, var(--ink));
+  /* 这行是 13px 的正文级文字，原来直接拿便签青 #7ddbd3 来写，压在米白卡上
+     只有 1.6:1 —— 名字是 12.5:1 的近黑，副标题淡到快化了，读起来像两种
+     排版。改走 --cyan-ink：同一支青绿，压暗到 4.8:1，视觉上还是「青」
+     这一层，只是不再比正文淡四倍。 */
+  color: var(--cyan-ink);
   font-family: var(--font-hand-cn);
   font-size: 0.95rem;
   letter-spacing: 0.08em;
 }
 
+/* ✦ 是同一句话里的装饰符，跟字同色才不会一深一浅地跳 */
 .hero__subtitle::before,
 .hero__subtitle::after {
   content: '✦';
   margin: 0 0.4em;
-  color: var(--sticky-cyan);
+  color: var(--cyan-ink);
   font-size: 0.8em;
 }
 
@@ -4884,7 +4930,8 @@ html.theme-anim body {
   border-radius: 10px 14px 11px 13px;
   background: var(--surface);
   box-shadow: 2px 3px 0 var(--shadow-sm);
-  color: var(--text);
+  /* 导航是「扫」的元素，走 --text-soft 而不是正文黑 */
+  color: var(--text-soft);
   font-family: var(--font-hand-cn);
   font-size: 0.9rem;
   transform: rotate(-0.6deg);
@@ -4898,8 +4945,11 @@ html.theme-anim body {
   transform: rotate(0.4deg);
 }
 
+/* 这两个状态把底换成了便签黄，文字色也得跟着换到 --on-sticky：
+   深色态下 var(--text) 是近白，压在压暗过的便签黄上只剩 1.8:1，
+   当前页反而比其它项更难认。 */
 .site-nav__tag:hover {
-  color: var(--text);
+  color: var(--on-sticky);
   background: var(--sticky-yellow);
   transform: rotate(0deg) translateY(-2px);
   box-shadow: 3px 4px 0 var(--shadow-sm);
@@ -4907,6 +4957,7 @@ html.theme-anim body {
 
 .site-nav__tag.is-current,
 .site-nav__tag.is-pending {
+  color: var(--on-sticky);
   background: var(--sticky-yellow);
   transform: rotate(0deg);
 }
@@ -5006,7 +5057,7 @@ html.theme-anim body {
 
 .about__eyebrow::before {
   content: '✦';
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 0.85em;
 }
 

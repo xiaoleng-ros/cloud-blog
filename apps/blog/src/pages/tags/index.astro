@@ -15,15 +15,20 @@ const authorName = settings?.siteAuthor ?? '我';
 
 // 标签墙配色：与统计页环形图、卡片底色同源（都是便利贴色），
 // 逐个错开让相邻标签不同色。深色模式下这些变量会自动换成低饱和版本。
-// 顺序按「视觉轻重」排：先黄绿青（浅底上最跳），再粉紫brand（最重），
+// 顺序按「视觉轻重」排：先黄绿青（浅底上最跳），再粉紫（最重），
 // 免得出现「整行标签都是深粉色」这种扎眼组合。
+//
+// 末位原来是 --brand（#e85a7a）。它是「强调色」不是「纸色」：胶囊上的
+// 文字是深墨 --on-sticky，压在这支中饱和粉上只有 4.1:1，比其它四色的
+// 8~10:1 差一大截，排到它那几颗就明显发糊。换成第二个 --sticky-pink，
+// 整面墙重新回到同一档对比度。
 const TAG_COLORS = [
   'var(--sticky-yellow)',
   'var(--sticky-green)',
   'var(--sticky-cyan)',
   'var(--sticky-pink)',
   'var(--sticky-purple)',
-  'var(--brand)',
+  'var(--sticky-pink)',
 ];
 
 // 字号随文章数走：三档够用，连续公式在 count=1 时会和 count=2 几乎一样大，看不出差别。
@@ -191,7 +196,7 @@ for (const tag of tags) {
     font-family: var(--font-hand);
     font-size: 1rem;
     font-weight: 400;
-    color: var(--brand);
+    color: var(--brand-ink);
   }
 
   /* ---------- 标签墙 ---------- */
