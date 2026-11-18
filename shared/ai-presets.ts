@@ -21,6 +21,8 @@ export interface AiPlatformPreset {
   baseURL: string
   keyUrl: string
   docs: string
+  /** 拉取模型列表的路径，默认 /models（OpenAI 兼容） */
+  modelsPath?: string
   models: AiPresetModel[]
   defaultModel: string
 }

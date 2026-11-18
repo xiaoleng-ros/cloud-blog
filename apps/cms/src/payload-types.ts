@@ -778,7 +778,7 @@ export interface Navigation {
   createdAt?: string | null;
 }
 /**
- * 选择内置平台、填入 API Key 即可使用。API Key 只存服务端，不会下发到浏览器。
+ * 选择平台、填入 API Key 后拉取该账号可用模型并选用。API Key 只存服务端，不下发浏览器。
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "ai-models".
@@ -792,7 +792,22 @@ export interface AiModel {
          * 仅保存在服务端，前端只会看到脱敏后的掩码
          */
         apiKey: string;
-        modelId: string;
+        /**
+         * 由弹窗拉取并多选后写入，一般不用手动改
+         */
+        modelIds?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        /**
+         * 可在后台卡片上切换；前台未指定模型时用它
+         */
+        currentModelId?: string | null;
         enabled?: boolean | null;
         /**
          * 开启后前台功能（如 AI 摘要）可调用，会产生额度消耗，请谨慎
@@ -873,7 +888,8 @@ export interface AiModelsSelect<T extends boolean = true> {
     | {
         platformId?: T;
         apiKey?: T;
-        modelId?: T;
+        modelIds?: T;
+        currentModelId?: T;
         enabled?: T;
         allowFrontend?: T;
         id?: T;

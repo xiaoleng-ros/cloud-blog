@@ -1,54 +1,63 @@
 /**
  * AI 模型服务层（服务端专用，绝不可被浏览器直接 import）。
- *
- * 存储结构极简：每个配置只存 platformId + apiKey + modelId + 开关。
- * 平台的名称 / Base URL / 可用模型全部来自 shared/ai-presets 预设，用户只填 Key。
+ * 存：platformId + apiKey + modelIds（多选）+ currentModelId（可切换）+ 开关。
+ * 平台的 Base URL / 模型拉取全部来自 shared/ai-presets，用户只填 Key。
  */
 
 import { getPlatformPreset } from 'cloud-blog/shared/ai-presets'
 import { getDb } from './blog-sync'
 
 const CALL_TIMEOUT_MS = 60000
+const MODELS_TIMEOUT_MS = 20000
 
-/** 数据库里保存的最小配置 */
 export interface AiProviderConfig {
   platformId: string
   apiKey: string
-  modelId: string
+  modelIds?: string[] | null
+  currentModelId?: string | null
   enabled?: boolean | null
   allowFrontend?: boolean | null
 }
 
-/** 运行时补全后的供应商（含预设信息） */
 export interface AiProviderDef extends AiProviderConfig {
   name: string
   baseURL: string
 }
 
-/** 读取配置并用预设补全 baseURL / 名称 */
+/** 兼容旧数据：老结构是 modelId 单值，迁移到 modelIds/currentModelId */
+function normalize(p: Record<string, unknown>): AiProviderConfig {
+  const legacyModelId = typeof p.modelId === 'string' ? p.modelId : ''
+  const rawIds = Array.isArray(p.modelIds) ? p.modelIds.filter((x): x is string => typeof x === 'string') : []
+  const modelIds = rawIds.length ? rawIds : legacyModelId ? [legacyModelId] : []
+  const currentModelId = (typeof p.currentModelId === 'string' && p.currentModelId) || modelIds[0] || legacyModelId || ''
+  return {
+    platformId: String(p.platformId ?? ''),
+    apiKey: String(p.apiKey ?? ''),
+    modelIds,
+    currentModelId,
+    enabled: p.enabled !== false,
+    allowFrontend: Boolean(p.allowFrontend),
+  }
+}
+
 export async function readProviders(): Promise<AiProviderDef[]> {
   const payload = await getDb()
   const doc = await payload.findGlobal({ slug: 'ai-models', overrideAccess: true, depth: 0 }).catch(() => null)
-  const raw = (doc as unknown as { providers?: AiProviderConfig[] } | null)?.providers
+  const raw = (doc as unknown as { providers?: Record<string, unknown>[] } | null)?.providers
   if (!Array.isArray(raw)) return []
   return raw.map((p) => {
-    const preset = getPlatformPreset(p.platformId)
-    return {
-      ...p,
-      name: preset?.name ?? p.platformId,
-      baseURL: preset?.baseURL ?? '',
-    }
+    const cfg = normalize(p)
+    const preset = getPlatformPreset(cfg.platformId)
+    return { ...cfg, name: preset?.name ?? cfg.platformId, baseURL: preset?.baseURL ?? '' }
   })
 }
 
-/** API Key 掩码：只保留前 4 后 4 */
 export function maskKey(key: string): string {
   if (!key) return ''
   if (key.length <= 8) return '••••••••'
   return key.slice(0, 4) + '••••••••' + key.slice(-4)
 }
 
-/** 给后台管理页用的安全配置（Key 脱敏 + 带预设模型列表） */
 export function publicProviders(providers: AiProviderDef[]) {
   return providers.map((p, i) => {
     const preset = getPlatformPreset(p.platformId)
@@ -61,16 +70,15 @@ export function publicProviders(providers: AiProviderDef[]) {
       baseURL: preset?.baseURL ?? p.baseURL,
       keyUrl: preset?.keyUrl ?? '',
       docs: preset?.docs ?? '',
-      availableModels: preset?.models ?? [],
       apiKeyMasked: maskKey(p.apiKey ?? ''),
-      modelId: p.modelId,
+      modelIds: p.modelIds ?? [],
+      currentModelId: p.currentModelId ?? '',
       enabled: Boolean(p.enabled),
       allowFrontend: Boolean(p.allowFrontend),
     }
   })
 }
 
-/** 校验 baseURL 安全（预设地址都是 https；仅本地回环允许 http） */
 export function assertSafeBaseURL(raw: string): string {
   let url: URL
   try { url = new URL(raw) } catch { throw new Error('Base URL 不是合法的地址') }
@@ -85,11 +93,7 @@ export function assertSafeBaseURL(raw: string): string {
   return out
 }
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
-}
-
+export interface ChatMessage { role: 'system' | 'user' | 'assistant'; content: string }
 export interface ChatResult {
   content: string
   usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
@@ -97,16 +101,18 @@ export interface ChatResult {
   latencyMs: number
 }
 
-/** 调用配置中选中的模型 */
+/** 调用模型：modelId 可覆盖当前模型（用于切换模型调用） */
 export async function callModel(opts: {
   provider: AiProviderDef
+  modelId?: string
   messages: ChatMessage[]
   temperature?: number
   maxTokens?: number
   signal?: AbortSignal
 }): Promise<ChatResult> {
   const { provider, messages } = opts
-  const modelId = provider.modelId
+  const modelId = opts.modelId || provider.currentModelId || (provider.modelIds?.[0] ?? '')
+  if (!modelId) throw new Error('该平台没有可用模型')
   const baseURL = assertSafeBaseURL(provider.baseURL ?? '')
   if (!provider.apiKey) throw new Error('该平台未配置 API Key')
 
@@ -128,45 +134,29 @@ export async function callModel(opts: {
       }),
       signal: controller.signal,
     })
-
     const text = await res.text()
     if (!res.ok) {
       let detail = text.slice(0, 500)
       try { const j = JSON.parse(text); detail = j?.error?.message || j?.message || detail } catch {}
       throw new Error('模型接口返回 ' + res.status + '：' + detail)
     }
-
     const json = JSON.parse(text) as {
       choices?: Array<{ message?: { content?: string } }>
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
       model?: string
     }
-    const content = json.choices?.[0]?.message?.content ?? ''
     return {
-      content,
+      content: json.choices?.[0]?.message?.content ?? '',
       model: json.model || modelId,
       usage: json.usage
         ? { promptTokens: json.usage.prompt_tokens, completionTokens: json.usage.completion_tokens, totalTokens: json.usage.total_tokens }
         : undefined,
       latencyMs: Date.now() - started,
     }
-  } finally {
-    clearTimeout(timer)
-  }
+  } finally { clearTimeout(timer) }
 }
 
-/** 定位启用的配置（frontendOnly 时要求是「允许前台调用」的） */
-export function findProvider(providers: AiProviderDef[], opts: { frontendOnly?: boolean } = {}) {
-  for (const provider of providers) {
-    if (provider.enabled === false) continue
-    if (opts.frontendOnly && !provider.allowFrontend) continue
-    if (!provider.modelId) continue
-    return provider
-  }
-  return null
-}
-
-/** 按平台 id 找配置（用于后台测试：指定 platformId 而非数组下标） */
+/** 按平台 id 找已配置平台 */
 export function findByPlatform(providers: AiProviderDef[], platformId: string, opts: { frontendOnly?: boolean } = {}) {
   for (const provider of providers) {
     if (provider.platformId !== platformId) continue
@@ -177,11 +167,54 @@ export function findByPlatform(providers: AiProviderDef[], platformId: string, o
   return null
 }
 
-/** 前台调用限流：按 IP 滑动窗口，每 60s 最多 10 次 */
+/** 找第一个可给前台用的平台 */
+export function findFrontendProvider(providers: AiProviderDef[]) {
+  for (const provider of providers) {
+    if (provider.enabled === false || !provider.allowFrontend) continue
+    if ((provider.modelIds?.length ?? 0) === 0) continue
+    return provider
+  }
+  return null
+}
+
+/** 用 Key 从平台实时拉取可用模型列表（OpenAI 兼容 /models） */
+export async function fetchRemoteModels(platformId: string, apiKey: string): Promise<Array<{ id: string; name: string }>> {
+  const preset = getPlatformPreset(platformId)
+  if (!preset) throw new Error('未知平台')
+  if (!apiKey.trim()) throw new Error('请先填写 API Key')
+  const baseURL = assertSafeBaseURL(preset.baseURL)
+  const url = baseURL + (preset.modelsPath ?? '/models')
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), MODELS_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: 'Bearer ' + apiKey.trim() },
+      signal: controller.signal,
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      let detail = text.slice(0, 300)
+      try { const j = JSON.parse(text); detail = j?.error?.message || j?.message || detail } catch {}
+      throw new Error('平台返回 ' + res.status + '：' + detail)
+    }
+    const json = JSON.parse(text) as {
+      data?: Array<{ id?: string; name?: string; owned_by?: string }>
+      models?: Array<{ id?: string; name?: string }>
+    }
+    const list = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : []
+    const models = list
+      .map((m) => ({ id: String(m.id ?? '').trim(), name: String(m.name ?? m.id ?? '').trim() }))
+      .filter((m) => m.id)
+    // 去重
+    const seen = new Set<string>()
+    return models.filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
+  } finally { clearTimeout(timer) }
+}
+
+/** 前台限流：按 IP 每 60s 10 次 */
 const rateBuckets = new Map<string, number[]>()
 const FRONTEND_RATE_LIMIT = 10
 const FRONTEND_RATE_WINDOW_MS = 60000
-
 export function checkFrontendRateLimit(ip: string): boolean {
   const now = Date.now()
   const arr = (rateBuckets.get(ip) ?? []).filter((t) => now - t < FRONTEND_RATE_WINDOW_MS)
