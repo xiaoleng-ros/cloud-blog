@@ -26,6 +26,12 @@ export const MD_EXTRA_TAGS = [
   // 首次服务端渲染正常，一旦 SSE 实时同步重放该区块就会塌。
   // nav 只是语义容器，不承载任何可执行内容，放行无额外风险。
   'nav',
+  // 首页「站点运行时间」卡的抬头：class="site-age__head" 上的 flex 横排 /
+  // 虚线分隔 / 淡色字号全靠这个 <header> 承载。defaultSchema 没有 header，
+  // 首屏服务端渲染正常，一旦 SSE 同步重放 siteAge 区块，header 被 unwrap，
+  // class 一同丢失，时钟图标与标题就塌成上下堆叠的裸元素（浓黑大字、无虚线）。
+  // header 同为纯语义容器，放行无额外风险。
+  'header',
 ]
 
 /**
