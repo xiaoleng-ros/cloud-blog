@@ -102,10 +102,12 @@ export interface Config {
   globals: {
     'site-settings': SiteSetting;
     navigation: Navigation;
+    'ai-models': AiModel;
   };
   globalsSelect: {
     'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
     navigation: NavigationSelect<false> | NavigationSelect<true>;
+    'ai-models': AiModelsSelect<false> | AiModelsSelect<true>;
   };
   locale: null;
   widgets: {
@@ -776,6 +778,57 @@ export interface Navigation {
   createdAt?: string | null;
 }
 /**
+ * 配置 OpenAI 兼容的模型供应商与 API Key，供后台测试与前台 AI 功能调用。API Key 不会下发到浏览器。
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ai-models".
+ */
+export interface AiModel {
+  id: number;
+  providers?:
+    | {
+        /**
+         * 如「硅基流动」「DeepSeek 官方」
+         */
+        name: string;
+        /**
+         * OpenAI 兼容根地址，如 https://api.siliconflow.cn/v1（末尾不带 /chat/completions）
+         */
+        baseURL: string;
+        /**
+         * 仅保存在服务端，前端只会看到脱敏后的掩码
+         */
+        apiKey: string;
+        enabled?: boolean | null;
+        models?:
+          | {
+              /**
+               * 接口里传的 model 值，如 Qwen/Qwen2.5-7B-Instruct
+               */
+              modelId: string;
+              /**
+               * 留空则显示模型 ID
+               */
+              displayName?: string | null;
+              free?: boolean | null;
+              /**
+               * 可选，仅用于展示
+               */
+              contextLength?: number | null;
+              /**
+               * 开启后前台功能（如 AI 摘要）可调用此模型，会产生额度消耗，请谨慎
+               */
+              allowFrontend?: boolean | null;
+              id?: string | null;
+            }[]
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "site-settings_select".
  */
@@ -828,6 +881,34 @@ export interface NavigationSelect<T extends boolean = true> {
         external?: T;
         sort?: T;
         visible?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ai-models_select".
+ */
+export interface AiModelsSelect<T extends boolean = true> {
+  providers?:
+    | T
+    | {
+        name?: T;
+        baseURL?: T;
+        apiKey?: T;
+        enabled?: T;
+        models?:
+          | T
+          | {
+              modelId?: T;
+              displayName?: T;
+              free?: T;
+              contextLength?: T;
+              allowFrontend?: T;
+              id?: T;
+            };
         id?: T;
       };
   updatedAt?: T;

@@ -22,6 +22,7 @@ import { Tags } from './collections/Tags'
 import { Users } from './collections/Users'
 import { Navigation } from './globals/Navigation'
 import { SiteSettings } from './globals/SiteSettings'
+import { AiModels } from './globals/AiModels'
 // 迁移必须静态导入：一是让 webpack 打进 EdgeOne 运行产物（动态 import 不会被打包），
 // 二是供 prodMigrations 在生产启动时自动补跑未执行的迁移（见下方 postgresAdapter）。
 import { migrations } from './migrations'
@@ -546,6 +547,12 @@ export default buildConfig({
           // 浏览器标签标题（否则回落到「Payload - Payload」）
           meta: { title: '更新日志' },
         },
+        // AI 模型管理：供应商 / API Key / 模型配置 + 在线测试（路由 /admin/ai-models）
+        'ai-models': {
+          Component: '/src/admin/views/ai/AiModelsView.tsx#AiModelsView',
+          path: '/ai-models',
+          meta: { title: 'AI 模型' },
+        },
       },
     },
     // 自定义 favicon（浏览器标签页图标，统一使用透明底深色云）
@@ -571,7 +578,7 @@ export default buildConfig({
   },
   // 数据模型：文章、随笔、分类、标签、图片、项目、友链、用户 + 站点设置/导航管理单例
   collections: [Posts, Notes, Categories, Tags, Media, Projects, Friends, Users],
-  globals: [SiteSettings, Navigation],
+  globals: [SiteSettings, Navigation, AiModels],
   // 富文本编辑器
   editor: lexicalEditor(),
   // 加密密钥（必须与 .env 中的 PAYLOAD_SECRET 一致，上方已校验非空）
