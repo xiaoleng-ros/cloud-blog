@@ -14,6 +14,10 @@ export interface AiPresetModel {
 export interface AiPlatformPreset {
   id: string
   name: string
+  /** 简称，用于卡片图标角标 */
+  short: string
+  /** 品牌色，用于图标底色 */
+  color: string
   baseURL: string
   keyUrl: string
   docs: string
@@ -25,6 +29,8 @@ export const AI_PLATFORM_PRESETS: AiPlatformPreset[] = [
   {
     id: 'siliconflow',
     name: '硅基流动 SiliconFlow',
+    short: 'SF',
+    color: '#6c5ce7',
     baseURL: 'https://api.siliconflow.cn/v1',
     keyUrl: 'https://cloud.siliconflow.cn/account/ak',
     docs: 'https://docs.siliconflow.cn/',
@@ -40,6 +46,8 @@ export const AI_PLATFORM_PRESETS: AiPlatformPreset[] = [
   {
     id: 'zhipu',
     name: '智谱 GLM',
+    short: 'GLM',
+    color: '#3d82e8',
     baseURL: 'https://open.bigmodel.cn/api/paas/v4',
     keyUrl: 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys',
     docs: 'https://docs.bigmodel.cn/',
@@ -54,6 +62,8 @@ export const AI_PLATFORM_PRESETS: AiPlatformPreset[] = [
   {
     id: 'deepseek',
     name: 'DeepSeek 官方',
+    short: 'DS',
+    color: '#4d6bfe',
     baseURL: 'https://api.deepseek.com/v1',
     keyUrl: 'https://platform.deepseek.com/api_keys',
     docs: 'https://api-docs.deepseek.com/',
@@ -66,6 +76,8 @@ export const AI_PLATFORM_PRESETS: AiPlatformPreset[] = [
   {
     id: 'moonshot',
     name: '月之暗面 Kimi',
+    short: 'K',
+    color: '#111827',
     baseURL: 'https://api.moonshot.cn/v1',
     keyUrl: 'https://platform.moonshot.cn/console/api-keys',
     docs: 'https://platform.moonshot.cn/docs',
@@ -79,6 +91,8 @@ export const AI_PLATFORM_PRESETS: AiPlatformPreset[] = [
   {
     id: 'openai',
     name: 'OpenAI 官方',
+    short: 'OA',
+    color: '#10a37f',
     baseURL: 'https://api.openai.com/v1',
     keyUrl: 'https://platform.openai.com/api-keys',
     docs: 'https://platform.openai.com/docs',
