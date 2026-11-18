@@ -778,7 +778,7 @@ export interface Navigation {
   createdAt?: string | null;
 }
 /**
- * 配置 OpenAI 兼容的模型供应商与 API Key，供后台测试与前台 AI 功能调用。API Key 不会下发到浏览器。
+ * 选择内置平台、填入 API Key 即可使用。API Key 只存服务端，不会下发到浏览器。
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "ai-models".
@@ -787,41 +787,17 @@ export interface AiModel {
   id: number;
   providers?:
     | {
-        /**
-         * 如「硅基流动」「DeepSeek 官方」
-         */
-        name: string;
-        /**
-         * OpenAI 兼容根地址，如 https://api.siliconflow.cn/v1（末尾不带 /chat/completions）
-         */
-        baseURL: string;
+        platformId: 'siliconflow' | 'zhipu' | 'deepseek' | 'moonshot' | 'openai';
         /**
          * 仅保存在服务端，前端只会看到脱敏后的掩码
          */
         apiKey: string;
+        modelId: string;
         enabled?: boolean | null;
-        models?:
-          | {
-              /**
-               * 接口里传的 model 值，如 Qwen/Qwen2.5-7B-Instruct
-               */
-              modelId: string;
-              /**
-               * 留空则显示模型 ID
-               */
-              displayName?: string | null;
-              free?: boolean | null;
-              /**
-               * 可选，仅用于展示
-               */
-              contextLength?: number | null;
-              /**
-               * 开启后前台功能（如 AI 摘要）可调用此模型，会产生额度消耗，请谨慎
-               */
-              allowFrontend?: boolean | null;
-              id?: string | null;
-            }[]
-          | null;
+        /**
+         * 开启后前台功能（如 AI 摘要）可调用，会产生额度消耗，请谨慎
+         */
+        allowFrontend?: boolean | null;
         id?: string | null;
       }[]
     | null;
@@ -895,20 +871,11 @@ export interface AiModelsSelect<T extends boolean = true> {
   providers?:
     | T
     | {
-        name?: T;
-        baseURL?: T;
+        platformId?: T;
         apiKey?: T;
+        modelId?: T;
         enabled?: T;
-        models?:
-          | T
-          | {
-              modelId?: T;
-              displayName?: T;
-              free?: T;
-              contextLength?: T;
-              allowFrontend?: T;
-              id?: T;
-            };
+        allowFrontend?: T;
         id?: T;
       };
   updatedAt?: T;
