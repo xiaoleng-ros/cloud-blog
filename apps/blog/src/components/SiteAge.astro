@@ -112,8 +112,9 @@ const age = siteAge(since);
     gap: 0.4rem;
     padding-bottom: 0.65rem;
     border-bottom: 2px dashed var(--edge);
-    /* 卡片抬头是「扫」的层级，跟着导航走 --text-soft，不占正文黑 */
-    color: var(--text-soft);
+    /* 卡片抬头是「扫」的层级：比导航再轻一档走 --text-muted，
+       不跟下方大数字抢黑，白卡上仍过 AA */
+    color: var(--text-muted);
   }
 
   .site-age__head h2 {
