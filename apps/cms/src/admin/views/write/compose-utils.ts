@@ -74,6 +74,7 @@ export const buildPayload = (collection: 'posts' | 'notes', s: ComposeFields): R
       }
     : {
         title: s.title || undefined,
+        description: s.description,
         mood: s.mood,
         date: s.date,
         categories: firstCategory,

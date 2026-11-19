@@ -11,6 +11,16 @@ type Mode = 'sv' | 'wysiwyg'
 // 编辑器默认高度，和原 Monaco 版本保持一致
 const EDITOR_HEIGHT = 520
 
+/** AI 写作可选模型（来自后台已配置平台，复用 /api/admin/ai-models） */
+type AiModelOption = {
+  platformId: string
+  platformName: string
+  modelId: string
+  current: boolean
+}
+
+type AiAction = 'generate' | 'optimize'
+
 /**
  * Vditor 运行时资源的根路径（自托管，不走外网 CDN）
  *
@@ -116,6 +126,110 @@ export const MarkdownEditor: React.FC<{
   // Vditor 是否已完成异步初始化（i18n / lute 脚本加载完成）。
   // 初始化完成前 this.vditor 尚未建立，此时调用 setValue 会抛异常，必须先跳过。
   const readyRef = useRef(false)
+
+  // ---- AI 助手状态 ----
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiAction, setAiAction] = useState<AiAction>('generate')
+  const [aiModels, setAiModels] = useState<AiModelOption[]>([])
+  const [aiPlatform, setAiPlatform] = useState('')
+  const [aiModel, setAiModel] = useState('')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [aiNotice, setAiNotice] = useState('')
+  // 用 ref 持有最新正文，避免 AI 回调闭包读到旧值
+  const currentValueRef = useRef(value ?? '')
+  currentValueRef.current = value ?? ''
+
+  // 加载后台已配置的平台与模型（含未开启「前台调用」的，编辑写作走管理员权限）
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/admin/ai-models')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('加载模型失败'))))
+      .then((data: { providers?: Array<{ platformId: string; platformName: string; modelIds: string[]; currentModelId: string; enabled: boolean }> }) => {
+        if (cancelled) return
+        const options: AiModelOption[] = []
+        for (const p of data.providers ?? []) {
+          if (p.enabled === false) continue
+          for (const id of p.modelIds ?? []) {
+            options.push({
+              platformId: p.platformId,
+              platformName: p.platformName,
+              modelId: id,
+              current: id === p.currentModelId,
+            })
+          }
+        }
+        setAiModels(options)
+        const first = options.find((o) => o.current) ?? options[0]
+        if (first) {
+          setAiPlatform(first.platformId)
+          setAiModel(first.modelId)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAiError('未能加载模型列表，请先在后台「AI 模型」页配置。')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const aiPlatformModels = aiModels.filter((m) => m.platformId === aiPlatform)
+  const choosePlatform = (pid: string) => {
+    setAiPlatform(pid)
+    const list = aiModels.filter((m) => m.platformId === pid)
+    const pick = list.find((m) => m.current) ?? list[0]
+    setAiModel(pick?.modelId ?? '')
+  }
+
+  const runAi = async () => {
+    if (aiBusy) return
+    setAiError('')
+    setAiNotice('')
+    if (!aiPlatform || !aiModel) {
+      setAiError('请先在「AI 模型」页配置并选择一个模型。')
+      return
+    }
+    if (aiAction === 'generate' && !aiPrompt.trim()) {
+      setAiError('请填写文章主题或写作要求。')
+      return
+    }
+    if (aiAction === 'optimize' && !currentValueRef.current.trim()) {
+      setAiError('编辑器里还没有内容，请先写点什么再优化。')
+      return
+    }
+    setAiBusy(true)
+    try {
+      const res = await fetch('/api/admin/ai-compose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: aiAction,
+          prompt: aiPrompt,
+          content: currentValueRef.current,
+          platformId: aiPlatform,
+          modelId: aiModel,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((data as { error?: string }).error || '调用失败')
+      const text = String((data as { content?: string }).content ?? '').trim()
+      if (!text) throw new Error('模型返回了空内容')
+      // 用 setValue 整体写入：生成替换全文，优化也替换全文（用户可撤销/再编辑）
+      const instance = instanceRef.current
+      if (!instance || !readyRef.current) throw new Error('编辑器尚未就绪，请稍后再试')
+      instance.setValue(text, true)
+      internalValueRef.current = text
+      onChangeRef.current(text)
+      setAiNotice(`已用 ${(data as { model?: string }).model || aiModel} ${aiAction === 'generate' ? '生成' : '优化'}完成`)
+      setAiPrompt('')
+    } catch (e) {
+      setAiError((e as Error).message)
+    } finally {
+      setAiBusy(false)
+    }
+  }
 
   // 初始化编辑器：仅在 mode 或 theme 切换时重建（Vditor 不支持运行时切模式）
   useEffect(() => {
@@ -322,7 +436,93 @@ export const MarkdownEditor: React.FC<{
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className={`md-ai__toggle${aiOpen ? ' md-ai__toggle--active' : ''}`}
+          onClick={() => setAiOpen((v) => !v)}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 2l1.9 5.6L20 9.5l-6.1 1.9L12 17l-1.9-5.6L4 9.5l6.1-1.9L12 2z" />
+            <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
+          </svg>
+          AI 助手
+        </button>
       </div>
+
+      {/* AI 助手面板 */}
+      {aiOpen && (
+        <div className="md-ai">
+          <div className="md-ai__row">
+            <div className="md-ai__modes">
+              <button
+                type="button"
+                className={`md-ai__mode${aiAction === 'generate' ? ' md-ai__mode--active' : ''}`}
+                onClick={() => { setAiAction('generate'); setAiError(''); setAiNotice('') }}
+              >
+                一键生成
+              </button>
+              <button
+                type="button"
+                className={`md-ai__mode${aiAction === 'optimize' ? ' md-ai__mode--active' : ''}`}
+                onClick={() => { setAiAction('optimize'); setAiError(''); setAiNotice('') }}
+              >
+                优化文章
+              </button>
+            </div>
+            <select
+              className="md-ai__select"
+              value={aiPlatform}
+              onChange={(e) => choosePlatform(e.target.value)}
+              aria-label="选择平台"
+            >
+              {Array.from(new Set(aiModels.map((m) => m.platformId))).map((pid) => (
+                <option value={pid} key={pid}>
+                  {aiModels.find((m) => m.platformId === pid)?.platformName ?? pid}
+                </option>
+              ))}
+            </select>
+            <select
+              className="md-ai__select"
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              aria-label="选择模型"
+              disabled={!aiPlatformModels.length}
+            >
+              {aiPlatformModels.map((m) => (
+                <option value={m.modelId} key={m.modelId}>
+                  {m.modelId}{m.current ? '（当前）' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {aiAction === 'generate' ? (
+            <textarea
+              className="md-ai__prompt"
+              rows={3}
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="写下文章主题与要求，例如：写一篇介绍 Astro  Islands 架构的入门文章，面向前端新手，带一个示例代码……"
+            />
+          ) : (
+            <p className="md-ai__hint">将当前编辑器里的全文交给所选模型，从行文、结构、错别字等方面优化后写回编辑器。</p>
+          )}
+
+          <div className="md-ai__foot">
+            <button type="button" className="md-ai__run" onClick={runAi} disabled={aiBusy || !aiModels.length}>
+              {aiBusy ? (
+                <><span className="md-ai__spin" /> 处理中…</>
+              ) : aiAction === 'generate' ? (
+                '生成文章'
+              ) : (
+                '优化当前文章'
+              )}
+            </button>
+            {aiNotice ? <span className="md-ai__notice">{aiNotice}</span> : null}
+            {aiError ? <span className="md-ai__error">{aiError}</span> : null}
+          </div>
+        </div>
+      )}
 
       {/* Vditor 挂载点：高度由构造参数控制 */}
       <div ref={hostRef} />

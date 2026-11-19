@@ -45,6 +45,7 @@ export const Notes: CollectionConfig = {
       admin: { date: { displayFormat: 'yyyy-MM-dd' }, description: '随笔按年/月分组' },
     },
     { name: 'title', type: 'text', label: '标题（可选）' },
+    { name: 'description', type: 'textarea', label: '摘要（可选）' },
     { name: 'mood', type: 'text', label: '心情（可选）' },
     // 随笔分类：单选必填。URL 由「分类名 / 随笔 ID」拼接，不再依赖日期
     {

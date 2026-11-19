@@ -20,6 +20,7 @@ import * as migration_20261102_000000_add_site_url_field from './20261102_000000
 import * as migration_20261108_000000_drop_categories_node_type from './20261108_000000_drop_categories_node_type';
 import * as migration_20261108_000001_navigation_array_fields from './20261108_000001_navigation_array_fields';
 import * as migration_20261118_000000_add_ai_models_global from './20261118_000000_add_ai_models_global';
+import * as migration_20261119_000000_add_notes_description from './20261119_000000_add_notes_description';
 
 export const migrations = [
   {
@@ -131,5 +132,10 @@ export const migrations = [
     up: migration_20261118_000000_add_ai_models_global.up,
     down: migration_20261118_000000_add_ai_models_global.down,
     name: '20261118_000000_add_ai_models_global'
+  },
+  {
+    up: migration_20261119_000000_add_notes_description.up,
+    down: migration_20261119_000000_add_notes_description.down,
+    name: '20261119_000000_add_notes_description'
   },
 ];

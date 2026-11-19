@@ -404,6 +404,7 @@ export const ComposeView: React.FC<Props> = ({ collection, title }) => {
           collection={collection}
           mode={modal}
           initial={meta}
+          content={content}
           saving={modal === 'draft' ? loading : publishSaving}
           onCancel={() => setModal(null)}
           onConfirm={async (m) => {

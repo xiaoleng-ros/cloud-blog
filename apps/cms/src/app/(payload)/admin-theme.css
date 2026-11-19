@@ -926,6 +926,104 @@ img.gravatar-account {
   background: var(--theme-elevation-0);
 }
 
+/* ---------- Markdown 编辑器 AI 助手 ---------- */
+.md-ai__toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.md-ai__toggle:hover { background: var(--accent); color: #fff; }
+.md-ai__toggle--active { background: var(--accent); color: #fff; }
+
+.md-ai {
+  padding: 0.9rem 1.1rem 1rem;
+  border-bottom: 1px solid var(--theme-elevation-100);
+  background: var(--theme-elevation-0);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.md-ai__row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.md-ai__modes { display: inline-flex; border: 1px solid var(--theme-elevation-200); border-radius: 7px; overflow: hidden; }
+.md-ai__mode {
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--theme-elevation-500);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.md-ai__mode + .md-ai__mode { border-left: 1px solid var(--theme-elevation-200); }
+.md-ai__mode--active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.md-ai__select {
+  flex: 1;
+  min-width: 130px;
+  padding: 5px 9px;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 7px;
+  background: var(--theme-input-bg);
+  color: var(--theme-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.md-ai__select:focus { outline: none; border-color: var(--accent); }
+.md-ai__prompt {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--theme-elevation-200);
+  border-radius: 8px;
+  background: var(--theme-input-bg);
+  color: var(--theme-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.md-ai__prompt::placeholder { color: var(--theme-elevation-400); }
+.md-ai__prompt:focus { outline: none; border-color: var(--accent); }
+.md-ai__hint { margin: 0; font-size: 13px; line-height: 1.6; color: var(--theme-elevation-500); }
+.md-ai__foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.md-ai__run {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.md-ai__run:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.md-ai__run:disabled { opacity: 0.55; cursor: not-allowed; }
+.md-ai__notice { font-size: 12px; color: #0a7a44; }
+.md-ai__error { font-size: 12px; color: var(--danger, #d92d20); }
+.md-ai__spin {
+  width: 13px; height: 13px;
+  border: 2px solid rgb(255 255 255 / 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: md-ai-spin 0.7s linear infinite;
+}
+@keyframes md-ai-spin { to { transform: rotate(360deg); } }
+
 /* ---------- 11. 社交链接字段（SocialLinksField） ---------- */
 .social-links-field {
   display: flex;
@@ -1732,6 +1830,13 @@ img.gravatar-account {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* 关键：body 是 flex column 且高度受限，子项默认 flex-shrink:1 会被压缩。
+     这会让摘要框在弹窗高度不够时被「侵占」变矮，文字显示不全。
+     全部子项禁止收缩，超出的内容交给 body 自己滚动。 */
+}
+
+.publish-modal__body > * {
+  flex-shrink: 0;
 }
 
 .publish-modal__label {
@@ -1769,6 +1874,64 @@ img.gravatar-account {
   min-height: 64px;
   resize: vertical;
 }
+
+/* 标题 / 摘要：左边可输入、右边星星一键生成的组合框（形态对齐 TagPicker） */
+.ai-combo {
+  display: flex;
+  align-items: stretch;
+  min-height: 38px;
+  border: 1px solid var(--theme-elevation-250);
+  border-radius: 6px;
+  background: var(--theme-elevation-0);
+  overflow: hidden;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.ai-combo:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+/* 摘要 combo：交叉轴不做 stretch，否则 textarea 会被压成一行且无法靠自身高度撑开容器（死锁） */
+.ai-combo--area { align-items: flex-start; }
+.ai-combo__input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--theme-text);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.ai-combo__input::placeholder { color: var(--theme-elevation-400); }
+/* 摘要框：高度随内容自动变化（三行就三行高），由 JS 写入 height，
+   这里只负责「不出现内部滚动条 + 宽度照常撑满」 */
+.ai-combo--area .ai-combo__input {
+  /* flex-grow:1 保证宽度撑满；flex-shrink:0 保证不被 body 的 flex 压缩 */
+  flex: 1 0 auto;
+  min-height: 0;
+  height: auto;
+  resize: none;
+  overflow: hidden;
+}
+/* 摘要 combo 容器本身也不参与 flex 收缩（否则会被 body 的 flex 布局压扁） */
+.ai-combo--area { flex-shrink: 0; }
+.ai-combo__btn {
+  flex: 0 0 46px;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-left: 1px solid var(--theme-elevation-200);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ai-combo__btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.ai-combo__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.publish-modal__ai-tip { margin: 0; font-size: 12px; color: var(--theme-elevation-500); }
+.publish-modal__ai-tip--ok { color: #0a7a44; }
 
 /* 多选列表（标签）已换成 TagPicker 弹出卡片，见 §16b */
 

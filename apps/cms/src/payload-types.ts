@@ -220,6 +220,7 @@ export interface Note {
    */
   date: string;
   title?: string | null;
+  description?: string | null;
   mood?: string | null;
   /**
    * 仅能选择系统里已有的分类，URL 由「分类名 + 随笔 ID」自动拼接
@@ -514,6 +515,7 @@ export interface PostsSelect<T extends boolean = true> {
 export interface NotesSelect<T extends boolean = true> {
   date?: T;
   title?: T;
+  description?: T;
   mood?: T;
   categories?: T;
   status?: T;
@@ -785,36 +787,17 @@ export interface Navigation {
  */
 export interface AiModel {
   id: number;
+  /**
+   * 由「AI 模型」页面维护，一般不用手动改
+   */
   providers?:
     | {
-        platformId: 'siliconflow' | 'zhipu' | 'deepseek' | 'moonshot' | 'openai';
-        /**
-         * 仅保存在服务端，前端只会看到脱敏后的掩码
-         */
-        apiKey: string;
-        /**
-         * 由弹窗拉取并多选后写入，一般不用手动改
-         */
-        modelIds?:
-          | {
-              [k: string]: unknown;
-            }
-          | unknown[]
-          | string
-          | number
-          | boolean
-          | null;
-        /**
-         * 可在后台卡片上切换；前台未指定模型时用它
-         */
-        currentModelId?: string | null;
-        enabled?: boolean | null;
-        /**
-         * 开启后前台功能（如 AI 摘要）可调用，会产生额度消耗，请谨慎
-         */
-        allowFrontend?: boolean | null;
-        id?: string | null;
-      }[]
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
     | null;
   updatedAt?: string | null;
   createdAt?: string | null;
@@ -883,17 +866,7 @@ export interface NavigationSelect<T extends boolean = true> {
  * via the `definition` "ai-models_select".
  */
 export interface AiModelsSelect<T extends boolean = true> {
-  providers?:
-    | T
-    | {
-        platformId?: T;
-        apiKey?: T;
-        modelIds?: T;
-        currentModelId?: T;
-        enabled?: T;
-        allowFrontend?: T;
-        id?: T;
-      };
+  providers?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

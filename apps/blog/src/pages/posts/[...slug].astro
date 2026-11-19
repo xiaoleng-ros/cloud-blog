@@ -153,7 +153,6 @@ const articleSchema = {
         <span>{readingMinutes} 分钟阅读</span>
       </div>
       <h1>{post.data.title}</h1>
-      <p>{description}</p>
       {tags.length > 0 && (
         <div class="tag-list" aria-label="标签">
           {tags.map((tag) => <span>{tag}</span>)}
@@ -163,6 +162,13 @@ const articleSchema = {
 
     <div class="article__body">
       <div class="article__main">
+        {/* 摘要卡片：位于标签之后、正文之前；内含摘要文字，视觉上作为正文的引子。
+            挂独立 data-sync-block，后台改摘要时运行时可同步替换。 */}
+        <aside class="article-summary" data-sync-block="articleSummary" aria-label="文章摘要">
+          <span class="article-summary__label">摘要</span>
+          <p class="article-summary__text">{description}</p>
+        </aside>
+
         <div class="post-content" data-sync-block="postContent">
           <Content />
         </div>

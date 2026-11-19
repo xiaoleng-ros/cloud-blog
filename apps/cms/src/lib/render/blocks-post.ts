@@ -47,8 +47,14 @@ export function renderArticleHeader(post: MdEntry): string {
 
   return `<div class="post-meta">${meta}</div>
   <h1>${escapeHtml(post.data.title)}</h1>
-  <p>${escapeHtml(description)}</p>
   ${tagHtml}`
+}
+
+/** 文章摘要卡片（锚点 posts/[...slug].astro 的 aside[data-sync-block="articleSummary"]） */
+export function renderArticleSummary(post: MdEntry): string {
+  const description = getPostDescription(post)
+  return `<span class="article-summary__label">摘要</span>
+  <p class="article-summary__text">${escapeHtml(description)}</p>`
 }
 
 /** 文章正文内容（锚点 posts/[...slug].astro 的 div[data-sync-block="postContent"]） */
@@ -247,6 +253,7 @@ export async function postBlocks(ctx: SyncData, pathname: string): Promise<Recor
     // 服务端注入 <title> 时再统一做一次 HTML 转义。
     pageTitle: `${post.data.title} - ${siteName}`,
     articleHeader: renderArticleHeader(post),
+    articleSummary: renderArticleSummary(post),
     postContent: html,
     tocSidebar: hasToc ? renderTocSidebar(tocGroups) : '',
     articleFooter: renderArticleFooter(newer, older, related, post, settings?.siteAuthor ?? site.author, siteName),

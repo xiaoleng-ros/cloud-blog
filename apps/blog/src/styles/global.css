@@ -2169,6 +2169,35 @@ html.is-search-open {
   margin-top: 1.2rem;
 }
 
+/* 摘要卡片：标签之后、正文之前的「引子」，
+   呼应全站手绘便利贴风格（描边 + 轻微旋转 + 投影） */
+.article-summary {
+  margin: 0 0 2.2rem;
+  padding: 1.1rem 1.35rem;
+  border: 1.5px solid var(--on-sticky-line);
+  border-radius: 255px 18px 225px 16px / 16px 225px 18px 255px;
+  background: var(--sticky-cyan);
+  color: var(--on-sticky);
+  box-shadow: 3px 4px 0 var(--shadow-sm);
+  transform: rotate(-0.35deg);
+}
+
+.article-summary__label {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  font-family: var(--font-hand);
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+  opacity: 0.72;
+}
+
+.article-summary__text {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
 /* 文章详情页不渲染封面图：封面只用于列表卡片、OG 分享图与 JSON-LD image。 */
 
 .toc {
@@ -2291,10 +2320,10 @@ html.is-search-open {
 }
 
 .post-content h3 {
-  margin-top: 2rem;
-  color: var(--text);
-  font-size: 1.2rem;
-  font-weight: 750;
+  margin-top: 2.4rem;
+  color: var(--brand);
+  font-size: 1.45rem;
+  font-weight: 700;
   line-height: 1.4;
 }
 
@@ -4467,7 +4496,8 @@ html.theme-anim body {
 }
 .post-content h3 {
   font-family: var(--font-hand);
-  font-weight: 400;
+  /* 不要在手写体段落里把字重降到 400：那会让 h3 和正文几乎一样，失去标题层级 */
+  font-weight: 700;
 }
 
 /* 引用块：便利贴色块 */
